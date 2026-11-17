@@ -10,7 +10,13 @@ def participation_budget(k, fraction):
     return max(1, min(k, int(math.floor(k*fraction+0.5))))
 
 
-def effective_participation(cfg, round_id):
+def effective_participation(cfg, round_id,states=None):
+    if cfg.participation_schedule == 'feedback':
+        if not states:return cfg.participation
+        fraction=sum(s.last_constraint_violations>0 for s in states.values())/len(states)
+        return min(1.,cfg.participation*(1.+cfg.feedback_gain)) if fraction >= cfg.feedback_threshold else cfg.participation
+    if cfg.participation_schedule == 'stage':
+        return cfg.stage_participation[min(cfg.stages-1,round_id//cfg.rounds_per_stage)]
     total = max(1, cfg.stages * cfg.rounds_per_stage - 1)
     progress = round_id / total
     if cfg.participation_schedule == 'increasing':
@@ -22,9 +28,15 @@ def effective_participation(cfg, round_id):
     return cfg.participation
 
 
-def select_clients(states, cfg, round_id, rng, *, old_classes=frozenset(),new_classes=frozenset(),coarse_by_fine=None):
+def select_clients(states, cfg, round_id, rng, *, old_classes=frozenset(),new_classes=frozenset(),coarse_by_fine=None,
+                   relationships=None, class_forgetting=None):
     ids=sorted(states)
-    m=participation_budget(len(ids),effective_participation(cfg,round_id))
+    m=participation_budget(len(ids),effective_participation(cfg,round_id,states))
+    if str(round_id) in cfg.participation_overrides:
+        chosen=sorted(cfg.participation_overrides[str(round_id)])
+        if len(chosen)!=m or any(cid not in states for cid in chosen):
+            raise ValueError('Participation override must select exactly the configured eligible budget')
+        return chosen
     scores={i:0.0 for i in ids}
     policy=cfg.selector
     if policy=='random':
@@ -46,7 +58,9 @@ def select_clients(states, cfg, round_id, rng, *, old_classes=frozenset(),new_cl
         elif policy=='new':
             scores={i:len(holding[i]&new) for i in ids}
         elif policy=='historical_coverage':
-            scores={i:sum(1./(1.+max(0,round_id-states[i].last_selected)) for c in (holding[i]&old)) for i in ids}
+            # Older participation => higher urgency, not lower.
+            scores={i:len(holding[i]&old)*(round_id-states[i].last_selected)
+                    for i in ids}
         elif policy=='balanced':
             chosen=[];old_covered=set();new_covered=set()
             for _ in range(m):
@@ -69,6 +83,28 @@ def select_clients(states, cfg, round_id, rng, *, old_classes=frozenset(),new_cl
         elif policy=='recurrence':
             scores={i:sum(1./(1.+round_id-r) for r in states[i].recurrence_rounds.values()
                           if r<=round_id) for i in ids}
+        elif policy in {'feature_max','feature_min','gradient_align','gradient_conflict'}:
+            relations=relationships or {}
+            def relevant(i):
+                vals=[relations.get((int(a),int(b)),relations.get((int(b),int(a))))
+                      for a in old for b in (holding[i]&new) if a!=b]
+                return [float(v) for v in vals if v is not None and np.isfinite(v)]
+            averages={i:float(np.mean(relevant(i))) if relevant(i) else 0. for i in ids}
+            if policy in {'feature_min','gradient_conflict'}:
+                scores={i:-averages[i] for i in ids}
+            else:
+                scores=averages
+        elif policy=='forgetting':
+            risks=class_forgetting or {}
+            scores={i:sum(float(risks.get(c,0.)) for c in (holding[i]&old)) for i in ids}
+        elif policy=='gem_informed':
+            scores={i:float(states[i].last_constraint_violations)
+                    +0.001*len(holding[i]&old) for i in ids}
+        elif policy=='history_adaptive':
+            risks=class_forgetting or {}
+            scores={i:sum(float(risks.get(c,0.)) for c in (holding[i]&old))
+                       +0.01*(round_id-states[i].last_selected)
+                       +0.1*len(holding[i]&new) for i in ids}
         elif policy=='overlap':
             scores={i:sum(len(holding[i]&holding[j]) for j in ids if j!=i) for i in ids}
         elif policy=='coverage':

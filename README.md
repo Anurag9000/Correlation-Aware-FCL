@@ -2,7 +2,7 @@
 
 A modular, research-oriented PyTorch simulator for **federated continual learning under partial client participation, class overlap, old/new class relationships, cross-client temporal recurrence, and local forgetting prevention**.
 
-> **Implementation status (2026-11-17):** working, expanded research prototype—not a validated reproduction of all 152 planned research blocks. It registers **276 independently configured CIFAR-10 jobs and 278 CIFAR-100 jobs**, covering **63 distinct research block IDs** (some as partial/approximate implementations). The entire 152-block research catalogue is documented. **35 offline tests pass**. The actual CIFAR sweeps have **not** been trained or benchmarked here. Distinguish programmed jobs from completed research findings.
+> **Implementation status (2026-11-17 expanded pass):** 152 experiment blocks are documented; **144 block IDs have at least one dedicated runnable configuration**, although many are *partial/approximate research controls*. There are **423 independently configured CIFAR-10 jobs and 425 CIFAR-100 jobs**, all with **batch size 512**. The CIFAR-100 suite also includes the original **20-class / 10+10 class-incremental** intervention. **54 offline tests pass**. Official CIFAR training and statistical research verification have **not** been executed here. For the eight unscheduled blocks and detailed limitations, see [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Install
 
@@ -11,7 +11,7 @@ python -m pip install -e '.[test]'
 pytest -q
 ```
 
-Requires Python >=3.10, PyTorch, torchvision, SciPy, NumPy, and PyYAML. CUDA is chosen automatically when available. CIFAR datasets download through torchvision only when explicitly enabled.
+Requires Python >=3.10, PyTorch, torchvision, SciPy, NumPy, and PyYAML. CUDA is chosen automatically when available. CIFAR datasets download through torchvision only when explicitly enabled. A separate `cifar100_20` mode remaps an official 20-class CIFAR-100 subset into a 10+10 task sequence; its jobs are included inside the CIFAR-100 suite.
 
 ## Run every registered executable job, one after another, batch size 512
 
@@ -47,7 +47,7 @@ The default plan on each dataset comprises the 60-job canonical full/partial-par
 
 ## Local algorithms
 
-Implemented: SGD, local experience replay, A-GEM gradient projection, GEM quadratic-program projection with explicit residual checks, simplified diagonal-Fisher EWC, ER-ACE-like asymmetric stream masking and replay, local stage-consolidated DER and DER++, MAS-style local importance, LwF-style distillation, and optional FedProx local proximal regularization.
+Implemented: SGD, local experience replay, local Synaptic Intelligence, A-GEM gradient projection, GEM quadratic-program projection with explicit residual checks, simplified diagonal-Fisher EWC, ER-ACE-like asymmetric stream masking and replay, local stage-consolidated DER and DER++, MAS-style local importance, LwF-style distillation, and optional FedProx local proximal regularization.
 
 **Methodology qualifications:** ER-ACE, DER/DER++, EWC, MAS and LwF are *research adaptations* and are **not claimed as exact original-paper reproductions**. DER logits are consolidated at local-training boundaries rather than each incoming online stream step. GEM uses class-grouped client history and SciPy's CPU-based dual solve. Results must carry these qualifications.
 
@@ -103,6 +103,14 @@ The smoke test uses an offline ten-class synthetic image dataset and is not evid
 - [`docs/STATUS.md`](docs/STATUS.md) — verified implementation limits, testing and open work.
 - [`configs/plans/`](configs/plans/) — materialized batch-512 CIFAR experiment manifests.
 
+## Additional 2026-11-17 implementations
+
+The expanded data stream supports exact class holders and dose, raw-sample overlap, per-client arrival delays, round-level recurrence and periodic returns, train-only domain shifts, deterministic spurious markers, bounded label noise and client selection overrides. Local mechanisms include SI, GEM class/stage/all grouping, optimizer persistence and memory-reset ablations. Aggregation alternatives include class balancing, conflict reweighting/projection and training-gradient retention heuristics. Optional causal diagnostics include exhaustive **small accepted-cohort** subset enumeration, pre/post losses, update similarities and representation drift. Task-ID-assisted inference is separately reported from class-incremental evaluation; boundary-free variants remain class-aware. Refer to [`docs/NEW_IMPLEMENTATIONS.md`](docs/NEW_IMPLEMENTATIONS.md) for precise semantics and caveats.
+
+The 20-class CIFAR-100 old-class pair 0,1 and later pair 12,13 are related via official CIFAR superclasses, with an explicit participant intervention. Batch size 512 applies to every CIFAR job, including the subset.
+
+Validate frozen plans: `python scripts/validate_plans.py`. A repository test workflow is available in `.github/workflows/tests.yml`.
+
 ## Limitations
 
-This implementation **does not** complete every planned methodology. Broader fully controlled causal forks and all higher-order interactions, secure aggregation/differential privacy, robust federated deployment, SCAFFOLD, all-original-baseline reproduction, fine-grained controlled gradient-sign generation, full supervised task-free change-point learning, open-world label discovery, statistically significant CIFAR results, and per-client domain-shift evaluation remain future tasks. The catalogue reports missing blocks instead of turning them into fake SGD jobs. If a paper is written, report actual selected arms, realized data correlations, repetitions and confidence intervals, never the aspirational block count.
+This implementation **does not** complete every planned methodology. Eight blocks remain unscheduled and many of the 144 covered blocks remain partial. Broader fully controlled causal forks and all higher-order interactions, secure aggregation/differential privacy, robust federated deployment, SCAFFOLD, all-original-baseline reproduction, fine-grained controlled gradient-sign generation, full supervised task-free change-point learning, open-world label discovery, statistically significant CIFAR results, and per-client domain-shift evaluation remain future tasks. The catalogue reports missing blocks instead of turning them into fake SGD jobs. If a paper is written, report actual selected arms, realized data correlations, repetitions and confidence intervals, never the aspirational block count.

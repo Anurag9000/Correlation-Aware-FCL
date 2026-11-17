@@ -106,3 +106,53 @@ def diagnostic_gradient_relationships(model,bank,class_ids,device,samples_per_cl
     model.zero_grad(set_to_none=True)
     return {f'{a}:{b}':vector_cosine(vectors[a],vectors[b])
             for a,b in itertools.islice(itertools.combinations(sorted(vectors),2),max_pairs)}
+
+
+def class_gradient_representations(model,bank,class_ids,device,*,allowed_indices=None,samples_per_class=8):
+    """Privileged TRAIN-only class gradients at one global checkpoint.
+
+    No future samples are eligible: caller supplies indices that have actually
+    arrived somewhere in the federation. Never use held-out evaluation data.
+    Intended only for diagnostics and labeled oracle client selection.
+    """
+    allowed=set(allowed_indices) if allowed_indices is not None else set(range(len(bank.train)))
+    vectors={}
+    params=[p for p in model.parameters() if p.requires_grad]
+    previous_training=model.training
+    model.eval()
+    for cls in sorted(set(map(int,class_ids))):
+        ids=[i for i,y in enumerate(bank.train.targets)
+             if i in allowed and int(y)==cls][:samples_per_class]
+        if not ids:continue
+        x=torch.stack([bank.train[i][0] for i in ids]).to(device)
+        y=torch.tensor([cls]*len(ids),device=device)
+        model.zero_grad(set_to_none=True)
+        F.cross_entropy(model(x),y).backward()
+        vectors[cls]=torch.cat([(p.grad.detach().reshape(-1).cpu() if p.grad is not None
+                                  else torch.zeros_like(p).reshape(-1).cpu()) for p in params])
+    model.zero_grad(set_to_none=True)
+    model.train(previous_training)
+    return vectors
+
+
+def arrived_feature_means(model,bank,class_ids,device,*,allowed_indices,samples_per_class=16):
+    """Feature prototypes from already-arrived training examples only."""
+    allowed=set(allowed_indices)
+    means={}
+    previous_training=model.training
+    model.eval()
+    with torch.no_grad():
+        for cls in sorted(set(map(int,class_ids))):
+            ids=[i for i,y in enumerate(bank.train.targets)
+                 if i in allowed and int(y)==cls][:samples_per_class]
+            if not ids:continue
+            x=torch.stack([bank.train[i][0] for i in ids]).to(device)
+            embeddings=model.features(x) if hasattr(model,'features') else model(x)
+            means[cls]=embeddings.detach().float().mean(dim=0).cpu()
+    model.train(previous_training)
+    return means
+
+
+def pairwise_vector_cosines(vectors):
+    return {(a,b):vector_cosine(vectors[a],vectors[b])
+            for a,b in itertools.combinations(sorted(vectors),2)}

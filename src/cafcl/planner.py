@@ -249,3 +249,265 @@ def write_plan(path,jobs,dataset):
           'coverage_warning':'Unimplemented blocks are NOT represented by fabricated training jobs.'}
     path.write_text(json.dumps(plan,indent=2))
     return plan
+
+
+def research_closure_suite(dataset,seed=0):
+    """Additional real, independently stored CIFAR-10/CIFAR-100 interventions.
+
+    Each job maps to a *specific implemented mechanism*. Unsupported claims
+    remain excluded from the executable plan and the coverage ledger. The
+    CIFAR-100 plan also contains the exact original 20-class/10+10 design.
+    """
+    base=base_config(dataset,seed=seed)
+    jobs=[]
+    def add(block,tag,*,base_override=None,**kw):
+        b=base if base_override is None else base_override
+        jobs.append(_job(b,block,'closure_'+tag,**kw))
+    # A: fixed budget, comparable rounds, total updates, and stage schedules.
+    for rate in (1.,.5):
+        add('A03',f'roundmatched_{int(rate*100)}',participation=rate)
+    for tag,rate,rounds in (('full',1.,10),('half',.5,20)):
+        add('A04',f'clientupdates_{tag}',participation=rate,rounds_per_stage=rounds)
+    for tag,rates in (('earlyfull',(1.,.25)),('latefull',(.25,1.))):
+        b=replace(base,stages=2)
+        add('A06',tag,base_override=b,participation_schedule='stage',stage_participation=rates)
+    for selector in ('coverage','fixed'):
+        add('A07',f'diversity_{selector}',scenario='overlap',selector=selector,participation=.5)
+    for selector in ('fixed','round_robin'):
+        add('A09',f'frequency_{selector}',scenario='overlap',selector=selector,participation=.25)
+
+    # B: exact 10+10 CIFAR-100 reproduction. In CIFAR-10 the analogous
+    # semantic pairs are automobile/truck (1/9) and cat/dog (3/5).
+    if dataset=='cifar100':
+        b=replace(base,dataset='cifar100_20',num_clients=10,stages=2,
+                  scenario='disjoint',relation='natural',rounds_per_stage=20)
+        holders={'0':(0,),'1':(0,),'12':(3,),'13':(3,)}
+        new_pair=(12,13)
+        old_pair=(0,1)
+    else:
+        b=replace(base,num_clients=10,stages=2,
+                  scenario='disjoint',relation='natural',rounds_per_stage=20)
+        holders={'1':(0,),'3':(0,),'5':(3,),'9':(3,)}
+        new_pair=(5,9)
+        old_pair=(1,3)
+    b=replace(b,holders_override=holders)
+    for arm in ('include','exclude'):
+        add('B05',f'exact_old{old_pair}_new{new_pair}_{arm}',base_override=b,
+            target_client=3,force_target=arm,intervention_round=20)
+        add('B12',f'class_spillover_{arm}',base_override=b,prepost_diagnostics=True,
+            target_client=3,force_target=arm,intervention_round=20)
+    for dose in (.25,.5,1.):
+        add('B07',f'related_dose_{int(dose*100)}',base_override=b,
+            class_sample_fraction={str(c):dose for c in new_pair})
+    for tag,when in (('once',20),('always',-1)):
+        add('B08',f'related_participation_{tag}',base_override=b,
+            target_client=3,force_target='include',intervention_round=when)
+    for arm,cohort in (('related',(0,1,2,3,4)),('unrelated',(0,1,2,4,5))):
+        add('B09',f'mixed_related_{arm}',base_override=b,
+            participation_overrides={'20':cohort})
+
+    # C: exact label/sample overlap; client-specific domain; update conflict.
+    for tag,weights in (('balanced',(.5,.5)),('dominant',(.9,.1))):
+        add('C03',tag,scenario='overlap',holders_override={'0':(0,1)},
+            class_holder_weights={'0':weights})
+    add('C04','same_label_disjoint_images',scenario='overlap',overlap=1.,
+        sample_overlap_fraction=0.)
+    for fraction in (0.,.25,.5):
+        add('C05',f'raw_sample_overlap_{int(fraction*100)}',scenario='overlap',
+            overlap=1.,sample_overlap_fraction=fraction)
+    add('C06','client_domain_shared_class',scenario='domain',stages=2,num_clients=5,
+        learning_setting='domain_il')
+    add('C07','overlapping_client_update_cosines',scenario='overlap',
+        overlap=1.,gradient_diagnostics=True)
+    for selector in ('fixed','round_robin'):
+        add('C10',f'longitudinal_{selector}',scenario='overlap',overlap=1.,selector=selector)
+
+    # D/E: recurrence *round* delay, periodic return, inactive holding clients.
+    for lag in (1,5,15):
+        add('D06',f'lag_{lag}_rounds',scenario='recurrence',stages=2,
+            recurrence_round_delay=lag)
+    for period in (5,10):
+        add('D08',f'periodic_{period}',scenario='recurrence',stages=2,
+            recurrence_round_delay=3,recurrence_period=period,recurrence_repeats=3)
+    for method in ('sgd','gem'):
+        add('D09',f'mixed_old_new_{method}',scenario='mixed',method=method)
+    for arm in ('include','exclude'):
+        add('D10',f'inactive_recurrence_{arm}',scenario='recurrence',stages=2,
+            force_target=arm,target_client=3,intervention_round=20)
+    skipped={str(r):(0,1,2,4,5) for r in range(20,25)}
+    immediate={'20':(0,1,2,3,4)}
+    delayed=dict(skipped);delayed['25']=(0,1,2,3,4)
+    for tag,overrides in (('immediate',immediate),('delayed',delayed)):
+        add('D11',f'recurrence_participation_{tag}',scenario='recurrence',stages=2,
+            num_clients=10,participation=.5,participation_overrides=overrides)
+    for method in ('sgd','gem'):
+        add('E03',f'overlap_recurrence_{method}',scenario='mixed',method=method)
+    for selector in ('gradient_align','gradient_conflict'):
+        costbase=b if dataset=='cifar100' else base
+        add('E05',f'helpful_harmful_{selector}',base_override=costbase,
+            selector=selector,gradient_diagnostics=True)
+    for dose in (.1,.5):
+        add('E07',f'rare_recurrence_{int(dose*100)}',scenario='recurrence',stages=2,
+            class_sample_fraction={'0':dose})
+
+    # F: model-dependent train-only oracle score controls.
+    for selector,block in [('feature_max','F11'),('feature_min','F12'),
+                           ('gradient_align','F13'),('gradient_conflict','F14'),
+                           ('forgetting','F15'),('history_adaptive','F19')]:
+        costly=b if dataset=='cifar100' and selector.startswith(('feature','gradient')) else base
+        add(block,selector,base_override=costly,selector=selector,
+            gradient_diagnostics=selector.startswith('gradient'))
+    add('F20','exhaustive_subsets',num_clients=4,participation=.75,
+        causal_max_clients=4,subset_diagnostics=True,rounds_per_stage=2,model='linear')
+
+    # G: SI and GEM reference grouping, historical-memory controls.
+    for method in ('sgd','si'):
+        add('G08',f'synaptic_intelligence_{method}',method=method)
+    for grouping in ('class','stage','all'):
+        add('G14',f'gem_reference_{grouping}',method='gem',gem_grouping=grouping)
+    for method in ('sgd','replay'):
+        add('G11',f'memory_comparison_{method}',method=method)
+
+    # H: optimizer state, long dropout and rejoining.
+    for policy in ('reset','persist'):
+        add('H04',f'momentum_{policy}',optimizer_state_policy=policy,momentum=.9)
+    for tag,overrides in (('included',{'20':(0,1,2,3,4)}),
+                          ('excluded',{str(r):(0,1,2,4,5) for r in range(20,28)})):
+        add('H07',f'rejoin_{tag}',num_clients=10,participation=.5,
+            participation_overrides=overrides)
+
+    # I: distinct server aggregation mechanisms.
+    for aggregator,block in [('fedavg','I03'),('class_balanced','I03'),
+                              ('fedavg','I04'),('conflict_aware','I04'),
+                              ('fedavg','I05'),('retention_aware','I05'),
+                              ('fedavg','I07'),('conflict_projection','I07'),
+                              ('fedavg','I08'),('inverse_participation','I08')]:
+        add(block,f'aggregate_{aggregator}_{block}',scenario='overlap',
+            aggregator=aggregator)
+
+    # J: client data quantity, domain drift, time and class imbalance.
+    for skew in (0.,3.):
+        add('J03',f'client_sample_skew_{skew}',scenario='overlap',client_sample_skew=skew)
+    for stage in (2,3):
+        add('J04',f'domain_feature_skew_{stage}',scenario='domain',stages=stage,
+            num_clients=5,learning_setting='domain_il')
+    for power in (0.,1.):
+        add('J05',f'long_tail_{power}',scenario='overlap',class_imbalance_power=power)
+    for tag,lags in (('independent',{}),('dependent',{'0':2,'1':2,'2':2})):
+        add('J06',f'correlated_arrivals_{tag}',scenario='asynchronous',
+            arrival_lag_by_client=lags)
+    for lag in (0,5):
+        add('J07',f'client_lag_{lag}',scenario='asynchronous',
+            arrival_lag_by_client={'0':lag,'1':lag})
+    for period in (0,5,10):
+        add('J09',f'recurrence_period_{period}',scenario='recurrence',stages=2,
+            recurrence_round_delay=3,recurrence_period=period,
+            recurrence_repeats=1 if not period else 3)
+    for mode in ('domain','gradual_drift'):
+        add('J12',f'temporal_distribution_{mode}',scenario=mode,stages=2,
+            num_clients=5,learning_setting='domain_il')
+
+    # K: task-ID-aware, domain-ID-assessed, and boundary-free controls.
+    for method in ('sgd','gem'):
+        add('K02',f'task_il_{method}',scenario='disjoint',stages=2,
+            learning_setting='task_il',method=method)
+    for scenario in ('domain','gradual_drift'):
+        add('K03',f'domain_il_{scenario}',scenario=scenario,stages=2,
+            num_clients=5,learning_setting='domain_il')
+    for method in ('gem','agem'):
+        add('K04',f'boundary_free_{method}',method=method,boundary_mode='hidden',
+            learning_setting='boundary_free')
+    for mode in ('known','hidden'):
+        add('K06',f'experience_boundary_{mode}',method='gem',boundary_mode=mode,
+            learning_setting='boundary_free' if mode=='hidden' else 'class_il')
+    for scenario in ('disjoint','asynchronous'):
+        add('K07',f'transitions_{scenario}',scenario=scenario)
+
+    # L: local/global loss before/after, subset enumeration and representation.
+    for block in ('L03','L04'):
+        add(block,f'counterfactual_{block}',num_clients=4,participation=.75,
+            causal_max_clients=4,subset_diagnostics=True,rounds_per_stage=2,model='linear')
+    for block in ('L05','L06'):
+        add(block,f'historical_losses_{block}',prepost_diagnostics=True,
+            scenario='related',relation='related')
+    for block in ('L07','L10'):
+        add(block,f'gradient_interference_{block}',gradient_diagnostics=True,
+            prepost_diagnostics=True,scenario='overlap')
+    for scenario in ('disjoint','related'):
+        add('L08',f'representation_drift_{scenario}',scenario=scenario,
+            representation_diagnostics=True)
+
+    # M/N: resource measurement and exploratory mechanism policies.
+    for block in ('M06','M07'):
+        for selector in ('fixed','round_robin'):
+            add(block,f'resource_{selector}',selector=selector)
+    for method in ('gem','agem'):
+        add('N04',f'gem_informed_{method}',selector='gem_informed',method=method)
+
+    if len(jobs)!=len({j.job_id for j in jobs}):
+        raise RuntimeError('Duplicate closure job identifiers')
+    for job in jobs:job.validate()
+    return jobs
+
+
+_old_all_supported_suite=all_supported_suite
+
+def all_supported_suite(dataset,seed=0):
+    """Every executable suite job, not every unimplemented catalogue block."""
+    return _old_all_supported_suite(dataset,seed)+research_closure_suite(dataset,seed)
+
+
+def additional_research_controls(dataset,seed=0):
+    """Explicit controls for catalogue blocks previously represented only by
+    implicit behavior. These remain partial where causal matching or a
+    publication-level benchmark is still absent.
+    """
+    base=base_config(dataset,seed=seed)
+    jobs=[]
+    def add(block,tag,**kw):jobs.append(_job(base,block,'controls_'+tag,**kw))
+    for selector in ('random','fixed'):
+        add('A02',f'fixed_resampled_{selector}',selector=selector,participation=.5)
+    for selector in ('coverage','overlap'):
+        add('A08',f'redundancy_{selector}',selector=selector,scenario='overlap',participation=.5)
+    for relation in ('related','unrelated'):
+        add('B03',f'coarse_relationship_{relation}',scenario='related',relation=relation,
+            gradient_diagnostics=True)
+        add('B04',f'gradient_relationship_{relation}',scenario='related',relation=relation,
+            gradient_diagnostics=True)
+        add('L09',f'permuted_class_arrival_{relation}',scenario='related',relation=relation)
+    for scenario in ('related','recurrence'):
+        add('D03',f'related_new_labels_{scenario}',scenario=scenario,relation='related')
+    for shift in ('recurrence','shifted_recurrence'):
+        add('D04',f'domain_shift_{shift}',scenario=shift,stages=2)
+    for tag,lags in (('persistent',{}),('temporary',{'0':10,'1':10})):
+        add('E08',f'client_correlation_{tag}',scenario='asynchronous',
+            arrival_lag_by_client=lags)
+    for selector in ('random','recurrence'):
+        add('F16',f'recurrence_aware_{selector}',scenario='recurrence',selector=selector)
+    for full_sync in (False,True):
+        add('H03',f'rejoin_fullsync_{full_sync}',full_sync=full_sync,
+            scenario='asynchronous')
+    for clear in (False,True):
+        add('H05',f'private_memory_reset_{clear}',method='gem',
+            reset_memory_on_sync=clear)
+    for agg,block in (('fedavg','I01'),('uniform','I02')):
+        add(block,f'standalone_aggregation_{agg}',aggregator=agg,scenario='overlap')
+    for strength in (0.,1.):
+        add('J10',f'spurious_patch_{strength}',spurious_strength=strength,
+            spurious_ood_eval=bool(strength))
+    for rate in (0.,.2):
+        add('J11',f'client_label_noise_{rate}',label_noise_rate=rate)
+    add('K01','class_incremental_reference',scenario='disjoint',learning_setting='class_il')
+    add('M01',f'dataset_generalization_{dataset}',scenario='related',relation='related')
+    for feedback in ('constant','feedback'):
+        add('N05',f'feedback_participation_{feedback}',scenario='overlap',method='gem',
+            participation_schedule=feedback,participation=.5)
+    for job in jobs:job.validate()
+    if len(jobs)!=len({j.job_id for j in jobs}):raise RuntimeError('Duplicate control job IDs')
+    return jobs
+
+
+_previous_supported_suite=all_supported_suite
+
+def all_supported_suite(dataset,seed=0):
+    return _previous_supported_suite(dataset,seed)+additional_research_controls(dataset,seed)

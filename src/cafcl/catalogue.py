@@ -106,3 +106,9 @@ PARTIAL={'A05','A08','B01','B02','C01','C02','D01','D02','D05','D07','E09','F09'
 def catalogue_report():
     return [{'id':key,'name':name,'status':('partial_implementation' if key in PARTIAL else 'implemented')
               if key in IMPLEMENTED else 'not_implemented'} for key,name in CATALOGUE.items()]
+
+# Expanded November 2026 implementation. Every new block is PARTIAL until
+# exact reference fidelity, causal controls, and CIFAR validations are verified.
+EXPANDED_PARTIAL={'F15', 'A03', 'B08', 'J11', 'K06', 'I08', 'G14', 'H07', 'J12', 'D06', 'L07', 'J10', 'M07', 'C06', 'I07', 'N04', 'E07', 'B03', 'J04', 'C05', 'I04', 'A09', 'G08', 'C03', 'L05', 'B09', 'J06', 'J09', 'B07', 'D04', 'D09', 'L03', 'L06', 'J03', 'L10', 'M06', 'N05', 'L04', 'B05', 'C04', 'F14', 'F20', 'L09', 'C07', 'K07', 'C10', 'F11', 'D10', 'D03', 'A07', 'F13', 'I03', 'K03', 'E03', 'H04', 'E05', 'D08', 'A04', 'A06', 'J05', 'K02', 'K04', 'L08', 'F19', 'B04', 'D11', 'J07', 'B12', 'I05', 'F12', 'E08'}
+IMPLEMENTED.update(EXPANDED_PARTIAL)
+PARTIAL.update(EXPANDED_PARTIAL)

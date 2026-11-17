@@ -64,3 +64,53 @@ def aggregation_leave_one_out(model, bank, observed, updates, base_weights,
                 'note': 'Retrospective oracle analysis; not a deployable client selector'}
     finally:
         model.load_state_dict(original)
+
+
+def aggregation_subset_report(model,bank,observed,updates,base_weights,aggregator,
+                              batch_size,device,*,limit=5):
+    """Evaluate every nonempty subset and pairwise interaction from SAME uploads.
+
+    This is a retrospective *aggregation-only* oracle. It is intentionally
+    bounded by `limit`, as it requires 2**K held-out evaluations and is not
+    a feasible selection algorithm for large federations.
+    """
+    ids=[int(u['client_id']) for u in updates]
+    if not 2<=len(ids)<=limit or len(set(ids))!=len(ids):
+        return {'status':'not_evaluated','reason':'requires 2..limit unique uploads'}
+    from .simulator import aggregate
+    from .evaluation import evaluate
+    original={k:v.detach().cpu().clone() for k,v in model.state_dict().items()}
+    scores={}
+    per_class={}
+    try:
+        # Empty subset is the unmodified previous global model.
+        model.load_state_dict(base_weights)
+        baseline,_=evaluate(model,bank,observed,batch_size,device,peak={})
+        scores[frozenset()]=baseline['accuracy']
+        per_class[frozenset()]=baseline['per_class']
+        for size in range(1,len(ids)+1):
+            for chosen in combinations(ids,size):
+                cohort=frozenset(chosen)
+                selected=[u for u in updates if u['client_id'] in cohort]
+                weights=aggregate(selected,base_weights,aggregator)
+                model.load_state_dict(weights)
+                value,_=evaluate(model,bank,observed,batch_size,device,peak={})
+                scores[cohort]=value['accuracy']
+                per_class[cohort]=value['per_class']
+        interactions={}
+        for a,b in combinations(sorted(ids),2):
+            pair=frozenset((a,b))
+            interactions[f'{a}:{b}']={
+                'accuracy_interaction':pair_interaction(scores,(),a,b),
+                'per_class_interaction':{
+                    str(c):per_class[pair][c]-per_class[frozenset((a,))][c]
+                    -per_class[frozenset((b,))][c]+per_class[frozenset()][c]
+                    for c in baseline['per_class']}}
+        return {'status':'evaluated','kind':'aggregation_subset_oracle',
+                'evaluated_subsets':len(scores),
+                'subset_accuracy':{','.join(map(str,sorted(key))):value
+                                   for key,value in scores.items()},
+                'pair_interactions':interactions,
+                'note':'Diagnostic only. No additional local client training was executed.'}
+    finally:
+        model.load_state_dict(original)
