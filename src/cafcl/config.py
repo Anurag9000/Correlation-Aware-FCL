@@ -29,6 +29,7 @@ class RunConfig:
     dirichlet_alpha: float = 0.5
     target_client: int = -1
     force_target: str = "none"
+    intervention_round: int = -1
     gradient_diagnostics: bool = False
     causal_diagnostics: bool = False
     causal_max_clients: int = 6
@@ -49,6 +50,8 @@ class RunConfig:
     memory_policy: str = "random_per_class"
     local_optimizer: str = "sgd"
     client_heterogeneity: bool = False
+    fork_source_job: str = ""
+    fork_checkpoint_round: int = 0
     job_id: str = ""
     block_id: str = ""
 
@@ -78,8 +81,15 @@ class RunConfig:
         assert self.relation in {"natural", "related", "unrelated"}
         assert self.recurrence_client_policy in {"same", "different"}
         assert self.force_target in {"none", "include", "exclude"}
+        assert self.intervention_round >= -1
         assert 0 <= self.overlap <= 1
         assert self.dirichlet_alpha > 0
+        if self.fork_source_job:
+            assert self.job_id and self.job_id != self.fork_source_job
+            assert self.fork_checkpoint_round >= 1
+            assert self.force_target != 'none'
+            assert self.intervention_round >= self.fork_checkpoint_round
+            assert self.intervention_round < self.stages*self.rounds_per_stage
         if self.force_target != "none":
             assert 0 <= self.target_client < self.num_clients
             assert round(self.num_clients * self.participation) < self.num_clients or self.force_target == "include"

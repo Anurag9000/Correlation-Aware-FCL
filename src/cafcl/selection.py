@@ -86,7 +86,7 @@ def select_clients(states, cfg, round_id, rng, *, old_classes=frozenset(),new_cl
             chosen=rng.choice(ids,size=m,replace=False,p=weights).tolist()
         elif policy not in {'coverage','balanced','diversity'}:
             chosen=sorted(ids,key=lambda i:(-scores[i],i))[:m]
-    if cfg.force_target!='none':
+    if cfg.force_target!='none' and (cfg.intervention_round<0 or round_id==cfg.intervention_round):
         target=cfg.target_client
         if cfg.force_target=='include' and target not in chosen:
             chosen[-1]=target

@@ -93,7 +93,7 @@ IMPLEMENTED={
 'N01','N03',
 'A10','A11','B11','C08','C09','D12','E01','E02','E04','E06','E10',
 'F08','F17','F18','G05','G06','G09','G10','G13','G15','G16',
-'H06','I06','J08','L01','M05','N02'
+'H06','I06','J08','L01','L02','M05','N02'
 }
 # Partial/approximate coverage is deliberately distinguishable from a complete
 # block reproduction; these blocks have functioning simple comparison arms.
@@ -101,7 +101,7 @@ PARTIAL={'A05','A08','B01','B02','C01','C02','D01','D02','D05','D07','E09','F09'
          'G07','G11','G12','H03','H05','J02','M01','M03','M04','N01','N03',
          'A11','B11','C08','C09','D12','E01','E02','E04','E06','E10',
          'F08','F17','F18','G05','G06','G09','G10','G13','G15','G16',
-         'H06','I06','J08','M05','N02'}
+         'H06','I06','J08','L02','M05','N02'}
 
 def catalogue_report():
     return [{'id':key,'name':name,'status':('partial_implementation' if key in PARTIAL else 'implemented')

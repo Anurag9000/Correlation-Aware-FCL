@@ -1,6 +1,7 @@
 """Local execution and sequential all-supported experiment orchestration."""
 from __future__ import annotations
 import argparse,json,traceback,time
+from dataclasses import replace
 from pathlib import Path
 from .config import RunConfig
 from .planner import core_suite,all_supported_suite,write_plan
@@ -25,6 +26,16 @@ def main():
     single=sp.add_parser('run',help='Run one experiment configuration JSON')
     single.add_argument('config');single.add_argument('--output-dir',default='results')
     single.add_argument('--data-root',default='data');single.add_argument('--download',action='store_true')
+    fork=sp.add_parser('fork',help='Full multi-round counterfactual fork from a saved checkpoint')
+    fork.add_argument('--config',required=True,help='JSON baseline configuration')
+    fork.add_argument('--checkpoint',required=True,help='Validated same-scenario checkpoint')
+    fork.add_argument('--client',type=int,required=True)
+    fork.add_argument('--arm',choices=['include','exclude'],required=True)
+    fork.add_argument('--round',type=int,required=True)
+    fork.add_argument('--job-id',required=True)
+    fork.add_argument('--output-dir',default='results/counterfactuals')
+    fork.add_argument('--data-root',default='data')
+    fork.add_argument('--download',action='store_true')
     cat=sp.add_parser('catalogue',help='Print implemented and missing block IDs')
     cat.add_argument('--output',default='')
     args=p.parse_args()
@@ -32,6 +43,13 @@ def main():
         report=catalogue_report()
         if args.output:Path(args.output).write_text(json.dumps(report,indent=2))
         else:print(json.dumps(report,indent=2))
+        return
+    if args.action=='fork':
+        baseline=RunConfig(**json.loads(Path(args.config).read_text()))
+        config=replace(baseline,job_id=args.job_id,target_client=args.client,
+                       force_target=args.arm,intervention_round=args.round)
+        print(json.dumps(run_experiment(config,args.output_dir,args.data_root,
+                                        args.download,fork_from_checkpoint=args.checkpoint),indent=2))
         return
     if args.action=='run':
         config=RunConfig(**json.loads(Path(args.config).read_text()))
@@ -53,7 +71,14 @@ def main():
         for i,cfg in enumerate(jobs_to_run,1):
             print(f'\n=== [{i}/{len(jobs_to_run)}] {cfg.job_id} ({args.dataset}, batch 512) ===',flush=True)
             try:
-                result=run_experiment(cfg,str(root/'runs'),args.data_root,args.download)
+                source=None
+                if cfg.fork_source_job:
+                    source=(root/'runs'/cfg.fork_source_job/
+                            f'checkpoint_round_{cfg.fork_checkpoint_round:04d}.pt')
+                    if not source.is_file():
+                        raise RuntimeError(f'Dependent fork checkpoint missing: {source}')
+                result=run_experiment(cfg,str(root/'runs'),args.data_root,args.download,
+                                      fork_from_checkpoint=source)
                 if result['status']=='already_completed':skipped+=1
                 else:completed+=1
             except Exception as exc:

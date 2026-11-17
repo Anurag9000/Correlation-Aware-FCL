@@ -41,7 +41,7 @@ The implementation records class-wise `accuracy_c(r)`, previous-peak drop, old/n
 
 ## Counterfactual semantics
 
-`aggregation_leave_one_out` evaluates alternatives from the *same accepted local-update pool*, comparing all-client aggregation with a reweighted aggregate excluding one client. This is a valid retrospective aggregation intervention **not** a multi-round train-or-not-train counterfactual. It excludes nonexistent client gradient history and does not model future local memory divergence. Full causal state forks are still required for those claims. Use matched checkpoint, data arrival, compute budgets, client substitutions, and preserved RNG streams for any future trajectory-level experiment.
+`aggregation_leave_one_out` evaluates alternatives from the *same accepted local-update pool*, comparing all-client aggregation with a reweighted aggregate excluding one client. This is a valid retrospective aggregation intervention **not** a multi-round train-or-not-train counterfactual. It excludes nonexistent client gradient history and does not model future local memory divergence. A separate `fork` runner implements actual multi-round causal state forks from a saved checkpoint for fixed-budget one-round client include/exclude interventions, maintaining separate future client memories and model states. Use matched checkpoint, data arrival, compute budgets, client substitutions, and preserved RNG streams for any future trajectory-level experiment.
 
 ## Experiment execution contracts
 
@@ -59,3 +59,18 @@ The implementation records class-wise `accuracy_c(r)`, previous-peak drop, old/n
 ## Essential acceptance tests
 
 Verify: exact FedAvg weighting, exact active-client post-sync, data arrivals to inactive clients, complete global class test coverage, monotonic class observation sets, GEM/A-GEM projection correctness, per-class historical peak metrics, class overlap, disjoint-sample recurrence, selector budget, adaptive server optimizer finite state, independent job artifacts, checkpoint resumption, and diagnostic counterfactual reproducibility. Test the complete system offline with synthetic data before downloading CIFAR datasets.
+
+## Multi-round causal forks (implemented)
+
+A baseline run with `checkpoint_every=1` stores round-level full-state checkpoints. The dependent L02 causal suite reads a designated checkpoint, clones the entire global model, all clients' memories, optimizer and algorithm states, data-arrival history, global retention history, and RNG streams. Two continuation jobs differ only in a prescribed one-round include/exclude-client selection intervention and preserve the participating-client count. Subsequent local experiences and global updates evolve independently. Fork validation rejects data, optimizer, architecture, or scenario changes that would confound this experiment. These controlled branches estimate the effect of that one-round intervention on future trajectories; they do not directly establish the causal mechanism of class similarity, which requires separate data-relation interventions.
+
+Example CLI for a baseline with generated config and first-stage checkpoint:
+
+```bash
+python -m cafcl.cli fork --config path/to/original_config.json \
+  --checkpoint path/to/checkpoint_round_0002.pt \
+  --client 2 --arm include --round 2 --job-id intervention_include \
+  --output-dir results/counterfactuals
+```
+
+The regular `all-supported` suite runs L02 fork baselines immediately before their dependent inclusion/exclusion arms, so the two CIFAR launch scripts execute these as part of their sequential job plans.

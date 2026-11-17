@@ -1,8 +1,8 @@
 # Complete 152-block experiment catalogue and current executable coverage
 
-Every block is a research question, **not** an automatically implemented algorithm. Counts denote independent batch-512 job configurations present in the two launch plans, *not completed training*. A partially implemented block may have comparison arms but still lack full original-paper reproduction or controlled causal inference.
+Blocks are research questions; jobs are concrete batch-512 configurations; neither is evidence of a completed training result. `partial implementation` means genuine runnable methodology with important missing variants/controls. Multi-round causal forks are now scheduled as dependent jobs that replay identical full client/server state from a common checkpoint.
 
-| ID | Scientific experiment | Current implementation | CIFAR-10 jobs | CIFAR-100 jobs |
+| ID | Scientific experiment | Status | CIFAR-10 jobs | CIFAR-100 jobs |
 |---|---|---|---:|---:|
 | A01 | Participation rate | implemented | 19 | 19 |
 | A02 | Fixed versus resampled participants | implemented | 0 | 0 |
@@ -133,7 +133,7 @@ Every block is a research question, **not** an automatically implemented algorit
 | K07 | Asynchronous versus synchronized transitions | not implemented | 0 | 0 |
 | K08 | Closed-world versus open-world class arrival | not implemented | 0 | 0 |
 | L01 | Leave-one-client-out aggregation | implemented | 6 | 6 |
-| L02 | Add-one-client aggregation | not implemented | 0 | 0 |
+| L02 | Add-one-client aggregation | partial implementation | 18 | 18 |
 | L03 | Pairwise client interactions | not implemented | 0 | 0 |
 | L04 | Exhaustive participating subset enumeration | not implemented | 0 | 0 |
 | L05 | Pre/post local historical loss | not implemented | 0 | 0 |
@@ -157,6 +157,8 @@ Every block is a research question, **not** an automatically implemented algorit
 | N05 | Adaptive participation rate | not implemented | 0 | 0 |
 | N06 | Joint selection and aggregation | not implemented | 0 | 0 |
 
-**Totals:** 152 blocks, 72 with some implementation coverage (50 partial), 62 blocks with distinct scheduled jobs, 258 CIFAR-10 jobs and 260 CIFAR-100 jobs.
+**Totals:** 152 planned blocks; 73 with implementation coverage (51 partial); 63 blocks with independent jobs; 276 CIFAR-10 jobs and 278 CIFAR-100 jobs.
 
-**Not executed here.** The official CIFAR experiments require dataset downloads and GPU execution. All planned jobs save independent models and results in their configured roots. Missing blocks must not be re-labelled as completed until their algorithms, intervention arms, controls and scientific validation are implemented.
+**CAUSAL JOB DEPENDENCIES:** L02 creates a baseline with saved round checkpoints, then runs fixed-budget include and exclude counterfactual branches. `fork_source_job` and `fork_checkpoint_round` are recorded in the job configuration. These are full future-trajectories starting from identical server/client/memory/RNG state, changing one designated client-selection round. This does not implement all possible causal analyses.
+
+Missing blocks are explicitly `not implemented`. No official CIFAR runs, publication-level validation, multi-seed confidence intervals, or external-method reproductions were executed here.

@@ -2,7 +2,7 @@
 
 A modular, research-oriented PyTorch simulator for **federated continual learning under partial client participation, class overlap, old/new class relationships, cross-client temporal recurrence, and local forgetting prevention**.
 
-> **Implementation status (2026-11-17):** working, expanded research prototype—not a validated reproduction of all 152 planned research blocks. It registers **258 independently configured CIFAR-10 jobs and 260 CIFAR-100 jobs**, covering **62 distinct research block IDs** (some as partial/approximate implementations). The entire 152-block research catalogue is documented. **32 offline tests pass**. The actual CIFAR sweeps have **not** been trained or benchmarked here. Distinguish programmed jobs from completed research findings.
+> **Implementation status (2026-11-17):** working, expanded research prototype—not a validated reproduction of all 152 planned research blocks. It registers **276 independently configured CIFAR-10 jobs and 278 CIFAR-100 jobs**, covering **63 distinct research block IDs** (some as partial/approximate implementations). The entire 152-block research catalogue is documented. **35 offline tests pass**. The actual CIFAR sweeps have **not** been trained or benchmarked here. Distinguish programmed jobs from completed research findings.
 
 ## Install
 
@@ -32,7 +32,7 @@ bash scripts/run_both_sequentially.sh
 
 Use `--limit 1` to smoke-test the first job, `--stop-on-error` to abort on the first failure, and `--seed N` plus a **different** `RESULTS_ROOT` for independent replication sets. Use `DATA_ROOT` for the CIFAR download location. The scripts **never start automatically** after install or push.
 
-The default plan on each dataset comprises the 60-job canonical full/partial-participation matrix; supported participation, overlap, relatedness, recurrence, memory, synchronization, aggregation, optimizer, selection, and diagnostic ablations; and expanded mechanisms including DER/DER++, ER-ACE, MAS, LwF, server FedAdam/FedAvgM, adaptive participation scheduling, heterogeneous local clients, retrospective leave-one-client-out aggregation, and varying inactive-data retention. See `configs/plans/` and `docs/EXPERIMENT_CATALOGUE.md`.
+The default plan on each dataset comprises the 60-job canonical full/partial-participation matrix; supported participation, overlap, relatedness, recurrence, memory, synchronization, aggregation, optimizer, selection, and diagnostic ablations; and expanded mechanisms including DER/DER++, ER-ACE, MAS, LwF, server FedAdam/FedAvgM, adaptive participation scheduling, heterogeneous local clients, retrospective leave-one-client-out aggregation, varying inactive-data retention, and **matched multi-round include/exclude counterfactual forks** from shared full-state checkpoints. See `configs/plans/` and `docs/EXPERIMENT_CATALOGUE.md`.
 
 ## Non-negotiable scientific semantics
 
@@ -43,7 +43,7 @@ The default plan on each dataset comprises the 60-job canonical full/partial-par
 5. **Every selected active client immediately receives the new global model after aggregation.** A separate `full_sync` mode broadcasts to inactive clients too.
 6. The official **global held-out evaluation includes every class observed anywhere so far**, even when held only by an inactive client. Global model exposure and never-integrated classes are separately recorded.
 7. The local memory survives global synchronization. GEM/A-GEM constrain against locally remembered historical classes, which does not guarantee globally forgetting-safe aggregation.
-8. Every accepted model update is versioned; completed jobs retain independent configurations, metrics, stage checkpoints, and a final model. An interruption can resume from a durable round checkpoint.
+8. Every accepted model update is versioned; completed jobs retain independent configurations, metrics, stage checkpoints, round-level fork checkpoints when requested, and a final model. An interruption can resume from a durable round checkpoint.
 
 ## Local algorithms
 
@@ -61,7 +61,7 @@ Aggregate: sample-weighted FedAvg, uniform client averaging, FedAvgM-style serve
 
 The simulator supports disjoint/IID/Dirichlet-skewed, overlapping, related/unrelated class-order, temporal recurrence (same versus different client, delay), mixed, and asynchronous arrival scenarios. CIFAR-100 relationships use official coarse-superclass metadata; CIFAR-10 relationships use documented heuristic class pairings. Neither is ground-truth gradient similarity.
 
-Opt-in diagnostics compute class-label Jaccard, feature-mean cosine, held-training-sample class-gradient cosine, temporal arrival correlations, and **retrospective aggregation-only leave-one-client-out effects**. These diagnostics have privileged access to simulator training statistics and cannot be advertised as deployable under strong federated privacy constraints. Retrospective aggregation counterfactuals are **not** complete multi-round state forks.
+Opt-in diagnostics compute class-label Jaccard, feature-mean cosine, held-training-sample class-gradient cosine, temporal arrival correlations, and **retrospective aggregation-only leave-one-client-out effects**. These diagnostics have privileged access to simulator training statistics and cannot be advertised as deployable under strong federated privacy constraints. Retrospective aggregation counterfactuals are distinct from the implemented **limited multi-round checkpoint forks**. The latter resume two client-selection intervention arms from a shared full server/client/RNG snapshot; they do not exhaust the causal intervention search space.
 
 ## Run artifacts
 
@@ -105,4 +105,4 @@ The smoke test uses an offline ten-class synthetic image dataset and is not evid
 
 ## Limitations
 
-This implementation **does not** complete every planned methodology. Exact full-trajectory causal forks, secure aggregation/differential privacy, robust federated deployment, SCAFFOLD, all-original-baseline reproduction, fine-grained controlled gradient-sign generation, full supervised task-free change-point learning, open-world label discovery, statistically significant CIFAR results, and per-client domain-shift evaluation remain future tasks. The catalogue reports missing blocks instead of turning them into fake SGD jobs. If a paper is written, report actual selected arms, realized data correlations, repetitions and confidence intervals, never the aspirational block count.
+This implementation **does not** complete every planned methodology. Broader fully controlled causal forks and all higher-order interactions, secure aggregation/differential privacy, robust federated deployment, SCAFFOLD, all-original-baseline reproduction, fine-grained controlled gradient-sign generation, full supervised task-free change-point learning, open-world label discovery, statistically significant CIFAR results, and per-client domain-shift evaluation remain future tasks. The catalogue reports missing blocks instead of turning them into fake SGD jobs. If a paper is written, report actual selected arms, realized data correlations, repetitions and confidence intervals, never the aspirational block count.

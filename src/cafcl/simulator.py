@@ -112,7 +112,7 @@ def save_checkpoint(path,weights,cfg,version,states=None,full_state=False):
     os.replace(tmp,path)
 
 
-def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=True,verbose=True):
+def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=True,verbose=True,*,fork_from_checkpoint=None):
     cfg.validate()
     job=cfg.job_id or cfg.signature()
     run_dir=Path(output_root)/job
@@ -149,9 +149,22 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         total_rounds=cfg.stages*cfg.rounds_per_stage
         class_first_stage={c:s for s,cs in enumerate(scenario.stages) for c in cs}
         latest_checkpoint=run_dir/'checkpoint_latest.pt'
-        if cfg.resume and latest_checkpoint.exists():
-            saved=torch.load(latest_checkpoint,map_location='cpu',weights_only=False)
-            if saved['config']!=cfg.to_dict():
+        source_checkpoint=(Path(fork_from_checkpoint) if fork_from_checkpoint else
+                           (latest_checkpoint if cfg.resume and latest_checkpoint.exists() else None))
+        if source_checkpoint is not None:
+            saved=torch.load(source_checkpoint,map_location='cpu',weights_only=False)
+            if fork_from_checkpoint:
+                # Forks may only change the participation intervention and
+                # destination identity. Dataset/model/training must be identical.
+                allowed={'job_id','force_target','target_client','intervention_round',
+                         'causal_diagnostics','gradient_diagnostics','checkpoint_every',
+                         'fork_source_job','fork_checkpoint_round'}
+                old={k:v for k,v in saved['config'].items() if k not in allowed}
+                new={k:v for k,v in cfg.to_dict().items() if k not in allowed}
+                if old!=new:
+                    changed=[k for k in old if old[k]!=new.get(k)]
+                    raise RuntimeError(f'Fork changes confounded settings: {changed}')
+            elif saved['config']!=cfg.to_dict():
                 raise RuntimeError('Resumption configuration does not match saved checkpoint')
             first_round=int(saved['last_completed_round'])+1
             global_state=saved['global_state'];version=saved['version']
@@ -260,6 +273,11 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 save_round_state(latest_checkpoint,cfg,round_id,global_state,version,
                                  clients,observed,peak,integrated,history,rng,
                                  server_optimizer_state)
+                if cfg.checkpoint_every:
+                    save_round_state(run_dir/f'checkpoint_round_{round_id+1:04d}.pt',
+                                     cfg,round_id,global_state,version,
+                                     clients,observed,peak,integrated,history,rng,
+                                     server_optimizer_state)
             if (round_id+1)%cfg.rounds_per_stage==0:
                 save_checkpoint(run_dir/f'model_stage_{current_stage+1:02d}.pt',global_state,
                                 cfg,version,clients,full_state=True)
@@ -268,6 +286,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                       f'forgetting={result["forgetting"]:.4f} clients={len(selected)}',flush=True)
         save_checkpoint(run_dir/'model_final.pt',global_state,cfg,version,clients,full_state=True)
         atomic_json(run_dir/'summary.json',{'job_id':job,'dataset':cfg.dataset,
+                    'fork_source':str(fork_from_checkpoint) if fork_from_checkpoint else None,
                     'device':str(device),'rounds':total_rounds,'final_metrics':history[-1],
                     'model_final':str(run_dir/'model_final.pt')})
         atomic_json(status_file,{'status':'completed','finished_at':time.time(),

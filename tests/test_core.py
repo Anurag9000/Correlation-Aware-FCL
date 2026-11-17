@@ -17,7 +17,7 @@ def test_catalogue_complete():
     assert len(CATALOGUE)==152
     assert set(IMPLEMENTED)<=set(CATALOGUE)
 
-@pytest.mark.parametrize('dataset,count',[('cifar10',258),('cifar100',260)])
+@pytest.mark.parametrize('dataset,count',[('cifar10',276),('cifar100',278)])
 def test_plans(dataset,count):
     jobs=all_supported_suite(dataset)
     assert len(jobs)==count

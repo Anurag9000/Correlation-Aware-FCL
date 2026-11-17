@@ -142,7 +142,8 @@ def extended_suite(dataset,seed=0):
                 scenario=scenario,relation=relation,participation=part)
     for aggregator in ('fedavg','uniform','fedadam','fedavgm'):
         add('E10',f'relation_aggregation_{aggregator}',scenario='related',
-            relation='related',aggregator=aggregator)
+            relation='related',aggregator=aggregator,
+            server_lr=0.001 if aggregator=='fedadam' else 1.)
 
     # F/N: Client-selection ablations. Metadata selectors are privileged.
     for selector,block in (
@@ -182,6 +183,7 @@ def extended_suite(dataset,seed=0):
     for aggregation in ('fedavg','uniform','fedavgm','fedadam'):
         for scenario in ('non_iid','related'):
             add('I06',f'aggregate_{aggregation}_{scenario}',aggregator=aggregation,
+                server_lr=0.001 if aggregation=='fedadam' else 1.,
                 scenario=scenario,relation='related' if scenario=='related' else 'natural')
 
     # L: Retrospective aggregation counterfactuals on small cohorts only.
@@ -204,8 +206,37 @@ def extended_suite(dataset,seed=0):
     return jobs
 
 
+
+def causal_fork_suite(dataset,seed=0):
+    """Matched multi-round cohort inclusion/exclusion causal trajectories.
+
+    Each baseline saves a checkpoint at the first stream-stage boundary; two
+    independent branches then resume from that same *full federated state*.
+    The intervention is one selected round (not an all-round selection rule),
+    and later client data and memory states evolve independently.
+    """
+    base=base_config(dataset,seed=seed)
+    jobs=[]
+    for scenario in ('related','overlap','recurrence'):
+        for method in ('sgd','gem'):
+            common={'scenario':scenario,'method':method,'participation':.5,
+                    'checkpoint_every':1,
+                    'relation':'related' if scenario=='related' else 'natural'}
+            original=_job(base,'L02',f'forkbaseline_{scenario}_{method}',**common)
+            jobs.append(original)
+            for arm in ('include','exclude'):
+                branch=_job(base,'L02',f'fork{arm}_{scenario}_{method}',
+                            **common,force_target=arm,target_client=2,
+                            intervention_round=base.rounds_per_stage,
+                            fork_source_job=original.job_id,
+                            fork_checkpoint_round=base.rounds_per_stage)
+                jobs.append(branch)
+    assert len(jobs)==18
+    return jobs
+
+
 def all_supported_suite(dataset,seed=0):
-    return core_suite(dataset,seed)+additional_suite(dataset,seed)+extended_suite(dataset,seed)
+    return core_suite(dataset,seed)+additional_suite(dataset,seed)+extended_suite(dataset,seed)+causal_fork_suite(dataset,seed)
 
 
 def write_plan(path,jobs,dataset):

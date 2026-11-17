@@ -146,3 +146,60 @@ def test_resume_after_interrupted_round_is_identical(tmp_path,monkeypatch):
     h2=json.loads((tmp_path/'pristine_control'/'metrics.json').read_text())
     assert [x['accuracy'] for x in h1]==[x['accuracy'] for x in h2]
     assert resumed['status']=='completed'
+
+
+def test_full_trajectory_counterfactual_fork(tmp_path):
+    from dataclasses import replace
+    base=RunConfig(dataset='synthetic',num_clients=4,stages=2,rounds_per_stage=2,
+                   participation=.5,model='linear',checkpoint_every=1,
+                   job_id='baseline_for_forks')
+    run_experiment(base,str(tmp_path),verbose=False)
+    ck=tmp_path/'baseline_for_forks'/'checkpoint_round_0001.pt'
+    assert ck.is_file()
+    configs={arm:replace(base,job_id=f'branch_{arm}',target_client=3,
+                         force_target=arm,intervention_round=1)
+             for arm in ('include','exclude')}
+    for arm,cfg in configs.items():
+        run_experiment(cfg,str(tmp_path),verbose=False,fork_from_checkpoint=ck)
+    histories={arm:json.loads((tmp_path/f'branch_{arm}'/'metrics.json').read_text())
+               for arm in configs}
+    assert histories['include'][0]['selected_clients']==histories['exclude'][0]['selected_clients']
+    assert 3 in histories['include'][1]['selected_clients']
+    assert 3 not in histories['exclude'][1]['selected_clients']
+    assert all(len(h[1]['selected_clients'])==2 for h in histories.values())
+    assert len(histories['include'])==len(histories['exclude'])==4
+    assert (tmp_path/'branch_include'/'model_final.pt').is_file()
+
+
+def test_counterfactual_fork_rejects_scenario_change(tmp_path):
+    from dataclasses import replace
+    base=RunConfig(dataset='synthetic',num_clients=3,stages=2,rounds_per_stage=1,
+                   participation=2/3,model='linear',checkpoint_every=1,
+                   job_id='fork_root')
+    run_experiment(base,str(tmp_path),verbose=False)
+    ck=tmp_path/'fork_root'/'checkpoint_round_0001.pt'
+    changed=replace(base,job_id='bad_fork',scenario='overlap',
+                    force_target='include',target_client=0,intervention_round=1)
+    with pytest.raises(RuntimeError,match='confounded settings'):
+        run_experiment(changed,str(tmp_path),verbose=False,fork_from_checkpoint=ck)
+
+
+def test_registered_full_counterfactual_suite(tmp_path):
+    from cafcl.planner import causal_fork_suite
+    from dataclasses import replace
+    planned=causal_fork_suite('cifar10')
+    assert len(planned)==18
+    assert len([x for x in planned if x.fork_source_job])==12
+    baseline,include,exclude=planned[:3]
+    converted=[replace(x,dataset='synthetic',num_clients=4,model='linear',
+                       target_client=2) for x in (baseline,include,exclude)]
+    run_experiment(converted[0],str(tmp_path),verbose=False)
+    for config in converted[1:]:
+        source=(tmp_path/config.fork_source_job/
+                f'checkpoint_round_{config.fork_checkpoint_round:04d}.pt')
+        assert source.is_file()
+        run_experiment(config,str(tmp_path),verbose=False,fork_from_checkpoint=source)
+    h1=json.loads((tmp_path/converted[1].job_id/'metrics.json').read_text())
+    h2=json.loads((tmp_path/converted[2].job_id/'metrics.json').read_text())
+    assert 2 in h1[2]['selected_clients']
+    assert 2 not in h2[2]['selected_clients']
