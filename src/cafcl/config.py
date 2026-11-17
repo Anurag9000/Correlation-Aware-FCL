@@ -114,7 +114,7 @@ class RunConfig:
             # No privileged clean-label memory, class-balanced server weights
             # or simulator label-aware client selection in the noise baseline.
             assert self.method=='sgd' and self.selector=='random'
-            assert self.aggregator=='fedavg' 
+            assert self.aggregator=='fedavg'
         assert self.regularization_strength >= 0 and self.fedprox_mu >= 0
         assert self.server_lr > 0 and 0 <= self.server_beta1 < 1 and 0 <= self.server_beta2 < 1
         assert self.fedadam_epsilon > 0
@@ -129,11 +129,11 @@ class RunConfig:
         if self.learning_setting=='domain_il':
             assert self.scenario in {"domain","gradual_drift"}
         if self.learning_setting=='boundary_free':
-            assert self.boundary_mode=='hidden' 
+            assert self.boundary_mode=='hidden'
         if self.boundary_mode=='hidden':
             # Stage-dependent consolidation would leak hidden task boundaries.
             assert self.method in {"sgd","replay","gem","agem","er_ace","der","derpp"}
-            assert self.gem_grouping!='stage' 
+            assert self.gem_grouping!='stage'
         assert self.gem_grouping in {"class", "stage", "all"}
         assert 0 <= self.momentum < 1 and self.si_xi > 0 and self.selection_temperature > 0
         assert self.relation in {"natural", "related", "unrelated"}
