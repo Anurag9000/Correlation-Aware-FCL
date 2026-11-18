@@ -1,4 +1,4 @@
-# Full CIFAR-10 / CIFAR-100 finite-axis methodology sweep
+> **2026-11-19 runtime correction:** Every job uses [continuous client-local learning](CONTINUOUS_LOCAL_CL_PROTOCOL.md): all data-bearing clients learn every logical round, irrespective of whether they communicate, with accumulated stale-anchor deltas on later upload. The 67,938/69,722 plan counts are unchanged but training cost increases and previous-protocol checkpoints cannot be resumed.\n\n# Full CIFAR-10 / CIFAR-100 finite-axis methodology sweep
 
 ## Scope and exact counts
 

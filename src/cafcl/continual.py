@@ -47,12 +47,29 @@ class LocalState:
     si_path:dict|None=None
     si_displacement:dict|None=None
     si_stage:int=-1
+    mas_stage:int=-1
+    # The client always continues learning on its private model. A server
+    # snapshot is an anchor for computing its entire, potentially stale delta.
+    sync_anchor:dict|None=None
+    pending_upload_examples:int=0
+    pending_upload_class_counts:dict[int,int]=field(default_factory=dict)
+    pending_upload_classes:set[int]=field(default_factory=set)
+    pending_upload_steps:int=0
+    local_experience:int=-1
+    first_seen_local_experience:dict[int,int]=field(default_factory=dict)
+    local_training_events:list[dict]=field(default_factory=list)
     def receive(self,weights,version,*,clear_memory=False):
         if clear_memory:
             self.memory.clear()
             self.memory_logits.clear()
         self.shared_weights={k:v.detach().cpu().clone() for k,v in weights.items()}
+        self.sync_anchor={k:v.detach().cpu().clone() for k,v in weights.items()}
         self.model_version=version
+        # Acknowledged local contributions have now reached the server.
+        self.pending_upload_examples=0
+        self.pending_upload_class_counts={}
+        self.pending_upload_classes=set()
+        self.pending_upload_steps=0
     def arrival(self,indices,labels,stage):
         if stage > self.current_stage:
             self.current_indices=[]
@@ -157,8 +174,13 @@ def _reference_gradient(model,params,dataset,indices,batch_size,device,seed):
     return _flatten_grads(params)
 
 
-def local_train(model,client,bank,cfg,device,round_id,task_classes=None):
-    """The global model is loaded before this function; client weights stay CPU-side."""
+def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experience_end=False):
+    """Continue training on the client's own local model, without server access.
+
+    The simulator calls this for every client with local data every round,
+    whether selected for federation or not. Shared weights are the private
+    local model between rounds; server synchronization is handled separately.
+    """
     if client.shared_weights is None:
         raise RuntimeError('Client must synchronize before local training')
     model.load_state_dict(client.shared_weights)
@@ -188,7 +210,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None):
                             for n,p in model.named_parameters()}
             client.si_displacement={n:torch.zeros_like(p.detach().cpu())
                                     for n,p in model.named_parameters()}
-        if client.si_stage>=0 and client.current_stage>client.si_stage:
+        if client.si_stage>=0 and client.local_experience>client.si_stage:
             # SI consolidation uses ONLY locally applied optimization steps;
             # the global broadcast is deliberately excluded from the path.
             for n,p in model.named_parameters():
@@ -200,12 +222,12 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None):
             client.si_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
         elif client.si_anchor is None:
             client.si_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
-        client.si_stage=client.current_stage
+        client.si_stage=client.local_experience
     # Persist an earlier global teacher across all rounds of the new local stage.
-    if cfg.method=='lwf' and client.current_stage>client.lwf_stage:
+    if cfg.method=='lwf' and client.local_experience>client.lwf_stage:
         client.lwf_teacher={k:v.detach().cpu().clone() for k,v in model.state_dict().items()} \
             if client.lwf_stage>=0 else None
-        client.lwf_stage=client.current_stage
+        client.lwf_stage=client.local_experience
     teacher=None
     if cfg.method=='lwf' and client.lwf_teacher is not None:
         import copy
@@ -213,13 +235,19 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None):
         teacher.load_state_dict(client.lwf_teacher)
         teacher.eval()
         for parameter in teacher.parameters():parameter.requires_grad_(False)
-    anchor={name:p.detach().clone() for name,p in model.named_parameters()}
+    # FedProx regularizes toward the *last downloaded global model*.
+    # A disconnected client cannot use a later global snapshot it has never
+    # received, and its unsent trajectory must not be silently overwritten.
+    anchor={name:(client.sync_anchor[name].to(device).detach().clone()
+                  if cfg.fedprox_mu>0 and client.sync_anchor is not None
+                  else p.detach().clone())
+            for name,p in model.named_parameters()}
     # FedProx is a local objective, not a different aggregation formula.
 
     # Rehearsal and constraint memory are built only from previous locally trained examples.
     eligible_history={cls:inds for cls,inds in client.memory.items()
                       if (cls in client.trained_classes if cfg.boundary_mode=='hidden'
-                          else client.first_seen_stage.get(cls,client.current_stage)<client.current_stage)}
+                          else client.first_seen_local_experience.get(cls,client.local_experience)<client.local_experience)}
     oldmemory=[i for group in eligible_history.values() for i in group]
     def local_old_loss():
         if not oldmemory:return None
@@ -285,8 +313,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None):
                         loss=loss+cfg.der_beta*F.cross_entropy(replay_logits,ry)
             if cfg.method=='lwf' and teacher is not None:
                 with torch.no_grad():t_logits=teacher(x)
-                old_labels=sorted(c for c,s in client.first_seen_stage.items()
-                                  if s < client.current_stage)
+                old_labels=sorted(c for c,s in client.first_seen_local_experience.items()
+                                  if s < client.local_experience)
                 if old_labels:
                     ids=torch.tensor(old_labels,dtype=torch.long,device=device)
                     temperature=2.0
@@ -361,8 +389,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None):
             step_count+=1
             loss_total+=float(loss.detach().item())
     # Diagonal Fisher approximation for EWC, consolidated at each stage transition.
-    if cfg.method=='ewc' and (round_id+1)%cfg.rounds_per_stage==0:
-        if client.ewc_anchor is None or client.current_stage > client.ewc_stage:
+    if cfg.method=='ewc' and (experience_end or (round_id+1)%cfg.rounds_per_stage==0):
+        if client.ewc_anchor is None or client.local_experience > client.ewc_stage:
             # Use a bounded local batch; this is an approximation, recorded in diagnostics.
             x,y=next(iter(_example_loader(training_data,indices,min(cfg.batch_size,128),
                                           cfg.seed+round_id+client.client_id)))
@@ -370,8 +398,9 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None):
             F.cross_entropy(model(x.to(device)),y.to(device)).backward()
             client.ewc_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
             client.ewc_fisher={n:(p.grad.detach().cpu().square() if p.grad is not None else torch.zeros_like(p.cpu())) for n,p in model.named_parameters()}
-            client.ewc_stage=client.current_stage
-    if cfg.method=='mas' and (round_id+1)%cfg.rounds_per_stage==0:
+            client.ewc_stage=client.local_experience
+    if (cfg.method=='mas' and (experience_end or (round_id+1)%cfg.rounds_per_stage==0)
+            and client.local_experience > client.mas_stage):
         # MAS surrogate importance uses output sensitivity, independent of labels.
         xm,_=next(iter(_example_loader(training_data,indices,min(cfg.batch_size,128),
                                       cfg.seed+round_id+client.client_id)))
@@ -384,6 +413,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None):
             omega={n:omega[n]+client.mas_omega[n] for n in omega}
         client.mas_omega=omega
         client.mas_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
+        client.mas_stage=client.local_experience
     # Never allocate replay/GEM memory for non-memory algorithms.
     if cfg.method in {'gem','agem','replay','er_ace','der','derpp'}:
         client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy)

@@ -1,4 +1,10 @@
-"""Atomic simulator with two broadcasts per selected client per round."""
+"""Continuous on-device continual learning with conditional federated communication.
+
+Every client trains locally every logical round after its data arrive. A selected
+client uploads accumulated private learning, then receives the committed server
+model; inactive clients never synchronize unless a full-sync ablation requests
+it explicitly. All client state is durable across checkpoints.
+"""
 from __future__ import annotations
 from dataclasses import asdict, replace
 import copy,hashlib,json,os,random,time,traceback
@@ -12,8 +18,47 @@ from .continual import LocalState,local_train
 from .selection import select_clients
 from .evaluation import evaluate
 from .causal import aggregation_leave_one_out,aggregation_subset_report
+from collections import Counter
 from .diagnostics import (diagnostic_gradient_relationships,
     class_gradient_representations, arrived_feature_means, pairwise_vector_cosines)
+
+
+# Changing the semantics of an existing job must never silently reuse its old
+# success markers or checkpoints, even though its scientific config is unchanged.
+PROTOCOL_VERSION = 'continuous_local_cl_v1'
+
+
+def anchored_upload(client, global_state):
+    """Rebase *all* locally accumulated learning since the last download.
+
+    For a client last synchronized at anchor A with current private model L,
+    the current-server contribution is G+(L-A). If A==G (no staleness), this
+    equals ordinary FedAvg weight aggregation. Otherwise it is explicitly a
+    stale-delta FedAvg adaptation, NOT identical to synchronous FedAvg.
+    Neither model weights nor privacy-sensitive raw memory are sent separately.
+    """
+    if client.shared_weights is None or client.sync_anchor is None:
+        return None
+    if client.pending_upload_steps <= 0:
+        return None
+    candidate={}
+    for key,gv in global_state.items():
+        lv=client.shared_weights[key]
+        anchor=client.sync_anchor[key]
+        if lv.shape != gv.shape or anchor.shape != gv.shape:
+            raise RuntimeError('Client/server state shape mismatch')
+        if gv.is_floating_point():
+            candidate[key]=(gv.to(torch.float64)+lv.to(torch.float64)
+                           -anchor.to(torch.float64)).to(gv.dtype)
+        else:
+            candidate[key]=lv.clone()
+    if not check_finite(candidate):
+        raise RuntimeError('Nonfinite accumulated client update')
+    return {'weights':candidate,'examples':client.pending_upload_examples,
+            'class_counts':dict(client.pending_upload_class_counts),
+            'accumulated_steps':client.pending_upload_steps,
+            'accumulated_classes':sorted(client.pending_upload_classes),
+            'anchor_version':client.model_version}
 
 
 def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None):
@@ -139,7 +184,7 @@ def server_optimizer_step(base,mean,method,cfg,state):
 def save_round_state(path,cfg,round_id,global_state,version,clients,observed,peak,
                      integrated,history,rng,server_optimizer_state):
     """Durable full-state checkpoint for exact logical-round resumption."""
-    payload={'config':cfg.to_dict(),'last_completed_round':round_id,
+    payload={'config':cfg.to_dict(),'protocol_version':PROTOCOL_VERSION,'last_completed_round':round_id,
              'global_state':global_state,'version':version,
              'clients':{cid:asdict(s) for cid,s in clients.items()},
              'observed':observed,'peak':peak,'integrated':integrated,
@@ -163,7 +208,7 @@ def atomic_json(path,obj):
 def save_checkpoint(path,weights,cfg,version,states=None,full_state=False):
     path=Path(path)
     tmp=path.with_suffix(path.suffix+'.tmp')
-    payload={'model_state':weights,'model_version':version,
+    payload={'model_state':weights,'model_version':version,'protocol_version':PROTOCOL_VERSION,
              'configuration':cfg.to_dict()}
     if full_state:
         payload['clients']={cid:asdict(s) for cid,s in states.items()}
@@ -182,6 +227,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
     if status_file.exists():
         old=json.loads(status_file.read_text())
         if old.get('status')=='completed':
+            if old.get('protocol_version')!=PROTOCOL_VERSION:
+                raise RuntimeError('Completed run uses incompatible local-training protocol; use a new output root')
             if not config_file.exists() or json.loads(config_file.read_text())!=cfg.to_dict():
                 raise RuntimeError(f'Completed job ID collision: {job}')
             if any(not (run_dir/name).exists() for name in
@@ -189,7 +236,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 raise RuntimeError('Completion marker exists but output artifacts are missing')
             return {'status':'already_completed','run_dir':str(run_dir)}
     atomic_json(config_file,cfg.to_dict())
-    atomic_json(status_file,{'status':'running','started_at':time.time()})
+    atomic_json(status_file,{'status':'running','protocol_version':PROTOCOL_VERSION,'started_at':time.time()})
     try:
         # Stable independent randomness for independent processes.
         random.seed(cfg.seed);np.random.seed(cfg.seed);torch.manual_seed(cfg.seed)
@@ -205,6 +252,10 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         clients={cid:LocalState(cid) for cid in range(cfg.num_clients)}
         model=create_model(cfg.model,bank.num_classes).to(device)
         global_state=copy_cpu_state(model)
+        # Initial model is shared at round zero. Subsequent downloads require
+        # explicit communication, except deliberate full-sync ablations.
+        for client in clients.values():
+            client.receive(global_state,version=0)
         observed=set();peak={};history=[];version=0
         integrated=set();server_optimizer_state={}
         first_round=0
@@ -218,6 +269,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            (latest_checkpoint if cfg.resume and latest_checkpoint.exists() else None))
         if source_checkpoint is not None:
             saved=torch.load(source_checkpoint,map_location='cpu',weights_only=False)
+            if saved.get('protocol_version')!=PROTOCOL_VERSION:
+                raise RuntimeError('Cannot resume or fork a checkpoint from an incompatible training protocol')
             if fork_from_checkpoint:
                 # Forks may only change the participation intervention and
                 # destination identity. Dataset/model/training must be identical.
@@ -243,31 +296,92 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 torch.cuda.set_rng_state_all(saved['cuda_rng'])
         for round_id in range(first_round,total_rounds):
             round_start=time.monotonic()
-            # First deliver ALL arrivals, irrespective of client participation.
+            # Queue all client arrivals but do NOT expose later class labels to
+            # the local learner before it has processed earlier class events.
+            # This is essential for ER-ACE masking and true within-round CL.
+            new_events={cid:[] for cid in clients}
             for arrival in scenario.arrivals_at(round_id):
-                # Stream arrivals occur independently of selection. The
-                # pending-data policy determines what remains trainable.
-                client=clients[arrival.client_id]
-                if cfg.pending_policy=='retain_all':
-                    client.current_stage=max(client.current_stage,arrival.stage)
-                    client.current_indices.extend(arrival.indices)
-                    client.seen_indices.update(arrival.indices)
-                    for idx in arrival.indices:
-                        client.sample_first_stage.setdefault(int(idx),int(arrival.stage))
-                    client.observed_classes.update(arrival.labels)
-                    for cls in arrival.labels:
-                        client.first_seen_stage.setdefault(int(cls),int(arrival.stage))
-                else:
-                    client.arrival(list(arrival.indices),arrival.labels,arrival.stage)
-                    if cfg.pending_policy=='bounded' and cfg.max_pending_samples>0:
-                        client.current_indices=client.current_indices[-cfg.max_pending_samples:]
-                if arrival.recurrence:
-                    for label in arrival.labels:
-                        clients[arrival.client_id].recurrence_rounds[int(label)]=round_id
+                for cls in arrival.labels:
+                    ids=[int(i) for i in arrival.indices
+                         if int(bank.train.targets[i])==int(cls)]
+                    if ids:
+                        new_events[arrival.client_id].append({
+                            'indices':ids,'class_id':int(cls),
+                            'global_stage':int(arrival.stage),
+                            'is_recurrence':bool(arrival.recurrence)})
+                # Global test exposure is independent of participation, and
+                # includes labels from all arrivals in this communication round.
                 observed.update(arrival.labels)
             current_stage=min(cfg.stages-1,round_id//cfg.rounds_per_stage)
             old={c for c in observed if class_first_stage[c]<current_stage}
             new=set(observed)-old
+            # Local training is unconditional on federation. Every client has
+            # an independent persistent model, private CL state and unsent
+            # update accumulator. Train arrivals sequentially, then retain the
+            # final current experience for the next round when no new data arrive.
+            local_details=[]
+            local_trained_clients=[]
+            for cid,client in clients.items():
+                local_cfg=cfg
+                if cfg.client_heterogeneity:
+                    algorithms=('sgd','gem','agem','replay')
+                    local_cfg=replace(cfg,method=algorithms[cid%len(algorithms)])
+                events=new_events[cid]
+                if not events and not client.current_indices:
+                    continue
+                # With retain-all, the union is the active data outside of new
+                # local arrivals. In all cases, individual new class events are
+                # learned separately and in arrival order.
+                jobs_to_train=events if events else [{'indices':list(client.current_indices),
+                    'class_id':None,'global_stage':current_stage,'is_recurrence':False}]
+                all_available=list(client.current_indices)
+                for event_index,event in enumerate(jobs_to_train):
+                    if events:
+                        cls=int(event['class_id'])
+                        # Deliver precisely this local class event, and only
+                        # now reveal its labels, samples and recurrence status.
+                        client.arrival(event['indices'],(cls,),event['global_stage'])
+                        if event['is_recurrence']:
+                            client.recurrence_rounds[cls]=round_id
+                        all_available.extend(event['indices'])
+                        client.local_experience+=1
+                        client.first_seen_local_experience.setdefault(cls,client.local_experience)
+                        client.local_training_events.append({'round':round_id,
+                            'local_experience':client.local_experience,
+                            'class':cls,'global_stage':event['global_stage'],
+                            'recurrence':event['is_recurrence'],
+                            'selected_for_upload':False})
+                        client.current_indices=list(event['indices'])
+                        if cfg.pending_policy=='bounded' and cfg.max_pending_samples>0:
+                            client.current_indices=client.current_indices[-cfg.max_pending_samples:]
+                    if cfg.learning_setting=='task_il':
+                        current_event_stage=event['global_stage']
+                        task_labels=scenario.stages[min(current_event_stage,len(scenario.stages)-1)]
+                    else:
+                        task_labels=None
+                    result=local_train(model,client,bank,local_cfg,device,round_id,
+                        task_classes=task_labels,experience_end=bool(events))
+                    if result is None:
+                        continue
+                    # Advance the private weights *without* downloading the
+                    # current global model or exposing raw private memory.
+                    client.shared_weights=result['weights']
+                    client.pending_upload_examples+=result['examples']
+                    client.pending_upload_steps+=result['steps']
+                    client.pending_upload_classes.update(result['class_counts'])
+                    for cls,count in result['class_counts'].items():
+                        client.pending_upload_class_counts[int(cls)]=(
+                            client.pending_upload_class_counts.get(int(cls),0)+count)
+                    local_trained_clients.append(cid)
+                    local_details.append({'client':cid,'local_experience':client.local_experience,
+                        'is_selected':False,
+                        **{k:v for k,v in result.items() if k!='weights'}})
+                # The next round's current training distribution must respect
+                # configured data-retention semantics, not the event queue.
+                if events and cfg.pending_policy=='retain_all':
+                    client.current_indices=list(dict.fromkeys(all_available))
+                if events and cfg.pending_policy=='bounded' and cfg.max_pending_samples>0:
+                    client.current_indices=client.current_indices[-cfg.max_pending_samples:]
             class_relationships=None
             if cfg.selector in {'feature_max','feature_min','gradient_align','gradient_conflict'}:
                 # Simulation-privileged: historical data that have *arrived*,
@@ -290,27 +404,25 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             selected=select_clients(clients,cfg,round_id,rng,old_classes=old,new_classes=new,
                                     coarse_by_fine=bank.coarse_by_fine,
                                     relationships=class_relationships,class_forgetting=risks)
-            accepted=[];local_details=[]
+            selected_set=set(selected)
+            for cid in selected:
+                for event in clients[cid].local_training_events:
+                    if event['round']==round_id:
+                        event['selected_for_upload']=True
+            for entry in local_details:
+                entry['is_selected']=entry['client'] in selected_set
+            accepted=[]
             base_global_state=global_state
             for cid in selected:
                 client=clients[cid]
-                # Pre-training sync, including clients rejoining after inactivity.
-                client.receive(global_state,version)
-                assert client.model_version==version
-                local_cfg=cfg
-                if cfg.client_heterogeneity:
-                    # Experimental fixed heterogeneous allocation, recorded per upload.
-                    algorithms=('sgd','gem','agem','replay')
-                    local_cfg=replace(cfg,method=algorithms[cid%len(algorithms)])
-                task_labels=(scenario.stages[client.current_stage]
-                             if cfg.learning_setting=='task_il' and client.current_stage>=0 else None)
-                result=local_train(model,client,bank,local_cfg,device,round_id,
-                                   task_classes=task_labels)
-                if result is not None:
-                    result['client_id']=cid
-                    integrated.update(int(bank.train.targets[i]) for i in client.current_indices)
-                    accepted.append(result)
-                    local_details.append({'client':cid,**{k:v for k,v in result.items() if k!='weights'}})
+                uploaded=anchored_upload(client,global_state)
+                if uploaded is None:
+                    continue
+                uploaded['client_id']=cid
+                integrated.update(uploaded['accumulated_classes'])
+                accepted.append(uploaded)
+            # Nonselected clients have not downloaded, uploaded or reset their
+            # pending updates. Their local trajectory remains intact.
             evaluation_bank=bank
             if cfg.scenario in {'domain','gradual_drift','shifted_recurrence'}:
                 from .data import DataBank
@@ -449,6 +561,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             result.update({'round':round_id,'model_version':version,
                            'stage':current_stage,'selected_clients':selected,
                            'selected_count':len(selected),'uploaded_count':len(accepted),
+                           'locally_trained_clients':sorted(set(local_trained_clients)),
+                           'locally_trained_count':len(set(local_trained_clients)),
+                           'uploaded_accumulated_classes':{str(u['client_id']):u['accumulated_classes'] for u in accepted},
+                           'uploaded_since_version':{str(u['client_id']):u['anchor_version'] for u in accepted},
+                           'uploaded_accumulated_steps':{str(u['client_id']):u['accumulated_steps'] for u in accepted},
+                           'client_unsent_steps':{str(cid):c.pending_upload_steps for cid,c in clients.items()},
+                           'protocol_version':PROTOCOL_VERSION,
                            'local_details':local_details,
                            'seconds':time.monotonic()-round_start,
                            'global_test_includes_inactive':True,
@@ -488,9 +607,11 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'fork_source':str(fork_from_checkpoint) if fork_from_checkpoint else None,
                     'device':str(device),'rounds':total_rounds,'final_metrics':history[-1],
                     'model_final':str(run_dir/'model_final.pt')})
-        atomic_json(status_file,{'status':'completed','finished_at':time.time(),
+        atomic_json(status_file,{'status':'completed','protocol_version':PROTOCOL_VERSION,
+                                'finished_at':time.time(),
                                 'rounds':total_rounds})
         return {'status':'completed','run_dir':str(run_dir),'final_accuracy':history[-1]['accuracy']}
     except Exception as exc:
-        atomic_json(status_file,{'status':'failed','error':repr(exc),'traceback':traceback.format_exc()})
+        atomic_json(status_file,{'status':'failed','protocol_version':PROTOCOL_VERSION,
+                                  'error':repr(exc),'traceback':traceback.format_exc()})
         raise

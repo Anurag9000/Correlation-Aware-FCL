@@ -1,4 +1,4 @@
-# Primary investigation: six-run CIFAR-10 A-GEM × FedAvg class-holder ablation
+> **2026-11-19 correction:** This pilot uses the [continuous client-local training protocol](CONTINUOUS_LOCAL_CL_PROTOCOL.md). Prior selected-only-learning assumptions are obsolete; do not compare old-protocol output directories with corrected runs.\n\n# Primary investigation: six-run CIFAR-10 A-GEM × FedAvg class-holder ablation
 
 ## Research question
 
@@ -33,8 +33,8 @@ The **identity** of the excluded client/class pair is randomized by `--seed` at 
 - Two experiences: original labels 0–4 first, 5–9 second; 20 communication rounds per experience by default.
 - Same PyTorch initialization seed, same data allocations, model architecture, learning rate, batch size **512**, local epoch count (1), A-GEM memory size, FedAvg aggregation and evaluation protocol in all six arms.
 - Full baseline: all 5 class-holding clients contribute at every round.
-- Partial arms: exactly 4 of 5 clients contribute at *every* round; the fifth is never selected. The excluded client still receives its data arrival events as required by the global FCL test-coverage invariant.
-- Normal A-GEM historical memory survives synchronization. The server receives and aggregates selected client weights; selected clients receive the new global weights immediately after aggregation.
+- Partial arms: exactly 4 of 5 clients communicate at *every* round; the fifth is never selected. **All five still perform local A-GEM training independently**. The omitted client retains its private class history and pending model changes but never uploads or downloads, so its two class labels remain absent from server integration.
+- Normal A-GEM memory survives synchronization. On each selected client's upload, the server receives its accumulated model delta since the last download and aggregates it; the client receives the committed new global weights only **after** upload. A nonselected client's buffer and private weights stay local, even across multiple stages.
 - Training uses the normal **10-logit** classifier for every job. No hidden post-hoc masking of logits creates artificially easy results.
 
 ## Primary measurement: identical seen-class test population

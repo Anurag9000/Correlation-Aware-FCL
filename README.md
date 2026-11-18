@@ -1,5 +1,8 @@
 # Correlation-Aware Federated Continual Learning (CA-FCL)
 
+> **Protocol correction (2026-11-19):** Every data-bearing client now trains a persistent local continual learner in **every round**, even without participating in federation. Selection controls communications only; disconnected updates are accumulated and transmitted on reconnection. All 11 local methods and all client/server factorial jobs share the corrected `continuous_local_cl_v1` training loop. See [continuous local CL protocol](docs/CONTINUOUS_LOCAL_CL_PROTOCOL.md). New results are **not** interchangeable with old-protocol checkpoints.
+
+
 ## Full factorial methodology sweeps — 2026-11-18
 
 Both default CIFAR launchers now run deterministic finite-axis plans: **67,938 CIFAR-10 jobs** and **69,722 CIFAR-100 jobs**, preserving the original 423/425 named A–N jobs. The expansion tests all **99 combinations of 11 local continual-learning methods and 9 server aggregation methods**, across multiple scenarios, participation policies/rates, correlation/overlap levels, learning rates, local epochs, memory sizes and additional method-aware hyperparameters. Factorial arms use seeds 0, 1 and 2. CIFAR-100 also includes the original 20-class 10+10 study. **Every configured batch size remains 512.**
@@ -56,12 +59,12 @@ The default plan on each dataset comprises the 60-job canonical full/partial-par
 ## Non-negotiable scientific semantics
 
 1. **Data arrives at all clients**, irrespective of selection. This immediately expands the global evaluation population.
-2. **Every selected client receives the current global model before local training**, including rejoining clients.
+2. **Every client with data learns locally each round, independent of participation.** A nonselected client keeps its own weights and historical CL state. A client reconnecting to the server uploads its accumulated delta **before** receiving the new global weights.
 3. Clients train only on accessible local training indices and permitted private memory; no global raw training-data pooling is performed for optimization.
-4. The server aggregates accepted local updates using the configured algorithm.
-5. **Every selected active client immediately receives the new global model after aggregation.** A separate `full_sync` mode broadcasts to inactive clients too.
+4. Only selected clients upload their accumulated, last-download-anchored model changes; the server aggregates these using the configured method. Stale-anchor rebasing is an asynchronous FedAvg adaptation, not synchronous vanilla FedAvg.
+5. **Every selected active client receives the committed global model after its upload is acknowledged.** Unselected clients receive no communication. The separate `full_sync` ablation intentionally broadcasts to inactive clients.
 6. The official **global held-out evaluation includes every class observed anywhere so far**, even when held only by an inactive client. Global model exposure and never-integrated classes are separately recorded.
-7. The local memory survives global synchronization. GEM/A-GEM constrain against locally remembered historical classes, which does not guarantee globally forgetting-safe aggregation.
+7. Each client preserves its local continual-learning history across nonparticipation and subsequent synchronization: GEM/A-GEM/replay buffers, EWC/SI/MAS importance state and LwF teachers as applicable; SGD keeps only its learned weights and optional optimizer state. Historical buffers are private and are not transmitted as raw data.
 8. Every accepted model update is versioned; completed jobs retain independent configurations, metrics, stage checkpoints, round-level fork checkpoints when requested, and a final model. An interruption can resume from a durable round checkpoint.
 
 ## Local algorithms

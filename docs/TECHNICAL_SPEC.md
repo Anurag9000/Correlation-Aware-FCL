@@ -1,4 +1,4 @@
-# CA-FCL technical and research protocol
+> **Protocol (2026-11-19):** [Continuous-local CL protocol](CONTINUOUS_LOCAL_CL_PROTOCOL.md) supersedes earlier selected-client-only training assumptions. All local methods train irrespective of communication; the server accepts accumulated reconnection updates.\n\n# CA-FCL technical and research protocol
 
 ## Temporal contract
 
@@ -6,24 +6,24 @@ Maintain independently: communication round `r`, stream data-arrival time, and t
 
 ## Round state machine
 
-1. Compile an immutable scenario and disjoint sample allocations. For every round, deliver all due data to clients regardless of participation.
-2. Record `globally_observed` labels; the evaluator immediately includes all corresponding official held-out test images. Record `globally_integrated` separately.
-3. Select a budget-exact set of clients using the configured selection rule. Privileged selectors use simulated holdings and must be labelled `oracle/diagnostic` rather than privacy-preserving.
-4. Synchronize the selected clients from the committed global model (rejoining clients never train stale weights under the synchronous protocol).
-5. Train each selected client independently with its accessible current samples and permitted private memory. Upload a version-tagged local model and sample-count metadata.
-6. Aggregate accepted updates. FedAvg uses normalized participating-client sample counts. FedAvgM/FedAdam apply stateful server optimization to the averaged client delta.
-7. Validate model tensors, then *synchronize all selected clients* with the new committed global model. `full_sync` additionally updates inactive clients; client private memory is not erased.
-8. Evaluate over all globally observed official held-out test classes, including those on inactive clients. Append per-round/per-class metrics and diagnostics; write durable checkpoints.
+1. Compile an immutable scenario and queue every client's due local class events, regardless of communication participation.
+2. Record globally observed labels and subsequently integrated labels separately.
+3. **Every client with data trains on its own persistent local model.** New class events arriving in the same round are learned sequentially, with no future-label exposure within that local sequence. Historical memory and unsent updates persist even for unselected clients.
+4. Select the communication cohort using the configured participation method. Privileged oracle selectors remain labelled as such.
+5. Upload selected clients' accumulated changes since each client's last downloaded model, plus training counts, represented classes and staleness metadata. **Never overwrite a disconnected client's model before uploading its changes.**
+6. Rebase each stale local delta against the current server model, then use the configured aggregation method; this is an asynchronous stale-anchor variant of FedAvg when anchors differ, not standard synchronous FedAvg.
+7. After accepted aggregation, synchronize selected clients, retaining their method-specific private CL memory. Inactive clients neither upload nor download, except in an explicit full-sync experimental ablation.
+8. Evaluate every globally observed class (including those at inactive clients), append per-round/per-class metrics, and checkpoint all global and private client state.
 
 ## Formal quantities
 
-Let `C` be clients, `P_r ⊆ C` selected clients, `D_{k,e}` local experiences, and `W_r` the canonical server model. Local training yields `W^k_{r+1}`. FedAvg outputs `W_{r+1} = Σ_{k∈P_r} n_{k,r} W^k_{r+1} / Σ_{k∈P_r} n_{k,r}`. The independent global observation set `Y_obs(r)` is the union of classes arriving at **all** clients by that round. The evaluation bank contains every official held-out test sample whose label lies in `Y_obs(r)`, irrespective of train participation. A class may be observed but never globally integrated. Such classes contribute to global accuracy, not automatically to a forgetting event.
+Let `C` be clients, `P_r ⊆ C` selected communicating clients, `D_{k,e}` private local experiences, and `W_r` the canonical server model. Let `A_k` be the latest model client k actually downloaded and `L_{k,r}` its continuously trained private weights. Its accumulated delta is `L_{k,r}-A_k`, and the server-frame upload candidate is `W_r+(L_{k,r}-A_k)`. FedAvg aggregates those candidates with accumulated local sample-count weights. This reduces to ordinary FedAvg if `A_k=W_r`; otherwise it is an explicitly stale-anchor FedAvg adaptation. The independent global observation set `Y_obs(r)` is the union of classes arriving at **all** clients by that round. The evaluation bank contains every official held-out test sample whose label lies in `Y_obs(r)`, irrespective of train participation. A class may be observed but never globally integrated. Such classes contribute to global accuracy, not automatically to a forgetting event.
 
 The implementation records class-wise `accuracy_c(r)`, previous-peak drop, old/new macro accuracy, global micro/macro accuracy, never-integrated classes and coverage. Compare identical held-out class slices to make a forgetting claim; never subtract global accuracies across changing evaluation populations and interpret the result as pure forgetting.
 
 ## Local methods
 
-- **SGD**: cross-entropy on accessible local samples; optimizer reconstructed per selected round.
+- **SGD**: cross-entropy on accessible local samples, even without federated participation; optimizer follows configured reset/persistence policy and the private model is never overwritten before a disconnected update is uploaded.
 - **Replay**: mixes current accessible training samples with permitted private-memory indices. Record repeated presentations separately from unique examples.
 - **GEM**: computes local reference gradients per remembered historical class; solves the convex nonnegative dual QP and verifies all primal dot-product constraints before SGD update. CPU SciPy solver is a resource cost.
 - **A-GEM**: projects current gradient onto a single reference-gradient halfspace when the dot product is negative.
@@ -58,7 +58,7 @@ The implementation records class-wise `accuracy_c(r)`, previous-peak drop, old/n
 
 ## Essential acceptance tests
 
-Verify: exact FedAvg weighting, exact active-client post-sync, data arrivals to inactive clients, complete global class test coverage, monotonic class observation sets, GEM/A-GEM projection correctness, per-class historical peak metrics, class overlap, disjoint-sample recurrence, selector budget, adaptive server optimizer finite state, independent job artifacts, checkpoint resumption, and diagnostic counterfactual reproducibility. Test the complete system offline with synthetic data before downloading CIFAR datasets.
+Verify: complete private offline-learning histories, last-download-anchored rebasing, exact synchronous FedAvg weighting, exact active-client post-sync, data arrivals to inactive clients, complete global class test coverage, monotonic class observation sets, GEM/A-GEM projection correctness, per-class historical peak metrics, class overlap, disjoint-sample recurrence, selector budget, adaptive server optimizer finite state, independent job artifacts, checkpoint resumption, and diagnostic counterfactual reproducibility. Test the complete system offline with synthetic data before downloading CIFAR datasets.
 
 ## Multi-round causal forks (implemented)
 
