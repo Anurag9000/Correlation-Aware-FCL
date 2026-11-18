@@ -1,3 +1,4 @@
+> **2026-11-18 expansion:** The default launchers now register **67,938 CIFAR-10** and **69,722 CIFAR-100** finite-grid jobs, including the previous 423/425 targeted experiments; all 99 local-method/server-method pairings are covered at batch size 512. None of the new sweeps has been trained. Methodology limitations below remain. See [FACTORIAL_SUITE.md](FACTORIAL_SUITE.md).
 # Implementation status — 2026-11-17, expanded engineering pass
 
 **Executable and test-validated offline research prototype; NOT exhaustive research closure.**

@@ -1,5 +1,24 @@
 # Correlation-Aware Federated Continual Learning (CA-FCL)
 
+## Full factorial methodology sweeps — 2026-11-18
+
+Both default CIFAR launchers now run deterministic finite-axis plans: **67,938 CIFAR-10 jobs** and **69,722 CIFAR-100 jobs**, preserving the original 423/425 named A–N jobs. The expansion tests all **99 combinations of 11 local continual-learning methods and 9 server aggregation methods**, across multiple scenarios, participation policies/rates, correlation/overlap levels, learning rates, local epochs, memory sizes and additional method-aware hyperparameters. Factorial arms use seeds 0, 1 and 2. CIFAR-100 also includes the original 20-class 10+10 study. **Every configured batch size remains 512.**
+
+These newly registered configurations **have not been trained**. This is an exhaustive *declared finite-grid* design, not an unrestricted product of all continuous knobs or a claim that missing research methods have been implemented.
+
+See [factorial design and counts](docs/FACTORIAL_SUITE.md), [compact design manifest](configs/designs/factorial_v1.json), and [generator/runner](src/cafcl/full_matrix.py).
+
+~~~bash
+bash scripts/run_all_cifar10.sh --plan-only
+bash scripts/run_all_cifar100.sh --plan-only
+bash scripts/run_all_cifar10.sh --suite legacy --plan-only
+bash scripts/run_all_cifar10.sh --suite balanced --plan-only
+bash scripts/run_all_cifar10.sh --suite factorial --families memory --plan-only
+bash scripts/run_all_cifar10.sh --plan-only --export-plan outputs/cifar10_all.jsonl.gz
+~~~
+
+---
+
 A modular, research-oriented PyTorch simulator for **federated continual learning under partial client participation, class overlap, old/new class relationships, cross-client temporal recurrence, and local forgetting prevention**.
 
 > **Implementation status (2026-11-17 expanded pass):** 152 experiment blocks are documented; **144 block IDs have at least one dedicated runnable configuration**, although many are *partial/approximate research controls*. There are **423 independently configured CIFAR-10 jobs and 425 CIFAR-100 jobs**, all with **batch size 512**. The CIFAR-100 suite also includes the original **20-class / 10+10 class-incremental** intervention. **54 offline tests pass**. Official CIFAR training and statistical research verification have **not** been executed here. For the eight unscheduled blocks and detailed limitations, see [`docs/STATUS.md`](docs/STATUS.md).
