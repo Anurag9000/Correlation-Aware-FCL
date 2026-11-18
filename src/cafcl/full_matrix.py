@@ -137,7 +137,7 @@ def raw_grids(dataset, seeds):
 
 
 def fingerprint(cfg):
-    payload=asdict(cfg);payload.pop('job_id',None);payload.pop('block_id',None)
+    payload=cfg.to_dict();payload.pop('job_id',None);payload.pop('block_id',None)
     return sha256(json.dumps(payload,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 

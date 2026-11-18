@@ -55,6 +55,8 @@ class LocalState:
     pending_upload_class_counts:dict[int,int]=field(default_factory=dict)
     pending_upload_classes:set[int]=field(default_factory=set)
     pending_upload_steps:int=0
+    pending_class_update_steps:dict[int,int]=field(default_factory=dict)
+    activated_labels:set[int]=field(default_factory=set)
     local_experience:int=-1
     first_seen_local_experience:dict[int,int]=field(default_factory=dict)
     local_training_events:list[dict]=field(default_factory=list)
@@ -70,6 +72,7 @@ class LocalState:
         self.pending_upload_class_counts={}
         self.pending_upload_classes=set()
         self.pending_upload_steps=0
+        self.pending_class_update_steps={}
     def arrival(self,indices,labels,stage):
         if stage > self.current_stage:
             self.current_indices=[]
@@ -164,17 +167,20 @@ def _example_loader(dataset,indices,batch_size,seed,shuffle=True):
                       num_workers=0,generator=generator,pin_memory=torch.cuda.is_available())
 
 
-def _reference_gradient(model,params,dataset,indices,batch_size,device,seed):
+def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,active_pair_classes=None):
     model.zero_grad(set_to_none=True)
     batch=next(iter(_example_loader(dataset,indices,batch_size,seed)))
     x,y=batch
     x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
     loss=F.cross_entropy(model(x),y)
     loss.backward()
+    if active_pair_classes is not None:
+        from .class_indexed import freeze_other_class_rows
+        freeze_other_class_rows(model,active_pair_classes)
     return _flatten_grads(params)
 
 
-def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experience_end=False):
+def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experience_end=False,active_pair_classes=None):
     """Continue training on the client's own local model, without server access.
 
     The simulator calls this for every client with local data every round,
@@ -186,6 +192,11 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     model.load_state_dict(client.shared_weights)
     model.to(device)
     model.train()
+    if active_pair_classes is not None:
+        from .class_indexed import canonical_pair_loss,freeze_other_class_rows
+        active_pair_classes=tuple(sorted(set(int(c) for c in active_pair_classes)))
+        if len(active_pair_classes)!=2:
+            raise ValueError('Local contrastive episode requires two distinct labels')
     indices=list(dict.fromkeys(client.current_indices))
     if not indices:
         return None
@@ -263,7 +274,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     old_loss_before=local_old_loss() if cfg.prepost_diagnostics else None
     step_count=0; loss_total=0.; last_projection=0.; num_violations=0;qp_calls=0
     for epoch in range(cfg.epochs):
-        if cfg.method=='replay' and oldmemory:
+        if cfg.method=='replay' and oldmemory and active_pair_classes is None:
             replay_count=min(len(oldmemory),int(round(len(indices)*cfg.replay_ratio)))
             chosen=rng.choice(oldmemory,size=replay_count,replace=len(oldmemory)<replay_count).tolist()
             batch_indices=indices+chosen
@@ -274,13 +285,15 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
             x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
             optimizer.zero_grad(set_to_none=True)
             logits=model(x)
-            if cfg.learning_setting=='task_il':
+            if active_pair_classes is not None:
+                loss=canonical_pair_loss(logits,y,active_pair_classes)
+            elif cfg.learning_setting=='task_il':
                 if task_classes is None or not set(y.tolist()).issubset(set(task_classes)):
                     raise RuntimeError('Task-IL labels do not match the known local task')
                 task_mask=torch.ones(logits.shape[1],dtype=torch.bool,device=device)
                 task_mask[torch.as_tensor(task_classes,dtype=torch.long,device=device)]=False
                 logits=logits.masked_fill(task_mask.unsqueeze(0),-1e9)
-            if cfg.method=='er_ace':
+            if active_pair_classes is None and cfg.method=='er_ace':
                 # ER-ACE stream loss: mask historical classes absent from the
                 # *current* minibatch, but retain future/unseen output columns.
                 mask=torch.zeros(logits.shape[1],dtype=torch.bool,device=device)
@@ -290,8 +303,14 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                         mask[past_cls]=True
                 stream_logits=logits.masked_fill(mask.unsqueeze(0),-1e9)
                 loss=F.cross_entropy(stream_logits,y)
-            else:
+            elif active_pair_classes is None:
                 loss=F.cross_entropy(logits,y)
+            if cfg.method=='replay' and oldmemory and active_pair_classes is not None:
+                ref_count=min(len(oldmemory),max(1,int(round(len(y)*cfg.replay_ratio))))
+                chosen=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
+                rx,ry=next(iter(_example_loader(training_data,chosen,ref_count,
+                    cfg.seed+round_id+client.client_id,shuffle=False)))
+                loss=loss+F.cross_entropy(model(rx.to(device)),ry.to(device))
             if cfg.method in {'er_ace','der','derpp'} and oldmemory:
                 ref_count=min(len(oldmemory),max(1,int(round(len(y)*cfg.replay_ratio))))
                 chosen=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
@@ -347,11 +366,13 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                 loss=loss+.5*cfg.regularization_strength*pen
             loss.backward()
             if cfg.method in {'gem','agem'} and oldmemory:
+                if active_pair_classes is not None:
+                    freeze_other_class_rows(model,active_pair_classes)
                 g=_flatten_grads(params)
                 if cfg.method=='agem':
                     refidx=rng.choice(oldmemory,size=min(cfg.batch_size,len(oldmemory)),replace=False).tolist()
                     ref=_reference_gradient(model,params,training_data,refidx,cfg.batch_size,device,
-                                            cfg.seed+round_id+client.client_id)
+                                            cfg.seed+round_id+client.client_id,active_pair_classes)
                     z,last_projection,v=agem_project(g,ref)
                 else:
                     refs=[]
@@ -370,17 +391,25 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                         mem=groups[group]
                         if mem:
                             refs.append(_reference_gradient(model,params,training_data,mem,
-                                                            cfg.batch_size,device,cfg.seed+group))
+                                                            cfg.batch_size,device,cfg.seed+group,active_pair_classes))
                     z,last_projection,v=gem_project(g,refs)
                     qp_calls+=int(v>0)
                 num_violations+=v
                 _set_grads(params,z)
+            if active_pair_classes is not None:
+                freeze_other_class_rows(model,active_pair_classes)
+            frozen=None
+            if active_pair_classes is not None:
+                from .class_indexed import snapshot_frozen_rows,restore_frozen_rows
+                frozen=snapshot_frozen_rows(model,active_pair_classes)
             if cfg.method=='si':
                 before={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
                 applied_grad={n:(p.grad.detach().cpu().clone() if p.grad is not None
                                  else torch.zeros_like(p.detach().cpu()))
                               for n,p in model.named_parameters()}
             optimizer.step()
+            if frozen is not None:
+                restore_frozen_rows(model,optimizer,frozen)
             if cfg.method=='si':
                 for n,p in model.named_parameters():
                     displacement=p.detach().cpu()-before[n]
@@ -447,8 +476,16 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     client.trained_classes.update(int(bank.train.targets[i]) for i in indices)
     from collections import Counter
     class_counts=dict(Counter(int(bank.train.targets[i]) for i in indices))
+    if active_pair_classes is not None:
+        client.activated_labels.update(active_pair_classes)
+        class_update_steps={int(c):step_count for c in active_pair_classes}
+    else:
+        client.activated_labels.update(class_counts)
+        class_update_steps={int(c):step_count for c in class_counts}
+
     return {'weights':{k:v.detach().cpu().clone() for k,v in model.state_dict().items()},
-            'examples':len(indices),'class_counts':class_counts,'steps':step_count,'loss':loss_total/max(1,step_count),
+            'examples':len(indices),'class_counts':class_counts,'class_update_steps':class_update_steps,
+            'active_pair_classes':list(active_pair_classes) if active_pair_classes else None,'steps':step_count,'loss':loss_total/max(1,step_count),
             'constraint_violations':num_violations,'qp_calls':qp_calls,
             'projection_norm_last':last_projection,'memory_samples':sum(map(len,client.memory.values())),
             'method_used':cfg.method,'fedprox_mu':cfg.fedprox_mu,

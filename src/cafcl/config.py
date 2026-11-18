@@ -89,11 +89,17 @@ class RunConfig:
     reset_memory_on_sync: bool = False
     feedback_threshold: float = 0.25
     feedback_gain: float = 0.5
+    # Single class-indexed classifier with optional strict two-label local episodes.
+    # 'compatible' pairs same-round labels where possible and explicitly marks
+    # singleton fallbacks; 'strict' rejects unpairable class arrivals.
+    class_pair_protocol: str = 'compatible'
+    classwise_head_merge: bool = True
 
     def validate(self):
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
         assert self.batch_size == 512 or self.dataset == "synthetic", "CIFAR run batch size must remain 512"
         assert self.num_clients >= 2
+        assert self.class_pair_protocol in {'compatible','strict'}
         assert self.rounds_per_stage >= 1 and self.stages >= 1
         assert self.epochs >= 1 and self.lr > 0
         assert 0 < self.participation <= 1
@@ -188,8 +194,13 @@ class RunConfig:
         return self
 
     def to_dict(self):
-        return asdict(self)
+        data=asdict(self)
+        # Preserve old plan-file serialization for unchanged job configurations.
+        # Every nondefault protocol variant is still explicitly serialized.
+        if data['class_pair_protocol']=='compatible':data.pop('class_pair_protocol')
+        if data['classwise_head_merge'] is True:data.pop('classwise_head_merge')
+        return data
 
     def signature(self):
-        raw = json.dumps(asdict(self), sort_keys=True)
+        raw = json.dumps(self.to_dict(), sort_keys=True)
         return hashlib.sha256(raw.encode()).hexdigest()[:16]

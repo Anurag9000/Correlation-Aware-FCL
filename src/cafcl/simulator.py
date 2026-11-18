@@ -15,6 +15,7 @@ from .config import RunConfig
 from .data import get_data_bank,compile_scenario
 from .models import create_model,copy_cpu_state,check_finite
 from .continual import LocalState,local_train
+from .class_indexed import classwise_merge,classifier_parameter_names
 from .selection import select_clients
 from .evaluation import evaluate
 from .causal import aggregation_leave_one_out,aggregation_subset_report
@@ -25,7 +26,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'continuous_local_cl_v1'
+PROTOCOL_VERSION = 'class_indexed_shared_stream_v2'
 
 
 def anchored_upload(client, global_state):
@@ -56,6 +57,7 @@ def anchored_upload(client, global_state):
         raise RuntimeError('Nonfinite accumulated client update')
     return {'weights':candidate,'examples':client.pending_upload_examples,
             'class_counts':dict(client.pending_upload_class_counts),
+            'class_update_steps':dict(client.pending_class_update_steps),
             'accumulated_steps':client.pending_upload_steps,
             'accumulated_classes':sorted(client.pending_upload_classes),
             'anchor_version':client.model_version}
@@ -182,7 +184,7 @@ def server_optimizer_step(base,mean,method,cfg,state):
 
 
 def save_round_state(path,cfg,round_id,global_state,version,clients,observed,peak,
-                     integrated,history,rng,server_optimizer_state):
+                     integrated,history,rng,server_optimizer_state,server_class_update_counts=None):
     """Durable full-state checkpoint for exact logical-round resumption."""
     payload={'config':cfg.to_dict(),'protocol_version':PROTOCOL_VERSION,'last_completed_round':round_id,
              'global_state':global_state,'version':version,
@@ -190,6 +192,7 @@ def save_round_state(path,cfg,round_id,global_state,version,clients,observed,pea
              'observed':observed,'peak':peak,'integrated':integrated,
              'history':history,'selection_rng':rng.bit_generator.state,
              'server_optimizer_state':server_optimizer_state,
+             'server_class_update_counts':dict(server_class_update_counts or {}),
              'python_rng':random.getstate(),'numpy_rng':np.random.get_state(),
              'torch_rng':torch.get_rng_state(),
              'cuda_rng':torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []}
@@ -258,6 +261,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             client.receive(global_state,version=0)
         observed=set();peak={};history=[];version=0
         integrated=set();server_optimizer_state={}
+        server_class_update_counts={}
         first_round=0
         rng=np.random.default_rng(cfg.seed+888_777)
         total_rounds=cfg.stages*cfg.rounds_per_stage
@@ -289,6 +293,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             clients={int(cid):LocalState(**state) for cid,state in saved['clients'].items()}
             observed=set(saved['observed']);peak=saved['peak'];integrated=set(saved['integrated'])
             history=saved['history'];server_optimizer_state=saved['server_optimizer_state']
+            server_class_update_counts=saved.get('server_class_update_counts',{})
             rng.bit_generator.state=saved['selection_rng']
             random.setstate(saved['python_rng']);np.random.set_state(saved['numpy_rng'])
             torch.set_rng_state(saved['torch_rng'])
@@ -326,29 +331,45 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 if cfg.client_heterogeneity:
                     algorithms=('sgd','gem','agem','replay')
                     local_cfg=replace(cfg,method=algorithms[cid%len(algorithms)])
-                events=new_events[cid]
+                raw_events=new_events[cid]
+                events=[]
+                for start in range(0,len(raw_events),2):
+                    group=raw_events[start:start+2]
+                    if len(group)==2 and group[0]['class_id']!=group[1]['class_id']:
+                        events.append({'indices':group[0]['indices']+group[1]['indices'],
+                            'class_ids':(group[0]['class_id'],group[1]['class_id']),
+                            'global_stage':max(g['global_stage'] for g in group),
+                            'is_recurrence':any(g['is_recurrence'] for g in group)})
+                    else:
+                        if cfg.class_pair_protocol=='strict':
+                            raise ValueError(f'Client {cid} has insufficient distinct class '
+                                f'labels for a two-class episode at round {round_id}: {group}')
+                        events.extend({**g,'class_ids':(g['class_id'],)} for g in group)
                 if not events and not client.current_indices:
                     continue
                 # With retain-all, the union is the active data outside of new
                 # local arrivals. In all cases, individual new class events are
                 # learned separately and in arrival order.
                 jobs_to_train=events if events else [{'indices':list(client.current_indices),
-                    'class_id':None,'global_stage':current_stage,'is_recurrence':False}]
+                    'class_id':None,'class_ids':(),
+                    'global_stage':current_stage,'is_recurrence':False}]
                 all_available=list(client.current_indices)
                 for event_index,event in enumerate(jobs_to_train):
                     if events:
-                        cls=int(event['class_id'])
-                        # Deliver precisely this local class event, and only
-                        # now reveal its labels, samples and recurrence status.
-                        client.arrival(event['indices'],(cls,),event['global_stage'])
-                        if event['is_recurrence']:
-                            client.recurrence_rounds[cls]=round_id
+                        classes=tuple(int(c) for c in event['class_ids'])
+                        client.arrival(event['indices'],classes,event['global_stage'])
+                        for cls in classes:
+                            if event['is_recurrence']:
+                                client.recurrence_rounds[cls]=round_id
                         all_available.extend(event['indices'])
                         client.local_experience+=1
-                        client.first_seen_local_experience.setdefault(cls,client.local_experience)
+                        for cls in classes:
+                            client.first_seen_local_experience.setdefault(cls,client.local_experience)
                         client.local_training_events.append({'round':round_id,
                             'local_experience':client.local_experience,
-                            'class':cls,'global_stage':event['global_stage'],
+                            'class':classes[0] if len(classes)==1 else None,
+                            'classes':list(classes),
+                            'global_stage':event['global_stage'],
                             'recurrence':event['is_recurrence'],
                             'selected_for_upload':False})
                         client.current_indices=list(event['indices'])
@@ -360,7 +381,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     else:
                         task_labels=None
                     result=local_train(model,client,bank,local_cfg,device,round_id,
-                        task_classes=task_labels,experience_end=bool(events))
+                        task_classes=task_labels,experience_end=bool(events),
+                        active_pair_classes=(tuple(event['class_ids']) if events and
+                                             len(event['class_ids'])==2 and not cfg.label_noise_rate else None))
                     if result is None:
                         continue
                     # Advance the private weights *without* downloading the
@@ -368,6 +391,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     client.shared_weights=result['weights']
                     client.pending_upload_examples+=result['examples']
                     client.pending_upload_steps+=result['steps']
+                    for cls,count in result['class_update_steps'].items():
+                        client.pending_class_update_steps[int(cls)]=(
+                            client.pending_class_update_steps.get(int(cls),0)+int(count))
                     client.pending_upload_classes.update(result['class_counts'])
                     for cls,count in result['class_counts'].items():
                         client.pending_upload_class_counts[int(cls)]=(
@@ -471,6 +497,15 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                                clients=clients,round_id=round_id,old_gradient=old_gradient)
                 candidate,new_server_state=server_optimizer_step(
                     global_state,mean,cfg.aggregator,cfg,server_optimizer_state)
+                if cfg.classwise_head_merge:
+                    candidate=classwise_merge(global_state,candidate,accepted,
+                        server_class_update_counts,classifier_parameter_names(model),
+                        method=cfg.aggregator)
+                for u in accepted:
+                    for cls,n in u.get('class_update_steps',{}).items():
+                        server_class_update_counts[int(cls)]=(
+                            server_class_update_counts.get(int(cls),0)+int(n))
+
                 # Candidate is built without mutating the committed server state.
                 for cid in selected:
                     clients[cid].receive(candidate,version+1,
@@ -590,12 +625,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                (round_id+1)%cfg.rounds_per_stage==0:
                 save_round_state(latest_checkpoint,cfg,round_id,global_state,version,
                                  clients,observed,peak,integrated,history,rng,
-                                 server_optimizer_state)
+                                 server_optimizer_state,server_class_update_counts)
                 if cfg.checkpoint_every:
                     save_round_state(run_dir/f'checkpoint_round_{round_id+1:04d}.pt',
                                      cfg,round_id,global_state,version,
                                      clients,observed,peak,integrated,history,rng,
-                                     server_optimizer_state)
+                                     server_optimizer_state,server_class_update_counts)
             if (round_id+1)%cfg.rounds_per_stage==0:
                 save_checkpoint(run_dir/f'model_stage_{current_stage+1:02d}.pt',global_state,
                                 cfg,version,clients,full_state=True)
