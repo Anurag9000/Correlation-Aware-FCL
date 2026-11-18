@@ -124,6 +124,14 @@ def main() -> int:
                 expected_per_class = {str(label) for label in observed}
                 if set(row.get("per_class", {})) != expected_per_class:
                     raise AssertionError(f"round {row.get('round')} global evaluation omitted an observed class")
+                confusion = row.get("confusion_matrix", {})
+                labels = confusion.get("labels", [])
+                counts = confusion.get("counts", [])
+                if (labels != list(range(10)) or len(counts) != 10 or
+                        any(len(values) != 10 for values in counts) or
+                        sum(sum(int(value) for value in values) for values in counts) !=
+                        row.get("evaluation_samples")):
+                    raise AssertionError(f"round {row.get('round')} confusion counts are incomplete")
                 if row.get("selected_count") != len(row.get("selected_clients", [])):
                     raise AssertionError(f"round {row.get('round')} selected-client count mismatch")
                 if row.get("uploaded_count", 0) > row.get("selected_count", 0):
@@ -150,6 +158,14 @@ def main() -> int:
             finite_tree(final_test, f"{cfg.job_id}.final_test")
             if final_test.get("evaluation_split") != "test":
                 raise AssertionError("final model benchmark evaluation is not the official test split")
+            final_confusion = final_test.get("confusion_matrix", {})
+            test_labels = final_confusion.get("labels", [])
+            test_counts = final_confusion.get("counts", [])
+            if (test_labels != list(range(10)) or len(test_counts) != 10 or
+                    any(len(values) != 10 for values in test_counts) or
+                    sum(sum(int(value) for value in values) for values in test_counts) !=
+                    final_test.get("evaluation_samples")):
+                raise AssertionError("final model confusion counts are incomplete")
             if cfg.fork_source_job:
                 source = root / "runs" / cfg.fork_source_job
                 source_config = json.loads((source / "config.json").read_text())
