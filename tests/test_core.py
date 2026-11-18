@@ -1,4 +1,5 @@
 import json
+import io
 from dataclasses import replace
 import numpy as np
 import pytest
@@ -12,7 +13,7 @@ from cafcl.continual import gem_project,agem_project,LocalState
 from cafcl.selection import select_clients
 from cafcl.simulator import aggregate,run_experiment
 from cafcl.planner import core_suite,all_supported_suite
-from cafcl.cli import select_jobs,wait_for_exclusive_gpu
+from cafcl.cli import select_jobs,wait_for_exclusive_gpu,wait_for_host_memory
 from types import SimpleNamespace
 
 
@@ -40,6 +41,15 @@ def test_named_job_selection_preserves_plan_order_and_rejects_invalid_ids():
         select_jobs(jobs,['A01_disjoint_sgd_full','A01_disjoint_sgd_full'])
     with pytest.raises(ValueError,match='Unknown job IDs'):
         select_jobs(jobs,['NO_SUCH_JOB'])
+
+
+def test_host_memory_gate_waits_until_available_memory_meets_threshold(monkeypatch):
+    readings=iter(["MemAvailable: 7340032 kB\n", "MemAvailable: 8388608 kB\n"])
+    sleeps=[]
+    monkeypatch.setattr('builtins.open',lambda *a,**k:io.StringIO(next(readings)))
+    monkeypatch.setattr('cafcl.cli.time.sleep',sleeps.append)
+    wait_for_host_memory(8.0,poll_seconds=1)
+    assert sleeps==[5]
 
 
 def test_sequential_suite_gpu_gate_waits_for_foreign_compute_pid(monkeypatch):

@@ -24,6 +24,27 @@ def select_jobs(jobs, requested_ids):
     return [job for job in jobs if job.job_id in selected]
 
 
+def wait_for_host_memory(minimum_gib, poll_seconds=30):
+    """Pause between jobs until the shared host has the requested headroom."""
+    if minimum_gib <= 0:
+        return
+    minimum_kib=int(minimum_gib*1024*1024)
+    while True:
+        available_kib=None
+        with open('/proc/meminfo',encoding='ascii') as fh:
+            for line in fh:
+                if line.startswith('MemAvailable:'):
+                    available_kib=int(line.split()[1])
+                    break
+        if available_kib is None:
+            raise RuntimeError('Cannot read MemAvailable for the suite resource gate')
+        if available_kib>=minimum_kib:
+            return
+        print(f'Waiting for host memory headroom: {available_kib/1024/1024:.1f} GiB '
+              f'available; minimum is {minimum_gib:.1f} GiB',flush=True)
+        time.sleep(max(5,poll_seconds))
+
+
 def wait_for_exclusive_gpu(current_pid, poll_seconds=30):
     """Pause suite progression while another non-allowlisted CUDA job is active."""
     allowlisted={int(value) for value in os.environ.get(
@@ -60,6 +81,8 @@ def main():
     suite.add_argument('--wait-for-exclusive-gpu',action='store_true',
                        help='Wait between jobs while another CUDA compute process is active')
     suite.add_argument('--gpu-poll-seconds',type=int,default=30)
+    suite.add_argument('--minimum-memory-gib',type=float,default=0.0,
+                       help='Wait between jobs until MemAvailable reaches this value')
     single=sp.add_parser('run',help='Run one experiment configuration JSON')
     single.add_argument('config');single.add_argument('--output-dir',default='results')
     single.add_argument('--data-root',default='data');single.add_argument('--download',action='store_true')
@@ -110,6 +133,7 @@ def main():
         if args.plan_only:return
         failures=[];completed=0;skipped=0
         for i,cfg in enumerate(jobs_to_run,1):
+            wait_for_host_memory(args.minimum_memory_gib,args.gpu_poll_seconds)
             if args.wait_for_exclusive_gpu:
                 wait_for_exclusive_gpu(os.getpid(),args.gpu_poll_seconds)
             print(f'\n=== [{i}/{len(jobs_to_run)}] {cfg.job_id} ({args.dataset}, batch 512) ===',flush=True)
