@@ -40,6 +40,21 @@ def test_fedadam_and_fedavgm_zero_parameter_shapes():
         assert torch.isfinite(second['w']).all() and next_state['step']==2
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(),reason='CUDA unavailable')
+def test_federated_parameter_aggregation_and_server_step_accept_cuda_device():
+    base={'w':torch.tensor([0.,0.]),'counter':torch.tensor(1)}
+    updates=[{'weights':{'w':torch.tensor([1.,2.]),'counter':torch.tensor(1)},
+              'examples':1,'class_counts':{0:1}},
+             {'weights':{'w':torch.tensor([3.,4.]),'counter':torch.tensor(1)},
+              'examples':3,'class_counts':{0:3}}]
+    mean=aggregate(updates,base,'fedavg',device='cuda')
+    out,state=server_optimizer_step(base,mean,'fedadam',RunConfig(dataset='synthetic'),{},
+                                    device='cuda')
+    assert mean['w'].tolist()==pytest.approx([2.5,3.5])
+    assert out['w'].device.type=='cpu' and torch.isfinite(out['w']).all()
+    assert state['step']==1 and state['m']['w'].device.type=='cpu'
+
+
 def test_selection_policies_are_budget_exact():
     c={i:LocalState(i) for i in range(6)}
     for i in c:
@@ -148,6 +163,35 @@ def test_resume_after_interrupted_round_is_identical(tmp_path,monkeypatch):
     assert resumed['status']=='completed'
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(),reason='CUDA is unavailable')
+def test_cuda_run_and_interrupted_resume_are_identical(tmp_path,monkeypatch):
+    import cafcl.simulator as sim
+    base=RunConfig(dataset='synthetic',num_clients=3,stages=2,rounds_per_stage=2,
+                   participation=2/3,model='linear',checkpoint_every=1,
+                   require_cuda=True,job_id='cuda_interrupted_resume')
+    original_evaluate=sim.evaluate
+    calls={'n':0}
+    def fail_once(*args,**kwargs):
+        calls['n']+=1
+        if calls['n']==2:raise RuntimeError('injected CUDA interruption')
+        return original_evaluate(*args,**kwargs)
+    with monkeypatch.context() as m:
+        m.setattr(sim,'evaluate',fail_once)
+        with pytest.raises(RuntimeError,match='injected CUDA interruption'):
+            sim.run_experiment(base,str(tmp_path),verbose=False)
+    assert (tmp_path/'cuda_interrupted_resume'/'checkpoint_latest.pt').is_file()
+    resumed=sim.run_experiment(base,str(tmp_path),verbose=False)
+    pristine=replace(base,job_id='cuda_pristine_control')
+    sim.run_experiment(pristine,str(tmp_path),verbose=False)
+    a=torch.load(tmp_path/'cuda_interrupted_resume'/'model_final.pt',map_location='cpu',weights_only=False)
+    b=torch.load(tmp_path/'cuda_pristine_control'/'model_final.pt',map_location='cpu',weights_only=False)
+    assert all(torch.equal(a['model_state'][k],b['model_state'][k]) for k in a['model_state'])
+    history=json.loads((tmp_path/'cuda_interrupted_resume'/'metrics.json').read_text())
+    assert resumed['status']=='completed'
+    assert all(row['model_execution_device']=='cuda' for row in history)
+    assert len(history)==base.stages*base.rounds_per_stage
+
+
 def test_full_trajectory_counterfactual_fork(tmp_path):
     from dataclasses import replace
     base=RunConfig(dataset='synthetic',num_clients=4,stages=2,rounds_per_stage=2,
@@ -191,7 +235,7 @@ def test_registered_full_counterfactual_suite(tmp_path):
     assert len(planned)==18
     assert len([x for x in planned if x.fork_source_job])==12
     baseline,include,exclude=planned[:3]
-    converted=[replace(x,dataset='synthetic',num_clients=4,model='linear',
+    converted=[replace(x,dataset='synthetic',num_clients=4,model='linear',require_cuda=False,
                        target_client=2,rounds_per_stage=2,
                        intervention_round=2 if x.fork_source_job else -1,
                        fork_checkpoint_round=2 if x.fork_source_job else 0)

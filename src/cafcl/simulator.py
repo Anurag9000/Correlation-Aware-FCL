@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from .config import RunConfig
-from .data import get_data_bank,compile_scenario
+from .data import get_data_bank,compile_scenario,data_partition_manifest
 from .models import create_model,copy_cpu_state,check_finite
 from .continual import LocalState,local_train
 from .selection import select_clients
@@ -16,8 +16,13 @@ from .diagnostics import (diagnostic_gradient_relationships,
     class_gradient_representations, arrived_feature_means, pairwise_vector_cosines)
 
 
-def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None):
+def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None,
+              device=None,return_weights=False):
     if not updates:raise RuntimeError('No client updates to aggregate')
+    work_device=torch.device(device) if device is not None else next(iter(base.values())).device
+    base={k:v.to(work_device) for k,v in base.items()}
+    updates=[{**u,'weights':{k:v.to(work_device) for k,v in u['weights'].items()}}
+             for u in updates]
     if method=='uniform':
         weights=[1./len(updates)]*len(updates)
     else:
@@ -37,30 +42,42 @@ def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None):
         scores=[u['examples']/max(1,clients[u['client_id']].selection_count)
                 for u in updates]
         weights=[score/sum(scores) for score in scores]
+    initial=torch.stack([torch.as_tensor(weight,device=work_device,dtype=torch.float64)
+                         for weight in weights])
+    initial_total=initial.sum()
+    if (not torch.isfinite(initial).all() or (initial < 0).any() or
+            not torch.isfinite(initial_total) or initial_total.item() <= 0):
+        raise RuntimeError(f'Invalid aggregation weights for {method}')
+    initial=initial/initial_total
+    weights=[initial[i] for i in range(len(initial))]
     if method in {'conflict_aware','retention_aware','conflict_projection'}:
         floating=[k for k,v in base.items() if v.is_floating_point()]
-        delta=[torch.cat([(u['weights'][k].detach().cpu().float()-base[k].float()).reshape(-1)
+        delta=[torch.cat([(u['weights'][k].detach().to(work_device).float()-base[k].float()).reshape(-1)
                           for k in floating]) for u in updates]
         if method=='conflict_aware':
             penalties=[]
             for i,di in enumerate(delta):
-                conflict=0.
+                conflict=torch.zeros((),device=work_device,dtype=di.dtype)
                 for j,dj in enumerate(delta):
                     if i!=j:
-                        denom=float(torch.linalg.vector_norm(di)*torch.linalg.vector_norm(dj))
-                        if denom>1.e-12:
-                            conflict+=max(0.,-float(torch.dot(di,dj))/denom)
+                        denom=torch.linalg.vector_norm(di)*torch.linalg.vector_norm(dj)
+                        cosine=torch.dot(di,dj)/denom.clamp_min(1.e-12)
+                        conflict+=torch.clamp(-cosine,min=0.)
                 penalties.append(conflict)
-            scores=[w/(1.+penalty) for w,penalty in zip(weights,penalties)]
-            weights=[score/sum(scores) for score in scores]
+            base_weights=torch.as_tensor(weights,device=work_device,dtype=delta[0].dtype)
+            scores=base_weights/(1.+torch.stack(penalties))
+            normalized=scores/scores.sum()
+            weights=[normalized[i] for i in range(len(normalized))]
         elif method=='retention_aware' and old_gradient is not None:
-            g=old_gradient.detach().cpu().float()
+            g=old_gradient.detach().to(work_device).float()
             scores=[]
             for w,d in zip(weights,delta):
-                denom=float(torch.linalg.vector_norm(g)*torch.linalg.vector_norm(d))
-                conflict=float(torch.dot(g,d))/denom if denom>1.e-12 else 0.
-                scores.append(w*np.exp(-max(-20.,min(20.,conflict))))
-            weights=[score/sum(scores) for score in scores]
+                denom=torch.linalg.vector_norm(g)*torch.linalg.vector_norm(d)
+                conflict=torch.dot(g,d)/denom.clamp_min(1.e-12)
+                scores.append(torch.as_tensor(w,device=work_device,dtype=d.dtype)*
+                              torch.exp(-torch.clamp(conflict,min=-20.,max=20.)))
+            normalized=torch.stack(scores)/torch.stack(scores).sum()
+            weights=[normalized[i] for i in range(len(normalized))]
         elif method=='conflict_projection':
             # Deterministic pairwise PCGrad-style projection of client deltas.
             # Unlike reweighting, this changes client update directions.
@@ -83,7 +100,20 @@ def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None):
                 else:
                     out[key]=baseval.clone()
             if not check_finite(out):raise RuntimeError('Nonfinite gradient-corrected aggregate')
+            out={k:v.detach().cpu() for k,v in out.items()}
+            if return_weights:
+                return out,{int(update['client_id']):float(weight.detach().item()
+                        if isinstance(weight,torch.Tensor) else weight)
+                        for update,weight in zip(updates,weights)}
             return out
+    normalized=torch.stack([torch.as_tensor(weight,device=work_device,dtype=torch.float64)
+                            for weight in weights])
+    total_weight=normalized.sum()
+    if (not torch.isfinite(normalized).all() or (normalized < 0).any() or
+            not torch.isfinite(total_weight) or total_weight.item() <= 0):
+        raise RuntimeError(f'Invalid aggregation weights for {method}')
+    normalized=normalized/total_weight
+    weights=[normalized[i] for i in range(len(normalized))]
     out={}
     for key,baseval in base.items():
         values=[u['weights'][key] for u in updates]
@@ -98,10 +128,14 @@ def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None):
                 accum+=weight*v.to(torch.float64)
             out[key]=accum.to(baseval.dtype)
     if not check_finite(out):raise RuntimeError('Nonfinite server aggregate')
+    out={k:v.detach().cpu() for k,v in out.items()}
+    if return_weights:
+        return out,{int(update['client_id']):float(weight.item())
+                    for update,weight in zip(updates,weights)}
     return out
 
 
-def server_optimizer_step(base,mean,method,cfg,state):
+def server_optimizer_step(base,mean,method,cfg,state,*,device=None):
     """FedAvgM and FedAdam using the FedAvg mean model delta.
 
     For FedAvg and uniform weighting, the returned mean model is unchanged.
@@ -109,6 +143,9 @@ def server_optimizer_step(base,mean,method,cfg,state):
     """
     if method not in {'fedadam','fedavgm'}:
         return mean,state
+    work_device=torch.device(device) if device is not None else next(iter(base.values())).device
+    base={k:v.to(work_device) for k,v in base.items()}
+    mean={k:v.to(work_device) for k,v in mean.items()}
     state={'step':state.get('step',0)+1,
            'm':dict(state.get('m',{})),
            'v':dict(state.get('v',{}))}
@@ -117,14 +154,14 @@ def server_optimizer_step(base,mean,method,cfg,state):
         if not old.is_floating_point():
             out[name]=mean[name].clone();continue
         delta=(mean[name].to(torch.float64)-old.to(torch.float64))
-        prev_m=state['m'].get(name,torch.zeros_like(delta))
+        prev_m=state['m'].get(name,torch.zeros_like(delta)).to(work_device)
         momentum=(cfg.server_beta1*prev_m+delta if method=='fedavgm'
                   else cfg.server_beta1*prev_m+(1-cfg.server_beta1)*delta)
         state['m'][name]=momentum
         if method=='fedavgm':
             update=cfg.server_lr*momentum
         else:
-            prev_v=state['v'].get(name,torch.zeros_like(delta))
+            prev_v=state['v'].get(name,torch.zeros_like(delta)).to(work_device)
             variance=cfg.server_beta2*prev_v+(1-cfg.server_beta2)*delta.square()
             state['v'][name]=variance
             # Bias correction makes the first server step well-conditioned.
@@ -133,7 +170,10 @@ def server_optimizer_step(base,mean,method,cfg,state):
             update=cfg.server_lr*m_hat/(v_hat.sqrt()+cfg.fedadam_epsilon)
         out[name]=(old.to(torch.float64)+update).to(old.dtype)
     if not check_finite(out):raise RuntimeError('Nonfinite adaptive server update')
-    return out,state
+    return ({k:v.detach().cpu() for k,v in out.items()},
+            {'step':state['step'],
+             'm':{k:v.detach().cpu() for k,v in state['m'].items()},
+             'v':{k:v.detach().cpu() for k,v in state['v'].items()}})
 
 
 def save_round_state(path,cfg,round_id,global_state,version,clients,observed,peak,
@@ -174,6 +214,10 @@ def save_checkpoint(path,weights,cfg,version,states=None,full_state=False):
 
 def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=True,verbose=True,*,fork_from_checkpoint=None):
     cfg.validate()
+    if cfg.require_cuda and not torch.cuda.is_available():
+        raise RuntimeError('CUDA is required for this run, but no compatible CUDA device is available')
+    if cfg.require_cuda and torch.cuda.device_count() < 1:
+        raise RuntimeError('CUDA is required for this run, but no visible CUDA device is available')
     job=cfg.job_id or cfg.signature()
     run_dir=Path(output_root)/job
     run_dir.mkdir(parents=True,exist_ok=True)
@@ -185,7 +229,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             if not config_file.exists() or json.loads(config_file.read_text())!=cfg.to_dict():
                 raise RuntimeError(f'Completed job ID collision: {job}')
             if any(not (run_dir/name).exists() for name in
-                   ('model_final.pt','summary.json','metrics.json')):
+                   ('model_final.pt','summary.json','metrics.json','final_test_metrics.json',
+                    'data_partition.json')):
                 raise RuntimeError('Completion marker exists but output artifacts are missing')
             return {'status':'already_completed','run_dir':str(run_dir)}
     atomic_json(config_file,cfg.to_dict())
@@ -194,8 +239,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         # Stable independent randomness for independent processes.
         random.seed(cfg.seed);np.random.seed(cfg.seed);torch.manual_seed(cfg.seed)
         if torch.cuda.is_available():torch.cuda.manual_seed_all(cfg.seed)
-        device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        bank=get_data_bank(cfg.dataset,data_root,download=download,seed=cfg.seed,class_subset=cfg.class_subset)
+        device=torch.device('cuda' if (cfg.require_cuda or torch.cuda.is_available()) else 'cpu')
+        bank=get_data_bank(cfg.dataset,data_root,download=download,seed=cfg.seed,
+                           class_subset=cfg.class_subset,
+                           validation_fraction=cfg.validation_fraction,
+                           train_fraction=cfg.train_fraction)
+        atomic_json(run_dir/'data_partition.json',data_partition_manifest(
+            bank,cfg.dataset,cfg.validation_fraction,cfg.train_fraction))
         scenario=compile_scenario(bank,cfg)
         torch.save({'arrivals':[asdict(a) for a in scenario.arrivals],
                     'stages':scenario.stages,
@@ -243,6 +293,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 torch.cuda.set_rng_state_all(saved['cuda_rng'])
         for round_id in range(first_round,total_rounds):
             round_start=time.monotonic()
+            if device.type=='cuda':
+                torch.cuda.reset_peak_memory_stats(device)
             # First deliver ALL arrivals, irrespective of client participation.
             for arrival in scenario.arrivals_at(round_id):
                 # Stream arrivals occur independently of selection. The
@@ -323,14 +375,17 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 slices=[(cid,stage,sorted(labels))
                         for (cid,stage),labels in sorted(domain_labels.items())]
                 domain_test=GlobalDomainTest(bank.test,slices,cfg.scenario)
+                domain_validation=GlobalDomainTest(bank.validation,slices,cfg.scenario)
                 evaluation_bank=DataBank(bank.train,domain_test,bank.num_classes,
-                                         bank.coarse_by_fine,bank.original_labels)
+                                         bank.coarse_by_fine,bank.original_labels,
+                                         domain_validation)
             if cfg.spurious_strength:
                 from .data import DataBank
                 from .domains import SpuriousTest
                 evaluation_bank=DataBank(bank.train,
                     SpuriousTest(evaluation_bank.test,cfg.spurious_strength),
-                    bank.num_classes,bank.coarse_by_fine,bank.original_labels)
+                    bank.num_classes,bank.coarse_by_fine,bank.original_labels,
+                    SpuriousTest(evaluation_bank.validation,cfg.spurious_strength))
             pre_aggregation_metrics=None
             pre_representation=None
             if accepted and cfg.prepost_diagnostics:
@@ -340,13 +395,15 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 pre_aggregation_metrics,_=evaluate(model,evaluation_bank,observed,cfg.batch_size,
                                                     device,peak.copy(),integrated=integrated,
                                                     old=old,new=new,
-                                                    task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None)
+                                                    task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                                                    split='validation')
             if accepted and cfg.representation_diagnostics and old:
                 model.load_state_dict(global_state)
                 model.to(device)
                 arrived=set().union(*(c.seen_indices for c in clients.values()))
                 pre_representation=arrived_feature_means(model,bank,old,device,
                                                           allowed_indices=arrived)
+            aggregation_weights={}
             if accepted:
                 old_gradient=None
                 if cfg.aggregator in {'retention_aware'} and old:
@@ -355,10 +412,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     vectors=class_gradient_representations(model,bank,old,device,
                                                            allowed_indices=arrived)
                     if vectors:old_gradient=torch.stack(list(vectors.values())).mean(0)
-                mean=aggregate(accepted,global_state,cfg.aggregator,
-                               clients=clients,round_id=round_id,old_gradient=old_gradient)
+                mean,aggregation_weights=aggregate(accepted,global_state,cfg.aggregator,
+                               clients=clients,round_id=round_id,old_gradient=old_gradient,
+                               device=device,return_weights=True)
                 candidate,new_server_state=server_optimizer_step(
-                    global_state,mean,cfg.aggregator,cfg,server_optimizer_state)
+                    global_state,mean,cfg.aggregator,cfg,server_optimizer_state,
+                    device=device)
                 # Candidate is built without mutating the committed server state.
                 for cid in selected:
                     clients[cid].receive(candidate,version+1,
@@ -427,15 +486,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     model.load_state_dict(global_state)
             result,peak=evaluate(model,evaluation_bank,observed,cfg.batch_size,device,peak,
                                  integrated=integrated,old=old,new=new,
-                                 task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None)
-            if cfg.spurious_ood_eval and cfg.spurious_strength:
-                from .data import DataBank
-                from .domains import SpuriousTest
-                shifted=DataBank(bank.train,SpuriousTest(bank.test,cfg.spurious_strength,reverse=True),
-                                 bank.num_classes,bank.coarse_by_fine,bank.original_labels)
-                shifted_metrics,_=evaluate(model,shifted,observed,cfg.batch_size,
-                                           device,peak={},integrated=integrated)
-                result['spurious_reversed_accuracy']=shifted_metrics['accuracy']
+                                 task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                                 split='validation')
             if pre_aggregation_metrics is not None:
                 result['pre_aggregation_accuracy']=pre_aggregation_metrics['accuracy']
                 result['pre_aggregation_cross_entropy']=pre_aggregation_metrics['cross_entropy_loss']
@@ -446,17 +498,27 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     for c,loss in result['per_class_loss'].items()}
             transmitted_bytes=sum(sum(t.numel()*t.element_size()
                     for t in u['weights'].values()) for u in accepted)
+            model_payload_bytes=sum(t.numel()*t.element_size() for t in global_state.values())
+            downloaded_bytes=model_payload_bytes*len(selected)*2
+            if cfg.full_sync:
+                downloaded_bytes+=model_payload_bytes*cfg.num_clients
+            if device.type=='cuda':torch.cuda.synchronize(device)
             result.update({'round':round_id,'model_version':version,
                            'stage':current_stage,'selected_clients':selected,
                            'selected_count':len(selected),'uploaded_count':len(accepted),
+                           'aggregation_weights':{str(cid):float(weight)
+                                                  for cid,weight in aggregation_weights.items()},
                            'local_details':local_details,
                            'seconds':time.monotonic()-round_start,
-                           'global_test_includes_inactive':True,
+                           'global_evaluation_includes_inactive':True,
+                           'model_execution_device':str(device),
                            'domain_evaluation_slices':(len(slices) if cfg.scenario in {'domain','gradual_drift','shifted_recurrence'} else None),
                            'causal_diagnostics':causal,
                            'subset_diagnostics':subset_analysis,
                            'representation_drift':representation_drift,
                            'update_transmitted_bytes':transmitted_bytes,
+                           'model_broadcast_bytes':downloaded_bytes,
+                           'communication_total_bytes':transmitted_bytes+downloaded_bytes,
                            'peak_cuda_allocated_bytes':torch.cuda.max_memory_allocated(device)
                                if device.type=='cuda' else 0,
                            'gradient_relationships':gradient_relationships,
@@ -483,14 +545,61 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             if verbose:
                 print(f'[{job}] round {round_id+1}/{total_rounds} acc={result["accuracy"]:.4f} '
                       f'forgetting={result["forgetting"]:.4f} clients={len(selected)}',flush=True)
+        model.load_state_dict(global_state)
+        model.to(device)
+        final_evaluation_bank=bank
+        if cfg.scenario in {'domain','gradual_drift','shifted_recurrence'}:
+            from .data import DataBank
+            from .domains import GlobalDomainTest
+            domain_labels={}
+            for arrival in scenario.arrivals:
+                key=(arrival.client_id,arrival.stage)
+                domain_labels.setdefault(key,set()).update(arrival.labels)
+            final_slices=[(cid,stage,sorted(labels))
+                          for (cid,stage),labels in sorted(domain_labels.items())]
+            final_evaluation_bank=DataBank(bank.train,
+                GlobalDomainTest(bank.test,final_slices,cfg.scenario),bank.num_classes,
+                bank.coarse_by_fine,bank.original_labels,
+                GlobalDomainTest(bank.validation,final_slices,cfg.scenario))
+        if cfg.spurious_strength:
+            from .data import DataBank
+            from .domains import SpuriousTest
+            final_evaluation_bank=DataBank(bank.train,
+                SpuriousTest(final_evaluation_bank.test,cfg.spurious_strength),
+                bank.num_classes,bank.coarse_by_fine,bank.original_labels,
+                SpuriousTest(final_evaluation_bank.validation,cfg.spurious_strength))
+        current_stage=cfg.stages-1
+        final_old={c for c in observed if class_first_stage[c]<current_stage}
+        final_new=set(observed)-final_old
         save_checkpoint(run_dir/'model_final.pt',global_state,cfg,version,clients,full_state=True)
+        final_test_metrics,_=evaluate(model,final_evaluation_bank,observed,cfg.batch_size,device,
+                                      peak={},integrated=integrated,old=final_old,new=final_new,
+                                      task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                                      split='test')
+        if cfg.spurious_ood_eval and cfg.spurious_strength:
+            from .data import DataBank
+            from .domains import SpuriousTest
+            shifted=DataBank(bank.train,
+                SpuriousTest(final_evaluation_bank.test,cfg.spurious_strength,reverse=True),
+                bank.num_classes,bank.coarse_by_fine,bank.original_labels,
+                SpuriousTest(final_evaluation_bank.validation,cfg.spurious_strength,reverse=True))
+            shifted_metrics,_=evaluate(model,shifted,observed,cfg.batch_size,device,
+                                       peak={},integrated=integrated,split='test')
+            final_test_metrics['spurious_reversed_accuracy']=shifted_metrics['accuracy']
+        atomic_json(run_dir/'final_test_metrics.json',final_test_metrics)
         atomic_json(run_dir/'summary.json',{'job_id':job,'dataset':cfg.dataset,
                     'fork_source':str(fork_from_checkpoint) if fork_from_checkpoint else None,
-                    'device':str(device),'rounds':total_rounds,'final_metrics':history[-1],
+                    'device':str(device),'model_execution_device':str(device),
+                    'rounds':total_rounds,
+                    'validation_metrics':history[-1],
+                    'final_metrics':final_test_metrics,
+                    'final_test_metrics':final_test_metrics,
+                    'require_cuda':cfg.require_cuda,
                     'model_final':str(run_dir/'model_final.pt')})
         atomic_json(status_file,{'status':'completed','finished_at':time.time(),
                                 'rounds':total_rounds})
-        return {'status':'completed','run_dir':str(run_dir),'final_accuracy':history[-1]['accuracy']}
+        return {'status':'completed','run_dir':str(run_dir),
+                'final_accuracy':final_test_metrics['accuracy']}
     except Exception as exc:
         atomic_json(status_file,{'status':'failed','error':repr(exc),'traceback':traceback.format_exc()})
         raise

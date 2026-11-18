@@ -1,9 +1,11 @@
 """Dataset loading and immutable, disjoint data allocation for CIFAR FCL."""
 from __future__ import annotations
-from collections import defaultdict
+from collections import Counter,defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 import pickle
+import hashlib
+import json
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -48,6 +50,96 @@ class RestrictedLabels(Dataset):
         return x, self.targets[index]
 
 
+class IndexedDataset(Dataset):
+    """A label-indexed view that exposes only an explicit source partition."""
+    def __init__(self, underlying, indices):
+        self.underlying = underlying
+        self.indices = tuple(int(i) for i in indices)
+        self.targets = [int(underlying.targets[i]) for i in self.indices]
+        self.classes = getattr(underlying, 'classes', None)
+
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, index):
+        x, _ = self.underlying[self.indices[index]]
+        return x, self.targets[index]
+
+
+def stratified_train_validation_split(dataset, validation_fraction=.1, seed=0):
+    """Deterministically split original training data by class."""
+    if not 0. < validation_fraction < .5:
+        raise ValueError('validation_fraction must be between 0 and 0.5')
+    by_class=defaultdict(list)
+    for index,label in enumerate(dataset.targets):
+        by_class[int(label)].append(index)
+    rng=np.random.default_rng(seed)
+    train_indices=[]
+    validation_indices=[]
+    for label in sorted(by_class):
+        indices=np.asarray(by_class[label],dtype=np.int64)
+        indices=rng.permutation(indices)
+        count=min(max(1,int(round(len(indices)*validation_fraction))),len(indices)-1)
+        validation_indices.extend(indices[:count].tolist())
+        train_indices.extend(indices[count:].tolist())
+    if not validation_indices or not train_indices:
+        raise ValueError('stratified split requires at least two samples per class')
+    return IndexedDataset(dataset,train_indices),IndexedDataset(dataset,validation_indices)
+
+
+def stratified_training_subset(dataset, fraction=1., seed=0):
+    """Select a reproducible class-stratified pilot subset from training data."""
+    if not 0. < fraction <= 1.:
+        raise ValueError('train_fraction must be in (0, 1]')
+    if fraction == 1.:
+        return dataset
+    by_class=defaultdict(list)
+    for index,label in enumerate(dataset.targets):
+        by_class[int(label)].append(index)
+    rng=np.random.default_rng(seed)
+    selected=[]
+    for label in sorted(by_class):
+        indices=np.asarray(by_class[label],dtype=np.int64)
+        count=max(1,int(round(len(indices)*fraction)))
+        selected.extend(rng.permutation(indices)[:count].tolist())
+    return IndexedDataset(dataset,sorted(selected))
+
+
+def source_indices(dataset):
+    """Return underlying dataset indices for an indexed/restricted view."""
+    indices=list(range(len(dataset)))
+    current=dataset
+    while hasattr(current,'indices') and hasattr(current,'underlying'):
+        indices=[int(current.indices[i]) for i in indices]
+        current=current.underlying
+    return indices
+
+
+def data_partition_manifest(bank, dataset_name, validation_fraction, train_fraction):
+    """Small reproducibility receipt for train, validation and official test."""
+    train_indices=source_indices(bank.train)
+    validation_indices=source_indices(bank.validation) if bank.validation is not None else []
+    test_indices=source_indices(bank.test)
+    def digest(indices):
+        payload=json.dumps(indices,separators=(',',':')).encode()
+        return hashlib.sha256(payload).hexdigest()
+    counts=lambda data: {str(int(c)):int(n) for c,n in sorted(Counter(data.targets).items())}
+    return {'dataset':dataset_name,'validation_fraction':validation_fraction,
+            'train_fraction':train_fraction,
+            'train_samples':len(bank.train),'validation_samples':len(validation_indices),
+            'official_test_samples':len(bank.test),
+            'train_class_counts':counts(bank.train),
+            'validation_class_counts':counts(bank.validation) if bank.validation is not None else {},
+            'official_test_class_counts':counts(bank.test),
+            'train_source_indices_sha256':digest(train_indices),
+            'validation_source_indices_sha256':digest(validation_indices),
+            'official_test_source_indices_sha256':digest(test_indices),
+            'train_validation_source_indices_disjoint':not bool(set(train_indices)&set(validation_indices)),
+            'official_test_is_original_cifar_test_split':dataset_name.startswith('cifar'),
+            'official_test_provenance':('torchvision CIFAR official test partition'
+                                        if dataset_name.startswith('cifar') else 'synthetic fixture')}
+
+
 @dataclass
 class DataBank:
     train: Dataset
@@ -55,11 +147,16 @@ class DataBank:
     num_classes: int
     coarse_by_fine: dict[int,int]
     original_labels: tuple[int, ...] = ()
+    validation: Dataset | None = None
 
 
-def get_data_bank(name: str, data_root: str, *, download=True, seed=0, class_subset=()) -> DataBank:
+def get_data_bank(name: str, data_root: str, *, download=True, seed=0, class_subset=(),
+                  validation_fraction=.1, train_fraction=1.) -> DataBank:
     if name == "synthetic":
-        return DataBank(TinySynthetic(True, seed), TinySynthetic(False, seed), 10, {x:x//2 for x in range(10)})
+        full_train=TinySynthetic(True, seed)
+        train,validation=stratified_train_validation_split(full_train,validation_fraction,seed=0)
+        train=stratified_training_subset(train,train_fraction,seed=seed+1)
+        return DataBank(train,TinySynthetic(False, seed),10,{x:x//2 for x in range(10)},(),validation)
     cls = datasets.CIFAR10 if name == "cifar10" else datasets.CIFAR100
     mean, std = (CIFAR10_MEAN, CIFAR10_STD) if name == "cifar10" else (CIFAR100_MEAN, CIFAR100_STD)
     transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean,std)])
@@ -104,7 +201,9 @@ def get_data_bank(name: str, data_root: str, *, download=True, seed=0, class_sub
         train=RestrictedLabels(train,original_labels)
         test=RestrictedLabels(test,original_labels)
         coarse={i:coarse[original] for i,original in enumerate(original_labels)}
-    return DataBank(train, test, len(train.classes), coarse, original_labels)
+    train,validation=stratified_train_validation_split(train,validation_fraction,seed=0)
+    train=stratified_training_subset(train,train_fraction,seed=seed+1)
+    return DataBank(train,test,len(original_labels),coarse,original_labels,validation)
 
 
 def class_order(bank: DataBank, relation: str, stages: int | None = None) -> list[int]:

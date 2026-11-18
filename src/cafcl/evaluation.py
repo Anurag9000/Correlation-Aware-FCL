@@ -7,11 +7,25 @@ from torch.utils.data import DataLoader,Subset
 
 @torch.inference_mode()
 def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=None, old=None, new=None,
-             task_class_groups=None):
+             task_class_groups=None,split='test'):
+    device=torch.device(device)
+    if any(parameter.device.type != device.type or
+           (device.index is not None and parameter.device.index != device.index)
+           for parameter in model.parameters()):
+        raise RuntimeError(f'Model parameters are not on requested evaluation device {device}')
     observed=set(map(int,observed))
-    if not observed:return {'accuracy':None,'macro_accuracy':None,'per_class':{},'forgetting':0.,'unlearned':[]},peak or {}
-    ids=[i for i,y in enumerate(bank.test.targets) if int(y) in observed]
-    loader=DataLoader(Subset(bank.test,ids),batch_size=batch_size,shuffle=False,num_workers=0)
+    if split not in {'validation','test'}:
+        raise ValueError(f'Unsupported evaluation split: {split}')
+    dataset=getattr(bank,split,None)
+    if dataset is None:
+        if split=='validation':
+            raise ValueError('Validation evaluation requested without a validation split')
+        dataset=bank.test
+    if not observed:
+        return {'accuracy':None,'macro_accuracy':None,'per_class':{},'forgetting':0.,
+                'unlearned':[],'evaluation_split':split,'evaluation_samples':0},peak or {}
+    ids=[i for i,y in enumerate(dataset.targets) if int(y) in observed]
+    loader=DataLoader(Subset(dataset,ids),batch_size=batch_size,shuffle=False,num_workers=0)
     model.eval()
     correct={c:0 for c in observed};count={c:0 for c in observed}
     class_losses={c:0. for c in observed}
@@ -94,6 +108,7 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
             'globally_integrated_classes':sorted(integrated),
             'never_integrated_classes':never_integrated,
             'never_integrated_accuracy':group_accuracy(never_integrated),
-            'observed_classes':sorted(observed),'test_samples':len(ids),
+            'observed_classes':sorted(observed),'evaluation_samples':len(ids),
+            'evaluation_split':split,
             'task_id_at_inference':task_class_groups is not None,
             'unlearned':unlearned},historical

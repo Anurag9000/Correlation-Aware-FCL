@@ -10,7 +10,8 @@ from .catalogue import CATALOGUE,IMPLEMENTED,catalogue_report
 def base_config(dataset, model='smallcnn', seed=0):
     return RunConfig(dataset=dataset,stages=2 if dataset=='cifar10' else 10,
                      num_clients=10 if dataset=='cifar10' else 20,
-                     batch_size=512,model=model,seed=seed)
+                     batch_size=512,model=model,seed=seed,
+                     require_cuda=dataset!='synthetic',validation_fraction=.1)
 
 
 def _job(base,block,tag,**kw):

@@ -1,8 +1,8 @@
 """Aggregation-only causal diagnostics.
 
 All candidate local updates must be trained from one identical global base version.
-These analyses never feed the held-out evaluation results back to a deployable
-selector; they are explicitly *privileged counterfactual diagnostics*.
+These analyses use validation results only and never feed them back to a
+deployable selector; they are explicitly *privileged counterfactual diagnostics*.
 """
 from __future__ import annotations
 from collections import Counter
@@ -44,9 +44,9 @@ def aggregation_leave_one_out(model, bank, observed, updates, base_weights,
     from .evaluation import evaluate
     original = {k: v.detach().cpu().clone() for k,v in model.state_dict().items()}
     def score(chosen):
-        candidate = aggregate(chosen, base_weights, aggregator)
+        candidate = aggregate(chosen, base_weights, aggregator,device=device)
         model.load_state_dict(candidate)
-        vals, _ = evaluate(model, bank, observed, batch_size, device, peak={})
+        vals, _ = evaluate(model, bank, observed, batch_size, device, peak={},split='validation')
         return vals
     try:
         full = score(updates)
@@ -85,16 +85,16 @@ def aggregation_subset_report(model,bank,observed,updates,base_weights,aggregato
     try:
         # Empty subset is the unmodified previous global model.
         model.load_state_dict(base_weights)
-        baseline,_=evaluate(model,bank,observed,batch_size,device,peak={})
+        baseline,_=evaluate(model,bank,observed,batch_size,device,peak={},split='validation')
         scores[frozenset()]=baseline['accuracy']
         per_class[frozenset()]=baseline['per_class']
         for size in range(1,len(ids)+1):
             for chosen in combinations(ids,size):
                 cohort=frozenset(chosen)
                 selected=[u for u in updates if u['client_id'] in cohort]
-                weights=aggregate(selected,base_weights,aggregator)
+                weights=aggregate(selected,base_weights,aggregator,device=device)
                 model.load_state_dict(weights)
-                value,_=evaluate(model,bank,observed,batch_size,device,peak={})
+                value,_=evaluate(model,bank,observed,batch_size,device,peak={},split='validation')
                 scores[cohort]=value['accuracy']
                 per_class[cohort]=value['per_class']
         interactions={}

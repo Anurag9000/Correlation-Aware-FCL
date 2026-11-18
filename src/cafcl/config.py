@@ -89,10 +89,15 @@ class RunConfig:
     reset_memory_on_sync: bool = False
     feedback_threshold: float = 0.25
     feedback_gain: float = 0.5
+    require_cuda: bool = False
+    validation_fraction: float = 0.1
+    train_fraction: float = 1.0
 
     def validate(self):
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
         assert self.batch_size == 512 or self.dataset == "synthetic", "CIFAR run batch size must remain 512"
+        assert 0. < self.validation_fraction < .5
+        assert 0. < self.train_fraction <= 1.
         assert self.num_clients >= 2
         assert self.rounds_per_stage >= 1 and self.stages >= 1
         assert self.epochs >= 1 and self.lr > 0

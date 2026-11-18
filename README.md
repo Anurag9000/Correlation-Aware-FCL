@@ -2,16 +2,17 @@
 
 A modular, research-oriented PyTorch simulator for **federated continual learning under partial client participation, class overlap, old/new class relationships, cross-client temporal recurrence, and local forgetting prevention**.
 
-> **Implementation status (2026-11-17 expanded pass):** 152 experiment blocks are documented; **144 block IDs have at least one dedicated runnable configuration**, although many are *partial/approximate research controls*. There are **423 independently configured CIFAR-10 jobs and 425 CIFAR-100 jobs**, all with **batch size 512**. The CIFAR-100 suite also includes the original **20-class / 10+10 class-incremental** intervention. **54 offline tests pass**. Official CIFAR training and statistical research verification have **not** been executed here. For the eight unscheduled blocks and detailed limitations, see [`docs/STATUS.md`](docs/STATUS.md).
+> **Implementation status (2026-11-18 server validation pass):** 152 experiment blocks are documented; **144 block IDs have at least one dedicated runnable configuration**, although many are *partial/approximate research controls*. There are **423 independently configured CIFAR-10 jobs and 425 CIFAR-100 jobs**, all with **batch size 512**. The CIFAR-100 suite also includes the original **20-class / 10+10 class-incremental** intervention. The latest CPU-only server test run reports **57 passed, 2 CUDA-specific tests skipped**. The full CIFAR suite and GPU pilots have not yet run. For the eight unscheduled blocks and detailed limitations, see [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Install
 
 ```bash
-python -m pip install -e '.[test]'
+python -m pip install -e '.[test]' -c requirements-cuda121.txt \
+  --extra-index-url https://download.pytorch.org/whl/cu121
 pytest -q
 ```
 
-Requires Python >=3.10, PyTorch, torchvision, SciPy, NumPy, and PyYAML. CUDA is chosen automatically when available. CIFAR datasets download through torchvision only when explicitly enabled. A separate `cifar100_20` mode remaps an official 20-class CIFAR-100 subset into a 10+10 task sequence; its jobs are included inside the CIFAR-100 suite.
+Requires Python >=3.10, PyTorch, torchvision, SciPy, NumPy, and PyYAML. Registered CIFAR production jobs set `require_cuda=true` and fail before creating run output if CUDA is unavailable; synthetic unit tests may run on CPU. CIFAR jobs reserve a deterministic, stratified 10% validation split from the original training set. Round feedback and selection use validation only; the official CIFAR test split is evaluated once after the final model is saved. CIFAR datasets download through torchvision only when explicitly enabled. A separate `cifar100_20` mode remaps an official 20-class CIFAR-100 subset into a 10+10 task sequence; its jobs are included inside the CIFAR-100 suite.
 
 ## Run every registered executable job, one after another, batch size 512
 
@@ -21,6 +22,8 @@ bash scripts/run_all_cifar10.sh --plan-only
 bash scripts/run_all_cifar100.sh --plan-only
 
 # Sequentially train and save all registered CIFAR-10 jobs:
+export CUDA_VISIBLE_DEVICES=0
+export PYTHONUNBUFFERED=1
 bash scripts/run_all_cifar10.sh
 
 # Sequentially train and save all registered CIFAR-100 jobs:
@@ -41,7 +44,7 @@ The default plan on each dataset comprises the 60-job canonical full/partial-par
 3. Clients train only on accessible local training indices and permitted private memory; no global raw training-data pooling is performed for optimization.
 4. The server aggregates accepted local updates using the configured algorithm.
 5. **Every selected active client immediately receives the new global model after aggregation.** A separate `full_sync` mode broadcasts to inactive clients too.
-6. The official **global held-out evaluation includes every class observed anywhere so far**, even when held only by an inactive client. Global model exposure and never-integrated classes are separately recorded.
+6. The global **validation evaluation includes every class observed anywhere so far**, even when held only by an inactive client. The official CIFAR test set is reserved for final model evaluation. Global model exposure and never-integrated classes are separately recorded.
 7. The local memory survives global synchronization. GEM/A-GEM constrain against locally remembered historical classes, which does not guarantee globally forgetting-safe aggregation.
 8. Every accepted model update is versioned; completed jobs retain independent configurations, metrics, stage checkpoints, round-level fork checkpoints when requested, and a final model. An interruption can resume from a durable round checkpoint.
 
@@ -49,7 +52,7 @@ The default plan on each dataset comprises the 60-job canonical full/partial-par
 
 Implemented: SGD, local experience replay, local Synaptic Intelligence, A-GEM gradient projection, GEM quadratic-program projection with explicit residual checks, simplified diagonal-Fisher EWC, ER-ACE-like asymmetric stream masking and replay, local stage-consolidated DER and DER++, MAS-style local importance, LwF-style distillation, and optional FedProx local proximal regularization.
 
-**Methodology qualifications:** ER-ACE, DER/DER++, EWC, MAS and LwF are *research adaptations* and are **not claimed as exact original-paper reproductions**. DER logits are consolidated at local-training boundaries rather than each incoming online stream step. GEM uses class-grouped client history and SciPy's CPU-based dual solve. Results must carry these qualifications.
+**Methodology qualifications:** ER-ACE, DER/DER++, EWC, MAS and LwF are *research adaptations* and are **not claimed as exact original-paper reproductions**. DER logits are consolidated at local-training boundaries rather than each incoming online stream step. GEM's nonnegative dual QP uses a device-resident projected-gradient solver in production; SciPy is retained as an independent numerical test reference. Results must carry these qualifications.
 
 ## Selection / aggregation
 
@@ -71,6 +74,7 @@ results/cifar10/
   suite_status.json
   runs/<INDEPENDENT_JOB_ID>/
     config.json
+    data_partition.json
     scenario.pt
     status.json
     metrics.json
@@ -79,22 +83,36 @@ results/cifar10/
     model_stage_02.pt
     ...
     model_final.pt
+    final_test_metrics.json
     summary.json
 ```
 
 The CIFAR-100 tree is identical. Every run has its own model and results. Stage and latest full-state checkpoints preserve client memory, model versions, participation RNG state, server optimizer state, and global metrics. Completed jobs are skipped only if the expected artifacts and matching configuration are present. Changed configurations cannot silently overwrite completed jobs.
 
-The test-bank size expands when new labels arrive, so the raw full-population accuracy change is *not identical* to forgetting. Per-class longitudinal retention, previously learned/integrated status and old/new accuracy are reported separately. Classes never globally trained remain in global accuracy.
+The validation-bank size expands when new labels arrive, so the raw full-population accuracy change is *not identical* to forgetting. Per-class longitudinal retention, previously learned/integrated status and old/new accuracy are reported separately. Classes never globally trained remain in global validation accuracy. Official test metrics are written separately after training.
 
 ## Validate and inspect
 
 ```bash
 pytest -q
 python -m cafcl.cli catalogue --output catalogue.json
-PYTHONPATH=src python -m cafcl.cli suite --dataset synthetic --suite core --limit 1
+PYTHONPATH=src CUDA_VISIBLE_DEVICES= python -m cafcl.cli suite --dataset synthetic --suite core --limit 1
 ```
 
 The smoke test uses an offline ten-class synthetic image dataset and is not evidence about CIFAR training performance.
+
+## CIFAR-10 GPU pilot
+
+On the server, after the official CIFAR-10 dataset is available, prepare and run the separate sequential pilot:
+
+```bash
+python scripts/generate_cifar10_pilot.py
+tmux new-session -d -s cafcl-cifar10-pilot 'bash scripts/run_cifar10_gpu_pilot.sh'
+# After the pilot finishes:
+CUDA_VISIBLE_DEVICES=0 python scripts/verify_cifar10_pilot.py
+```
+
+The pilot keeps batch size 512 and uses a stratified 15% subset of eligible training images. It has distinct `PILOT_` job IDs and outputs under `results/cifar10_gpu_pilot_v1/`; it does not replace or complete the production suite.
 
 ## Documentation
 

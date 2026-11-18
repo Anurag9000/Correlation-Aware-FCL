@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import Dataset
 
 from cafcl.config import RunConfig
-from cafcl.data import DataBank,TinySynthetic,RestrictedLabels,compile_scenario
+from cafcl.data import DataBank,TinySynthetic,RestrictedLabels,compile_scenario,get_data_bank
 from cafcl.domains import GlobalDomainTest,ClientDomainDataset
 from cafcl.selection import select_clients
 from cafcl.continual import LocalState
@@ -122,7 +122,7 @@ def test_conflict_projection_and_retention_aggregate():
 
 
 def test_subset_counterfactual_evaluates_all_combinations():
-    bank=DataBank(TinySynthetic(),TinySynthetic(False),10,{i:i//2 for i in range(10)})
+    bank=get_data_bank('synthetic','unused')
     from cafcl.models import create_model,copy_cpu_state
     model=create_model('linear',10)
     base=copy_cpu_state(model)
@@ -158,10 +158,11 @@ def test_post_sync_domain_and_task_il(tmp_path):
                  job_id='check_'+setting)
         run_experiment(cfg,str(tmp_path),verbose=False)
         hist=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
-        assert hist[-1]['global_test_includes_inactive']
+        assert hist[-1]['global_evaluation_includes_inactive']
+        assert hist[-1]['evaluation_split']=='validation'
         if scenario=='domain':
             assert hist[-1]['domain_evaluation_slices']>0
-            assert hist[-1]['test_samples']>len(TinySynthetic(False))
+            assert hist[-1]['evaluation_samples']>0
         else:assert hist[-1]['task_id_at_inference']
 
 
@@ -211,7 +212,8 @@ def test_sample_lag_and_multiple_domains_pipeline(tmp_path):
     run_experiment(cfg,str(tmp_path),verbose=False)
     rows=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
     assert any(r['domain_evaluation_slices']>0 for r in rows)
-    assert rows[-1]['test_samples']>=len(TinySynthetic(False))
+    assert rows[-1]['evaluation_split']=='validation'
+    assert rows[-1]['evaluation_samples']>0
 
 
 def test_spurious_and_noise_end_to_end(tmp_path):

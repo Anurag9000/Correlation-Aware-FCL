@@ -12,7 +12,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader,Subset
-from scipy.optimize import minimize
 
 @dataclass
 class LocalState:
@@ -97,39 +96,66 @@ def _set_grads(params, vector):
         pos+=size
     assert pos==vector.numel()
 
-def gem_project(gradient, references, tolerance=1e-5):
-    """Project a parameter-space gradient onto all halfspaces g_j·z >= 0.
+def gem_project(gradient, references, tolerance=1e-5, max_iterations=5000):
+    """Project a gradient onto GEM halfspaces using a device-resident dual QP.
 
-    Uses the mathematically equivalent convex nonnegative dual QP.
-    Computation is done in CPU double precision for numerical stability.
-    The calling local trainer performs normal model forward/backward on CUDA.
+    The dual is solved by accelerated projected gradient descent. Both the QP
+    and the resulting primal feasibility checks stay on ``gradient.device``;
+    production CUDA runs never copy parameter gradients through a CPU solver.
     """
     if not references:return gradient,0.,0
-    G=torch.stack(references,dim=0).detach().to(device='cpu',dtype=torch.float64).numpy()
-    g=gradient.detach().to(device='cpu',dtype=torch.float64).numpy()
-    # A zero constraint is vacuous.
-    mask=np.linalg.norm(G,axis=1)>1e-12
+    device=gradient.device
+    G=torch.stack(references,dim=0).detach().to(device=device,dtype=torch.float64)
+    g=gradient.detach().to(device=device,dtype=torch.float64)
+    if not torch.isfinite(G).all() or not torch.isfinite(g).all():
+        raise RuntimeError('GEM received nonfinite gradients')
+    mask=torch.linalg.vector_norm(G,dim=1)>1e-12
     G=G[mask]
-    if not len(G):return gradient,0.,0
-    violations=int(np.sum(G@g < -tolerance))
+    if G.shape[0]==0:return gradient,0.,0
+    initial=G@g
+    violations=int((initial < -tolerance).sum().item())
     if not violations:return gradient,0.,0
     Q=G@G.T
-    b=G@g
-    def obj(lam):return float(.5*lam@Q@lam + b@lam)
-    def jac(lam):return Q@lam + b
-    res=minimize(obj,np.zeros(len(G)),jac=jac,method='L-BFGS-B',bounds=[(0,None)]*len(G),
-                 options={'maxiter':5000,'ftol':1e-13,'gtol':1e-11})
-    z=g+G.T@res.x
-    violation=float(max(0.,-np.min(G@z)))
-    if violation>tolerance:
-        # SLSQP on small dual can rescue some poorly conditioned cases.
-        res=minimize(obj,np.maximum(res.x,0.),jac=jac,method='SLSQP',
-                     bounds=[(0,None)]*len(G),options={'maxiter':2000,'ftol':1e-12})
-        z=g+G.T@res.x
-        violation=float(max(0.,-np.min(G@z)))
-    if not np.all(np.isfinite(z)) or violation>tolerance:
-        raise RuntimeError(f'GEM QP infeasible numerically: residual={violation:.4g}')
-    return torch.as_tensor(z,device=gradient.device,dtype=gradient.dtype),float(np.linalg.norm(z-g)),violations
+    b=initial
+    lipschitz=torch.linalg.eigvalsh(Q).amax().clamp_min(1e-18)
+    step=lipschitz.reciprocal()
+    lam=torch.zeros_like(b)
+    extrapolated=lam.clone()
+    momentum=torch.ones((),device=device,dtype=torch.float64)
+    converged=False
+
+    def kkt_residual(value):
+        grad=Q@value+b
+        projected=torch.clamp(value-step*grad,min=0.)
+        return torch.max(torch.abs(value-projected))/step
+
+    # At most the number of classes/groups worth of dual variables are used.
+    # The periodic KKT check permits a fast exit on well-conditioned problems.
+    for iteration in range(max_iterations):
+        next_lam=torch.clamp(extrapolated-step*(Q@extrapolated+b),min=0.)
+        next_momentum=(1.+torch.sqrt(1.+4.*momentum.square()))/2.
+        extrapolated=next_lam+((momentum-1.)/next_momentum)*(next_lam-lam)
+        lam=next_lam
+        momentum=next_momentum
+        if iteration % 10 == 0 or iteration+1 == max_iterations:
+            primal=g+G.T@lam
+            violation=torch.clamp(-(G@primal).amin(),min=0.)
+            residual=kkt_residual(lam)
+            if (float(violation.item()) <= tolerance and
+                    float(residual.item()) <= 1e-8*(1.+float(torch.linalg.vector_norm(b).item()))):
+                converged=True
+                break
+    z=g+G.T@lam
+    violation=torch.clamp(-(G@z).amin(),min=0.)
+    if not torch.isfinite(z).all() or float(violation.item())>tolerance:
+        raise RuntimeError(f'GEM QP infeasible numerically: residual={float(violation.item()):.4g}')
+    if not converged:
+        # A feasible point alone is not evidence of a correct projection.
+        residual=float(kkt_residual(lam).item())
+        if residual>1e-6*(1.+float(torch.linalg.vector_norm(b).item())):
+            raise RuntimeError(f'GEM QP did not converge: KKT residual={residual:.4g}')
+    distance=torch.linalg.vector_norm(z-g)
+    return z.to(dtype=gradient.dtype),float(distance.item()),violations
 
 
 def agem_project(g, reference):
@@ -159,10 +185,17 @@ def _reference_gradient(model,params,dataset,indices,batch_size,device,seed):
 
 def local_train(model,client,bank,cfg,device,round_id,task_classes=None):
     """The global model is loaded before this function; client weights stay CPU-side."""
+    device=torch.device(device)
+    if cfg.require_cuda and device.type!='cuda':
+        raise RuntimeError('CUDA is required for local neural-network execution')
     if client.shared_weights is None:
         raise RuntimeError('Client must synchronize before local training')
     model.load_state_dict(client.shared_weights)
     model.to(device)
+    if any(parameter.device.type != device.type or
+           (device.index is not None and parameter.device.index != device.index)
+           for parameter in model.parameters()):
+        raise RuntimeError(f'Model parameters are not on requested training device {device}')
     model.train()
     indices=list(dict.fromkeys(client.current_indices))
     if not indices:
