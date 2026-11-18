@@ -8,6 +8,8 @@ import json
 import math
 from pathlib import Path
 
+CHANCE_ACCURACY = 0.1
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -47,6 +49,7 @@ def main() -> int:
             "job_id": raw["job_id"], "learning_rate": raw["lr"], "momentum": raw["momentum"],
             "old_validation_accuracy": old, "new_validation_accuracy": new,
             "harmonic_old_new_validation_accuracy": harmonic,
+            "learning_gate_passed": old > CHANCE_ACCURACY and new > CHANCE_ACCURACY,
             "all_observed_validation_macro_accuracy": macro,
             "integrated_class_coverage": coverage,
             "integrated_forgetting": forgetting, "training_seconds": seconds,
@@ -59,11 +62,15 @@ def main() -> int:
         r["all_observed_validation_macro_accuracy"],
         r["integrated_class_coverage"], -r["integrated_forgetting"],
         -r["training_seconds"]), reverse=True)
-    viable = [r for r in ranked if r["harmonic_old_new_validation_accuracy"] > 0]
+    viable = [r for r in ranked if r["learning_gate_passed"]]
     selected = viable[0] if viable else None
     result = {
         "suite": plan["suite"], "selection_split": "validation",
         "official_test_used_for_selection": False,
+        "learning_gate": {
+            "old_and_new_validation_accuracy_must_exceed": CHANCE_ACCURACY,
+            "rationale": "10-class class-incremental chance accuracy",
+        },
         "window_rounds": args.window,
         "selection_order": ["harmonic_old_new_validation_accuracy",
                             "all_observed_validation_macro_accuracy",

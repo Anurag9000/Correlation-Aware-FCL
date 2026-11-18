@@ -21,7 +21,9 @@ Each uses all eligible training data, two experiences, 20 rounds per
 experience, batch size 512, and validation-only selection. The 0.03/0 candidate
 is the registered baseline. Candidate outputs are independent under
 `results/cifar10_full_validation_v2/runs/`; selection and artifact verification
-are not complete until the full plan finishes.
+are not complete until the full plan finishes. A candidate must exceed the
+10-class chance accuracy separately on old and new classes over the final-stage
+selection window before it can be ranked by harmonic mean.
 
 An earlier attempt is retained in `results/cifar10_full_validation_v1/` for
 provenance. Its 0.01/0 candidate completed before another CUDA job started. Its

@@ -9,6 +9,8 @@ from pathlib import Path
 
 from cafcl.planner import all_supported_suite
 
+CIFAR10_CHANCE_ACCURACY = 0.1
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -54,6 +56,10 @@ def main() -> int:
         "selection_protocol": {
             "feedback_split": "validation",
             "primary_metric": "harmonic_mean_of_mean_old_and_new_validation_accuracy_over_last_stage",
+            "learning_gate": {
+                "old_and_new_validation_accuracy_must_exceed": CIFAR10_CHANCE_ACCURACY,
+                "rationale": "10-class class-incremental chance accuracy",
+            },
             "supplementary_metrics": ["all_observed_validation_macro_accuracy",
                                       "integrated_class_coverage",
                                       "integrated_forgetting", "training_seconds"],
