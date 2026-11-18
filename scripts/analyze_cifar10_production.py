@@ -258,16 +258,16 @@ def main() -> int:
                                                "diagnostic": name, "pair_or_index": pair,
                                                "value": value})
 
-        labels = [str(i) for i in range(10)]
-        confusion = final_test.get("confusion_matrix", {})
-        counts = confusion.get("counts", [])
-        confusion_labels = confusion.get("labels", [])
-        if counts and len(counts) == len(confusion_labels):
-            for i, true_label in enumerate(confusion_labels):
-                for j, predicted_label in enumerate(confusion_labels):
-                    confusion_out.append({"job_id": job_id, "split": "official_test_final_model",
-                                          "true_class": true_label, "predicted_class": predicted_label,
-                                          "count": counts[i][j]})
+        for split_name, confusion in (("validation_final_round", tail.get("confusion_matrix", {})),
+                                      ("official_test_final_model", final_test.get("confusion_matrix", {}))):
+            counts = confusion.get("counts", [])
+            confusion_labels = confusion.get("labels", [])
+            if counts and len(counts) == len(confusion_labels):
+                for i, true_label in enumerate(confusion_labels):
+                    for j, predicted_label in enumerate(confusion_labels):
+                        confusion_out.append({"job_id": job_id, "split": split_name,
+                                              "true_class": true_label, "predicted_class": predicted_label,
+                                              "count": counts[i][j]})
         val_per_class = tail.get("per_class", {})
         final_integrated = set(tail.get("globally_integrated_classes", []))
         final_never = set(tail.get("never_integrated_classes", []))
@@ -481,7 +481,7 @@ def main() -> int:
     (out/"README.md").write_text(
         "# CIFAR-10 result analysis\n\n"
         f"Completed jobs analyzed: {len(cache)} of {len(jobs)} plan entries.\n\n"
-        "The per-round and per-class tables use validation metrics. Final confusion matrices use the official test split only after training; they were not used for selection. "
+        "The per-round and per-class tables use validation metrics. Confusion exports include the final validation round and the official test split evaluated after training; test results were not used for selection. "
         "The SVG curves are per-job. Heatmaps count local training sample incidence and rounds in which participating clients jointly held each class pair. "
         "Family means are descriptive across configured jobs, not independent replications or significance tests.\n\n"
         "Run with: `python scripts/analyze_cifar10_production.py --results-root results/cifar10`.\n",
