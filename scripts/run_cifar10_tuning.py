@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+"""Run a CIFAR-10 validation-tuning plan sequentially and resumably on CUDA."""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+import traceback
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from cafcl.config import RunConfig
+from cafcl.simulator import atomic_json, run_experiment
+
+
+def wait_for_exclusive_gpu(current_pid: int, poll_seconds: int) -> None:
+    while True:
+        probe = subprocess.run(
+            ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, check=True)
+        pids = {int(x.strip()) for x in probe.stdout.splitlines() if x.strip().isdigit()}
+        pids.discard(current_pid)
+        approved_cpu_only = {int(value) for value in
+                             os.environ.get("CAFCL_GPU_CPU_ONLY_PIDS", "").split()
+                             if value.isdigit()}
+        blockers = []
+        ignored = []
+        for pid in sorted(pids):
+            if pid in approved_cpu_only:
+                ignored.append(pid)
+                continue
+            try:
+                argv = Path(f"/proc/{pid}/cmdline").read_bytes().decode(
+                    errors="replace").split("\0")
+            except OSError:
+                continue
+            if "--cpu-only" not in argv:
+                blockers.append(pid)
+        if not blockers:
+            if ignored:
+                print(f"Ignoring explicitly verified CPU-only contexts: {ignored}", flush=True)
+            return
+        print(f"Waiting for other GPU compute processes to exit: {blockers}; "
+              f"CPU-only contexts ignored: {ignored}", flush=True)
+        time.sleep(max(5, poll_seconds))
+
+
+def wait_for_host_memory(minimum_gib: float, poll_seconds: int) -> None:
+    """Keep a shared server from entering memory pressure between jobs."""
+    minimum_kib = int(minimum_gib * 1024 * 1024)
+    while True:
+        available_kib = None
+        with open("/proc/meminfo", encoding="ascii") as fh:
+            for line in fh:
+                if line.startswith("MemAvailable:"):
+                    available_kib = int(line.split()[1])
+                    break
+        if available_kib is None:
+            raise RuntimeError("Cannot read MemAvailable for the tuning resource gate")
+        if available_kib >= minimum_kib:
+            return
+        print(f"Waiting for host memory headroom: {available_kib/1024/1024:.1f} GiB available; "
+              f"minimum is {minimum_gib:.1f} GiB", flush=True)
+        time.sleep(max(5, poll_seconds))
+
+
+def load_plan(path: Path) -> tuple[dict, list[RunConfig]]:
+    payload = json.loads(path.read_text())
+    if payload.get("dataset") != "cifar10" or payload.get("suite") != "validation_hyperparameter_tuning":
+        raise ValueError(f"Not a CIFAR-10 validation tuning plan: {path}")
+    jobs = [RunConfig(**item) for item in payload.get("jobs", [])]
+    if not jobs or len({job.job_id for job in jobs}) != len(jobs):
+        raise ValueError("Tuning plan must contain uniquely named jobs")
+    for job in jobs:
+        job.validate()
+        if not job.job_id.startswith("TUNE_C10_") or job.batch_size != 512 or not job.require_cuda:
+            raise ValueError(f"Tuning execution invariant failed: {job.job_id}")
+        if job.fork_source_job:
+            raise ValueError("Hyperparameter candidates may not depend on causal fork checkpoints")
+    return payload, jobs
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--plan", default="results/cifar10_tuning_v1/job_plan.json")
+    parser.add_argument("--output-dir", default="results/cifar10_tuning_v1")
+    parser.add_argument("--data-root", default="data")
+    parser.add_argument("--gpu-poll-seconds", type=int, default=30)
+    parser.add_argument("--minimum-memory-gib", type=float, default=8.0)
+    parser.add_argument("--plan-only", action="store_true")
+    args = parser.parse_args()
+    payload, jobs = load_plan(Path(args.plan))
+    if args.plan_only:
+        print(f"Validated {len(jobs)} sequential tuning jobs")
+        return 0
+
+    import torch
+    if not torch.cuda.is_available():
+        raise SystemExit("CUDA is required for tuning; no jobs were started")
+    device = torch.device("cuda")
+    output = Path(args.output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    status_path = output / "tuning_status.json"
+    completed = already_completed = 0
+    failures = []
+    for index, cfg in enumerate(jobs, 1):
+        wait_for_host_memory(args.minimum_memory_gib, args.gpu_poll_seconds)
+        wait_for_exclusive_gpu(os.getpid(), args.gpu_poll_seconds)
+        print(f"\n=== TUNING [{index}/{len(jobs)}] {cfg.job_id} (batch 512) ===", flush=True)
+        try:
+            result = run_experiment(cfg, str(output / "runs"), args.data_root, download=False)
+            if result.get("status") == "already_completed":
+                already_completed += 1
+            else:
+                completed += 1
+        except Exception as exc:
+            failures.append({"job_id": cfg.job_id, "error": repr(exc),
+                             "traceback": traceback.format_exc()})
+            atomic_json(status_path, {
+                "suite": payload["suite"], "planned": len(jobs), "attempted": index,
+                "completed_this_invocation": completed, "already_completed": already_completed,
+                "failed": failures, "cuda_device": torch.cuda.get_device_name(device),
+                "updated_unix": time.time(),
+            })
+            raise
+        atomic_json(status_path, {
+            "suite": payload["suite"], "planned": len(jobs), "attempted": index,
+            "completed_this_invocation": completed, "already_completed": already_completed,
+            "failed": failures, "cuda_device": torch.cuda.get_device_name(device),
+            "updated_unix": time.time(),
+        })
+    print(f"Tuning finished: completed={completed}, already_completed={already_completed}, failed=0")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

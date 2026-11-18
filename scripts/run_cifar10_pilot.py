@@ -57,17 +57,39 @@ def wait_for_exclusive_gpu(current_pid: int, status_path: Path, *,
             capture_output=True, text=True, check=True)
         pids = sorted({int(value.strip()) for value in probe.stdout.splitlines()
                        if value.strip().isdigit()} - {current_pid})
-        if not pids:
+        approved_cpu_only = {int(value) for value in
+                             os.environ.get("CAFCL_GPU_CPU_ONLY_PIDS", "").split()
+                             if value.isdigit()}
+        gpu_pids = []
+        cpu_only_pids = []
+        for pid in pids:
+            if pid in approved_cpu_only:
+                cpu_only_pids.append(pid)
+                continue
+            try:
+                argv = Path(f"/proc/{pid}/cmdline").read_bytes().decode(
+                    errors="replace").split("\0")
+            except OSError:
+                argv = []
+            if "--cpu-only" in argv:
+                cpu_only_pids.append(pid)
+            else:
+                gpu_pids.append(pid)
+        if not gpu_pids:
+            if cpu_only_pids:
+                print(f"Ignoring explicitly CPU-only CUDA contexts: {cpu_only_pids}", flush=True)
             return
         atomic_json(status_path, {
             "suite": "representative_gpu_pilot", "status": "waiting_for_exclusive_gpu",
             "planned": planned, "attempted": attempted,
             "completed_this_invocation": completed,
             "already_completed": already_completed,
-            "foreign_compute_pids": pids,
+            "foreign_compute_pids": gpu_pids,
+            "ignored_cpu_only_context_pids": cpu_only_pids,
             "updated_unix": time.time(),
         })
-        print(f"Waiting for other CUDA compute processes to exit: {pids}", flush=True)
+        print(f"Waiting for other GPU compute processes to exit: {gpu_pids}; "
+              f"CPU-only contexts ignored: {cpu_only_pids}", flush=True)
         time.sleep(max(5, poll_seconds))
 
 

@@ -7,11 +7,28 @@ mkdir -p "$ROOT/logs" "$ROOT/results/cifar10_gpu_pilot_v1"
 exec > >(tee -a "$ROOT/logs/cifar10_gpu_pilot_v1.log") 2>&1
 
 while true; do
-  active="$(nvidia-smi --query-compute-apps=pid,process_name --format=csv,noheader)"
+  active=""
+  cpu_only=""
+  while IFS= read -r pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    if [[ " ${CAFCL_GPU_CPU_ONLY_PIDS:-} " == *" $pid "* ]]; then
+      cpu_only+=" $pid"
+      continue
+    fi
+    args="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+    if [[ " $args " == *" --cpu-only "* ]]; then
+      cpu_only+=" $pid"
+    else
+      active+=" $pid"
+    fi
+  done < <(nvidia-smi --query-compute-apps=pid --format=csv,noheader,nounits)
+  if [[ -n "$cpu_only" ]]; then
+    printf '[INFO] Ignoring explicitly CPU-only CUDA contexts:%s\n' "$cpu_only"
+  fi
   if [[ -z "$active" ]]; then
     break
   fi
-  printf '[WAIT] CUDA is occupied by another process:\n%s\n' "$active"
+  printf '[WAIT] CUDA is occupied by other GPU processes:%s\n' "$active"
   sleep 30
 done
 

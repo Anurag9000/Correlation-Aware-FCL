@@ -44,18 +44,52 @@ def main() -> int:
     checked = 0
     for cfg in jobs:
         run = root / "runs" / cfg.job_id
+        source_run = (root / "runs" / cfg.fork_source_job
+                      if cfg.fork_source_job else None)
         required = ["config.json", "status.json", "metrics.json", "summary.json",
                     "model_final.pt", "final_test_metrics.json", "data_partition.json",
                     "scenario.pt"]
-        required.extend(f"model_stage_{stage+1:02d}.pt" for stage in range(cfg.stages))
+        for stage in range(cfg.stages):
+            stage_end_round = (stage + 1) * cfg.rounds_per_stage
+            artifact_run = (source_run if source_run is not None and
+                            stage_end_round <= cfg.fork_checkpoint_round else run)
+            artifact = f"model_stage_{stage+1:02d}.pt"
+            if artifact_run is None or artifact_run == run:
+                required.append(artifact)
+            elif not (artifact_run / artifact).is_file():
+                raise AssertionError(f"{cfg.job_id}: source run lacks {artifact}")
         if cfg.checkpoint_every:
-            required.extend(f"checkpoint_round_{round_id+1:04d}.pt"
-                            for round_id in range(cfg.stages*cfg.rounds_per_stage))
+            for round_id in range(cfg.stages * cfg.rounds_per_stage):
+                absolute_round = round_id + 1
+                artifact_run = (source_run if source_run is not None and
+                                absolute_round <= cfg.fork_checkpoint_round else run)
+                artifact = f"checkpoint_round_{absolute_round:04d}.pt"
+                if artifact_run is None or artifact_run == run:
+                    required.append(artifact)
+                elif not (artifact_run / artifact).is_file():
+                    raise AssertionError(f"{cfg.job_id}: source run lacks {artifact}")
         missing = [name for name in required if not (run/name).is_file()]
         if missing:
             raise AssertionError(f"{cfg.job_id}: missing artifacts {missing}")
         if json.loads((run/"config.json").read_text()) != cfg.to_dict():
             raise AssertionError(f"{cfg.job_id}: saved configuration differs from plan")
+        if source_run is not None:
+            source_config_path = source_run / "config.json"
+            source_checkpoint = source_run / (
+                f"checkpoint_round_{cfg.fork_checkpoint_round:04d}.pt")
+            if not source_config_path.is_file() or not source_checkpoint.is_file():
+                raise AssertionError(f"{cfg.job_id}: causal source checkpoint is missing")
+            source_config = json.loads(source_config_path.read_text())
+            allowed = {"job_id", "force_target", "target_client", "intervention_round",
+                       "causal_diagnostics", "gradient_diagnostics", "checkpoint_every",
+                       "fork_source_job", "fork_checkpoint_round"}
+            if ({k: v for k, v in source_config.items() if k not in allowed} !=
+                    {k: v for k, v in cfg.to_dict().items() if k not in allowed}):
+                raise AssertionError(f"{cfg.job_id}: source configuration is confounded")
+            source_metrics = json.loads((source_run / "metrics.json").read_text())
+            fork_metrics = json.loads((run / "metrics.json").read_text())
+            if source_metrics[:cfg.fork_checkpoint_round] != fork_metrics[:cfg.fork_checkpoint_round]:
+                raise AssertionError(f"{cfg.job_id}: pre-fork metric history differs from source")
         partition = json.loads((run/"data_partition.json").read_text())
         expected_train_counts = {str(label): 675 for label in range(10)}
         expected_validation_counts = {str(label): 500 for label in range(10)}

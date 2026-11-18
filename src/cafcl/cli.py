@@ -1,12 +1,29 @@
 """Local execution and sequential all-supported experiment orchestration."""
 from __future__ import annotations
-import argparse,json,traceback,time
+import argparse,json,traceback,time,os,subprocess
 from dataclasses import replace
 from pathlib import Path
 from .config import RunConfig
 from .planner import core_suite,all_supported_suite,write_plan
 from .simulator import run_experiment,atomic_json
 from .catalogue import CATALOGUE,IMPLEMENTED,catalogue_report
+
+
+def wait_for_exclusive_gpu(current_pid, poll_seconds=30):
+    """Pause suite progression while another non-allowlisted CUDA job is active."""
+    allowlisted={int(value) for value in os.environ.get(
+        'CAFCL_GPU_CPU_ONLY_PIDS','').split() if value.isdigit()}
+    while True:
+        probe=subprocess.run(['nvidia-smi','--query-compute-apps=pid',
+                              '--format=csv,noheader,nounits'],
+                             capture_output=True,text=True)
+        if probe.returncode:
+            raise RuntimeError(f'Cannot verify exclusive GPU ownership: {probe.stderr.strip()}')
+        pids=sorted({int(value.strip()) for value in probe.stdout.splitlines()
+                     if value.strip().isdigit()}-{current_pid}-allowlisted)
+        if not pids:return
+        print(f'Waiting for other GPU compute processes to exit: {pids}',flush=True)
+        time.sleep(max(5,poll_seconds))
 
 
 def main():
@@ -23,6 +40,9 @@ def main():
     suite.add_argument('--stop-on-error',action='store_true')
     suite.add_argument('--limit',type=int,default=0,help='First N jobs for smoke testing')
     suite.add_argument('--include-incomplete',action='store_true',help='Fail if any planned block is unimplemented')
+    suite.add_argument('--wait-for-exclusive-gpu',action='store_true',
+                       help='Wait between jobs while another CUDA compute process is active')
+    suite.add_argument('--gpu-poll-seconds',type=int,default=30)
     single=sp.add_parser('run',help='Run one experiment configuration JSON')
     single.add_argument('config');single.add_argument('--output-dir',default='results')
     single.add_argument('--data-root',default='data');single.add_argument('--download',action='store_true')
@@ -69,6 +89,8 @@ def main():
         failures=[];completed=0;skipped=0
         jobs_to_run=jobs[:args.limit] if args.limit else jobs
         for i,cfg in enumerate(jobs_to_run,1):
+            if args.wait_for_exclusive_gpu:
+                wait_for_exclusive_gpu(os.getpid(),args.gpu_poll_seconds)
             print(f'\n=== [{i}/{len(jobs_to_run)}] {cfg.job_id} ({args.dataset}, batch 512) ===',flush=True)
             try:
                 source=None
