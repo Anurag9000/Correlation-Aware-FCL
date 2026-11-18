@@ -10,21 +10,19 @@ from cafcl.models import create_model,copy_cpu_state
 from cafcl.continual import gem_project,agem_project,LocalState
 from cafcl.selection import select_clients
 from cafcl.simulator import aggregate,run_experiment
-from cafcl.planner import core_suite,all_supported_suite
+from cafcl.full_matrix import expand,manifest
 
 
 def test_catalogue_complete():
     assert len(CATALOGUE)==152
     assert set(IMPLEMENTED)<=set(CATALOGUE)
 
-@pytest.mark.parametrize('dataset,count',[('cifar10',423),('cifar100',425)])
-def test_plans(dataset,count):
-    jobs=all_supported_suite(dataset)
-    assert len(jobs)==count
-    assert len({x.job_id for x in jobs})==count
-    assert all(x.batch_size==512 for x in jobs)
-    assert len(core_suite(dataset))==60
-    for j in jobs:j.validate()
+def test_only_cifar100_stream_registry_active():
+    plan=manifest(seeds=(0,),families=('balanced',))
+    assert plan['method_aggregator_pairs']==99
+    assert plan['job_count']==11*9*6*3
+    jobs=list(expand(seeds=(0,),families=('balanced',)))
+    assert all(c.dataset=='cifar100' and c.batch_size==512 and c.stream_protocol for _,c in jobs)
 
 
 def test_synthetic_data_complete_unique_allocations():

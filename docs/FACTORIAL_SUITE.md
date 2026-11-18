@@ -1,81 +1,68 @@
-> **2026-11-19 runtime correction:** Every job uses [continuous client-local learning](CONTINUOUS_LOCAL_CL_PROTOCOL.md): all data-bearing clients learn every logical round, irrespective of whether they communicate, with accumulated stale-anchor deltas on later upload. The 67,938/69,722 plan counts are unchanged but training cost increases and previous-protocol checkpoints cannot be resumed.\n\n# Full CIFAR-10 / CIFAR-100 finite-axis methodology sweep
+# CIFAR-100-only continuous-local-task experiment catalogue (v3)
 
-## Scope and exact counts
+## Source of truth
 
-| Property | CIFAR-10 | CIFAR-100 |
-|---|---:|---:|
-| Original A–N jobs preserved | 423 | 425 |
-| New distinct factorial jobs | 67,515 | 69,297 |
-| **Full sequential suite jobs** | **67,938** | **69,722** |
-| Client methods × server methods | 11 × 9 | 11 × 9 |
-| Distinct pairings represented | **99/99** | **99/99** |
-| Balanced four-scenario, five-policy core with three seeds | 5,940 | 5,940 |
-| 20-class/10+10 CIFAR-100 factorial jobs | — | 1,782 |
-| Batch size | **512** | **512** |
-| Configured global rounds (total) | 2,717,412 | 13,651,180 |
+`src/cafcl/full_matrix.py` lazily generates the active experiment ledger. Every job has a unique configuration fingerprint, a deterministic ID beginning `ST_`, batch size 512, strictly active-label task training, and the same communication-v3 simulator. **Old CIFAR-10, CIFAR-100/20, and stage-based 425-job/69,722-job suite registrations are retired.**
 
-The local methods are SGD, GEM, A-GEM, replay, EWC, SI, ER-ACE-style, DER, DER++, MAS and LwF. Server aggregators are FedAvg, uniform, FedAvgM, FedAdam, class-balanced, inverse-participation, conflict-aware, conflict projection and retention-aware. Existing partial/approximate mechanisms are not renamed as reference-faithful implementations.
+## Exact registered runs
 
-## Balanced factorial core
+| Family | Distinct CIFAR-100 jobs | Variable |
+|---|---:|---|
+| Balanced client/server/scenario/participation | 5,346 | 11 local learners × 9 server methods × 6 overlap patterns × 3 participation rates × 3 seeds |
+| Local tasks and classes per task | 8,910 | Local tasks 1/2/3 and classes per task 2/4 |
+| Controlled offline duration | 13,662 | Outages of 1,2,3,4 update intervals where feasible; deliberately recurrent rounds for longer outages |
+| Overlap strength | 2,970 | 25%, 50%, 100% label reuse |
+| Raw-image overlap | 1,188 | 0%, 25%, 50% train-sample duplication under cross-client overlaps |
+| Client selection | 10,692 | Random, fixed, rotation, coverage, last-active, class/recurrence/relatedness and related selectors |
+| Local optimization | 3,267 | LR × local epochs |
+| Episodic memory | 756 | Memory per class 0,10,20,50,100 |
+| Regularization | 324 | Strength for EWC, SI, MAS and LwF |
+| FedProx | 891 | Proximal coefficient |
+| Server optimization | 264 | FedAdam / FedAvgM server learning rate |
+| Replay ratio | 324 | Replay, ER-ACE, DER, DER++ |
+| Distillation coefficient | 243 | DER, DER++, LwF |
+| Replay beta | 162 | ER-ACE and DER++ |
+| GEM history constraint grouping | 54 | Class, local stage or aggregate memory |
+| Client population | 594 | 5, 10, 20 clients |
+| Recurrent rounds | 1,782 | 0, 2, 4 additional repeated-history intervals |
+| Semantic CIFAR class order | 594 | Natural, related, unrelated ordering |
+| Class-frequency imbalance | 891 | 0, .5, 1, 2 power |
+| Client sample quantity skew | 594 | 0, 1, 3 quantity-skew coefficient |
+| Terminal flush | 297 | Enable/disable final all-client communication |
+| **Total** | **53,805** | 3 seeds, deduplicated among declared grids |
 
-11 client methods × 9 server methods × 4 scenarios (disjoint, overlap, related, recurrence) × 5 participation arms (random 100%, random 50%, random 25%, coverage 50%, coverage 25%) × 3 independent seeds (0,1,2) = **5,940 distinct jobs per dataset**.
+### Complete factorial core
 
-## Additional distinct sweep families (post-deduplication)
+Every one of the 99 local-learner/server-aggregator pairings appears in the six overlap geometries, each at participation levels 100%, 80%, and 50%, under three independent seeds:
 
-| Family | CIFAR-10 | CIFAR-100 |
-|---|---:|---:|
-| Additional data scenarios | 2,673 | 2,673 |
-| All 22 client selectors across 3 scenarios | 17,820 | 17,820 |
-| Participation rates/policies | 10,098 | 10,098 |
-| Label overlap magnitude | 2,376 | 2,376 |
-| Raw image duplication | 1,188 | 1,188 |
-| Dirichlet label skew | 1,188 | 1,188 |
-| Learning rate × local epochs | 6,534 | 6,534 |
-| Episodic memory size | 1,512 | 1,512 |
-| Importance regularization | 648 | 648 |
-| FedProx coefficient | 1,782 | 1,782 |
-| Server learning rate | 528 | 528 |
-| Recurrence timing and holder | 2,376 | 2,376 |
-| Class imbalance | 891 | 891 |
-| Client quantity skew | 594 | 594 |
-| Model architecture | 1,188 | 1,188 |
-| Client count | 1,188 | 1,188 |
-| Local momentum and state persistence | 891 | 891 |
-| Memory selection policy | 189 | 189 |
-| Replay ratio | 648 | 648 |
-| Distillation loss coefficient | 486 | 486 |
-| Replay-label coefficient | 324 | 324 |
-| SI damping | 108 | 108 |
-| FedAdam momentum/variance coefficients | 528 | 528 |
-| GEM historical constraint grouping | 108 | 108 |
-| Inactive-client pending data policy | 1,188 | 1,188 |
-| Participation schedules | 2,970 | 2,970 |
-| Target-client inclusion/exclusion | 1,188 | 1,188 |
-| Spurious input features | 297 | 297 |
-| Compatible label-noise controls | 12 | 12 |
-| Heterogeneous client-local learning methods | 54 | 54 |
-| CIFAR-100 20-class 10+10 | — | 1,782 |
+`11 × 9 × 6 × 3 × 3 = 5,346` common-condition jobs.
 
-The job generator is the source of truth; it deduplicates repeated configurations *within* the new factorial grid, retaining different random seeds. The original targeted job IDs and their dependency ordering are unchanged. Full exact job dictionaries can be exported as JSONL without committing enormous static files.
+**No CIFAR-10 job configurations exist in this active registry.** The `--dataset` parser accepts only `cifar100`; `cafcl suite` delegates to this registry. The prior `cafcl` old-stage job planner and its entrypoints have been removed.
 
-## Run/inspect
+### Defaults and independent knobs
 
-~~~bash
-python -m pip install -e '.[test]'
+- Local clients: 10; data classes: 100; classes per task: 2; sequential tasks between server updates: 2; default new classes per client per update: 4 (until 100-class exhaustion).
+- The default disjoint stream consumes 40 new classes/round, followed by 40, followed by 20. No fabricated repetitions fill the final partial interval.
+- Participation 80% means 8 selected and 2 offline with 10 clients. `offline_duration_rounds=0` uses independently sampled random client sets. Positive durations force rotating seeded absent cohorts for controlled disconnection tests.
+- At the end, an optional explicitly marked communication-only round uploads pending updates from remaining offline clients.
+- No task-ID-assisted inference or per-task output heads; official evaluation uses one canonical 100-row class-indexed classifier and all arrived labels.
+
+### Validation and export
+
+```bash
 pytest -q
-bash scripts/run_all_cifar10.sh --plan-only
+python scripts/validate_factorial_plans.py
 bash scripts/run_all_cifar100.sh --plan-only
-bash scripts/run_all_cifar10.sh --plan-only --export-plan outputs/cifar10.jsonl.gz
-bash scripts/run_all_cifar100.sh --plan-only --export-plan outputs/cifar100.jsonl.gz
-bash scripts/run_all_cifar10.sh --suite legacy
-bash scripts/run_all_cifar10.sh --suite balanced
-bash scripts/run_all_cifar10.sh --suite factorial --families memory --seed 0 --limit 2
-CUDA_VISIBLE_DEVICES=0 bash scripts/run_all_cifar10.sh
+bash scripts/run_all_cifar100.sh --suite balanced --seeds 0 --plan-only
+bash scripts/run_all_cifar100.sh --plan-only --export-plan outputs/cifar100_stream_v3.jsonl.gz
+```
+
+### Launch only after GPU pilot
+
+```bash
+CUDA_VISIBLE_DEVICES=0 bash scripts/run_all_cifar100.sh --suite balanced --seed 0 --limit 2
+CUDA_VISIBLE_DEVICES=0 bash scripts/run_all_cifar100.sh --families offline_duration --seed 0 --limit 2
 CUDA_VISIBLE_DEVICES=0 bash scripts/run_all_cifar100.sh
-~~~
+```
 
-Use --start, --limit, --seeds, --families, --data-root, --output-dir, --continue-on-error and --allow-cpu (deliberate debugging only). The default is sequential, CUDA-required execution, checkpoint/resume with independent artifact directories, and a frozen plan digest.
-
-## Scientific limitations
-
-These **137,660 jobs are planned, not executed** and represent an extremely large training and storage commitment. The factorial cross is exhaustive only for the declared finite axes; arbitrary combinations of every conceivable continuous hyperparameter are not attempted. Some selection policies are privileged simulation/oracle controls, and feedback based on official test-set metrics cannot be presented as leakage-free training. Split original training data into train/validation before validation-driven tuning and reserve the official test set for confirmatory evaluation. Current baseline adaptations and partial A–N block coverage remain unchanged. A planned job does not guarantee numerical stability on actual GPUs.
+**Caution:** The full job list is a very large GPU commitment, and no official CIFAR-100 sweeps or hyperparameter-selection studies have been executed in this repository change. Official-test feedback in selection policies must not be presented as leakage-free adaptive training without a train-derived validation/control channel. Many oracle selectors and original-paper fidelity gaps remain. The factorial grid is exhaustive only with respect to the enumerated axes; arbitrary cross-products of every numeric parameter are not implied.

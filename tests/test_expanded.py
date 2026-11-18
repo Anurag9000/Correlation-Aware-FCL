@@ -226,11 +226,3 @@ def test_spurious_and_noise_end_to_end(tmp_path):
         assert 0<=final['accuracy']<=1
 
 
-def test_research_plans_preserve_20class_cifar100_experiment():
-    from cafcl.planner import all_supported_suite
-    planned=all_supported_suite('cifar100')
-    specific=[x for x in planned if x.dataset=='cifar100_20']
-    assert specific
-    assert all(x.stages==2 and x.rounds_per_stage==20 and x.batch_size==512 for x in specific)
-    assert any(x.holders_override.get('12')==(3,) and x.holders_override.get('13')==(3,)
-               for x in specific)

@@ -15,8 +15,16 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
     model.eval()
     correct={c:0 for c in observed};count={c:0 for c in observed}
     class_losses={c:0. for c in observed}
+    allowed_class_ids=torch.as_tensor(sorted(observed),dtype=torch.long,device=device)
     for x,y in loader:
         logits=model(x.to(device))
+        # The global classifier has shape-stable allocated rows, but classes
+        # that have not arrived anywhere must not compete at inference.
+        # Arrived-yet-offline classes DO compete: they are part of evaluation.
+        if task_class_groups is None:
+            mask=torch.ones(logits.shape[1],dtype=torch.bool,device=device)
+            mask[allowed_class_ids]=False
+            logits=logits.masked_fill(mask.unsqueeze(0),-1e9)
         if task_class_groups is None:
             pred=logits.argmax(1).cpu()
         else:

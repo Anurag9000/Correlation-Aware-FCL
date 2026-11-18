@@ -1,4 +1,4 @@
-name: Offline tests and experiment registry
+name: CIFAR-100 sequential local-task protocol
 on:
   push:
     branches: [main]
@@ -13,7 +13,7 @@ jobs:
           python-version: '3.11'
       - name: Install package
         run: python -m pip install -e '.[test]'
-      - name: Run offline tests
+      - name: Run offline regression tests
         run: pytest -q
-      - name: Validate both frozen sequential plans
-        run: python scripts/validate_plans.py
+      - name: Verify the CIFAR-100-only factorial registry
+        run: python scripts/validate_factorial_plans.py

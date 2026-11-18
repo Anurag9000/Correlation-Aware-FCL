@@ -13,6 +13,7 @@ import numpy as np
 import torch
 from .config import RunConfig
 from .data import get_data_bank,compile_scenario
+from .streaming import compile_stream_scenario,select_offline_cohort
 from .models import create_model,copy_cpu_state,check_finite
 from .continual import LocalState,local_train
 from .class_indexed import classwise_merge,classifier_parameter_names
@@ -26,7 +27,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'class_indexed_shared_stream_v2'
+PROTOCOL_VERSION = 'cifar100_communication_interval_v3'
 
 
 def anchored_upload(client, global_state):
@@ -222,6 +223,8 @@ def save_checkpoint(path,weights,cfg,version,states=None,full_state=False):
 
 def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=True,verbose=True,*,fork_from_checkpoint=None):
     cfg.validate()
+    if cfg.dataset!='synthetic' and (cfg.dataset!='cifar100' or not cfg.stream_protocol):
+        raise ValueError('Only the CIFAR-100 v3 task-stream protocol is an active experiment; retired CIFAR-10/20 and stage-based job runs are disabled')
     job=cfg.job_id or cfg.signature()
     run_dir=Path(output_root)/job
     run_dir.mkdir(parents=True,exist_ok=True)
@@ -246,7 +249,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         if torch.cuda.is_available():torch.cuda.manual_seed_all(cfg.seed)
         device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         bank=get_data_bank(cfg.dataset,data_root,download=download,seed=cfg.seed,class_subset=cfg.class_subset)
-        scenario=compile_scenario(bank,cfg)
+        scenario=(compile_stream_scenario(bank,cfg) if cfg.stream_protocol
+                  else compile_scenario(bank,cfg))
         torch.save({'arrivals':[asdict(a) for a in scenario.arrivals],
                     'stages':scenario.stages,
                     'original_labels':bank.original_labels,
@@ -264,7 +268,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         server_class_update_counts={}
         first_round=0
         rng=np.random.default_rng(cfg.seed+888_777)
-        total_rounds=cfg.stages*cfg.rounds_per_stage
+        total_rounds=(len(scenario.stages) if cfg.stream_protocol else cfg.stages*cfg.rounds_per_stage)
         class_first_stage={}
         for stage,labels in enumerate(scenario.stages):
             for c in labels:class_first_stage.setdefault(c,stage)
@@ -306,6 +310,14 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             # This is essential for ER-ACE masking and true within-round CL.
             new_events={cid:[] for cid in clients}
             for arrival in scenario.arrivals_at(round_id):
+                if cfg.stream_protocol:
+                    new_events[arrival.client_id].append({
+                        'indices':list(map(int,arrival.indices)),
+                        'class_ids':tuple(map(int,arrival.labels)),
+                        'global_stage':int(arrival.stage),
+                        'is_recurrence':bool(arrival.recurrence)})
+                    observed.update(arrival.labels)
+                    continue
                 for cls in arrival.labels:
                     ids=[int(i) for i in arrival.indices
                          if int(bank.train.targets[i])==int(cls)]
@@ -317,7 +329,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 # Global test exposure is independent of participation, and
                 # includes labels from all arrivals in this communication round.
                 observed.update(arrival.labels)
-            current_stage=min(cfg.stages-1,round_id//cfg.rounds_per_stage)
+            current_stage=(round_id if cfg.stream_protocol else
+                           min(cfg.stages-1,round_id//cfg.rounds_per_stage))
             old={c for c in observed if class_first_stage[c]<current_stage}
             new=set(observed)-old
             # Local training is unconditional on federation. Every client has
@@ -333,18 +346,27 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     local_cfg=replace(cfg,method=algorithms[cid%len(algorithms)])
                 raw_events=new_events[cid]
                 events=[]
-                for start in range(0,len(raw_events),2):
-                    group=raw_events[start:start+2]
-                    if len(group)==2 and group[0]['class_id']!=group[1]['class_id']:
-                        events.append({'indices':group[0]['indices']+group[1]['indices'],
-                            'class_ids':(group[0]['class_id'],group[1]['class_id']),
-                            'global_stage':max(g['global_stage'] for g in group),
-                            'is_recurrence':any(g['is_recurrence'] for g in group)})
-                    else:
-                        if cfg.class_pair_protocol=='strict':
-                            raise ValueError(f'Client {cid} has insufficient distinct class '
-                                f'labels for a two-class episode at round {round_id}: {group}')
-                        events.extend({**g,'class_ids':(g['class_id'],)} for g in group)
+                if cfg.stream_protocol:
+                    events=list(raw_events)
+                    if len(events)>cfg.local_tasks_per_round:
+                        raise AssertionError('Exceeded local task budget per server interval')
+                    if any(len(set(e['class_ids']))<2 for e in events):
+                        raise AssertionError('Singleton local task in strict stream')
+                else:
+                  for start in range(0,len(raw_events),2):
+                      group=raw_events[start:start+2]
+                      if len(group)==2 and group[0]['class_id']!=group[1]['class_id']:
+                          events.append({'indices':group[0]['indices']+group[1]['indices'],
+                              'class_ids':(group[0]['class_id'],group[1]['class_id']),
+                              'global_stage':max(g['global_stage'] for g in group),
+                              'is_recurrence':any(g['is_recurrence'] for g in group)})
+                      else:
+                          if cfg.class_pair_protocol=='strict':
+                              raise ValueError(f'Client {cid} has insufficient distinct class '
+                                  f'labels for a two-class episode at round {round_id}: {group}')
+                          events.extend({**g,'class_ids':(g['class_id'],)} for g in group)
+                if cfg.stream_protocol and not events:
+                    continue   # No fabricated training events after stream exhaustion.
                 if not events and not client.current_indices:
                     continue
                 # With retain-all, the union is the active data outside of new
@@ -383,7 +405,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     result=local_train(model,client,bank,local_cfg,device,round_id,
                         task_classes=task_labels,experience_end=bool(events),
                         active_pair_classes=(tuple(event['class_ids']) if events and
-                                             len(event['class_ids'])==2 and not cfg.label_noise_rate else None))
+                                             len(event['class_ids'])>=2 and not cfg.label_noise_rate else None))
                     if result is None:
                         continue
                     # Advance the private weights *without* downloading the
@@ -430,6 +452,14 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             selected=select_clients(clients,cfg,round_id,rng,old_classes=old,new_classes=new,
                                     coarse_by_fine=bank.coarse_by_fine,
                                     relationships=class_relationships,class_forgetting=risks)
+            if cfg.stream_protocol:
+                is_flush=bool(cfg.stream_terminal_flush and round_id==total_rounds-1)
+                if is_flush:
+                    # One clearly marked communication-only closing round:
+                    # every client with unsent updates can finally contribute.
+                    selected=sorted(clients)
+                else:
+                    selected=select_offline_cohort(cfg,round_id,total_rounds,selected)
             selected_set=set(selected)
             for cid in selected:
                 for event in clients[cid].local_training_events:
@@ -594,6 +624,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             transmitted_bytes=sum(sum(t.numel()*t.element_size()
                     for t in u['weights'].values()) for u in accepted)
             result.update({'round':round_id,'model_version':version,
+                           'terminal_communication_only_flush':bool(cfg.stream_protocol and cfg.stream_terminal_flush and round_id==total_rounds-1),
                            'stage':current_stage,'selected_clients':selected,
                            'selected_count':len(selected),'uploaded_count':len(accepted),
                            'locally_trained_clients':sorted(set(local_trained_clients)),
@@ -622,7 +653,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             # Durable intermediate results, so an interrupted run remains auditable.
             atomic_json(run_dir/'metrics.json',history)
             if cfg.checkpoint_every and (round_id+1)%cfg.checkpoint_every==0 or \
-               (round_id+1)%cfg.rounds_per_stage==0:
+               (cfg.stream_protocol or (round_id+1)%cfg.rounds_per_stage==0):
                 save_round_state(latest_checkpoint,cfg,round_id,global_state,version,
                                  clients,observed,peak,integrated,history,rng,
                                  server_optimizer_state,server_class_update_counts)
@@ -631,7 +662,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                                      cfg,round_id,global_state,version,
                                      clients,observed,peak,integrated,history,rng,
                                      server_optimizer_state,server_class_update_counts)
-            if (round_id+1)%cfg.rounds_per_stage==0:
+            if (cfg.stream_protocol or (round_id+1)%cfg.rounds_per_stage==0):
                 save_checkpoint(run_dir/f'model_stage_{current_stage+1:02d}.pt',global_state,
                                 cfg,version,clients,full_state=True)
             if verbose:

@@ -1,249 +1,204 @@
-"""Finite-grid, fully crossed CIFAR FCL research suites.
+"""CIFAR-100-only class-indexed, sequential-local-task experiment registry.
 
-Preserves legacy A--N plans. The declared grids are comprehensive across
-implemented method/server pairs but are not a claim that continuous spaces,
-missing algorithms, official-test-safe tuning, or training are completed.
+No CIFAR-10, CIFAR-100/20, or legacy stage-based experiment may enter this
+registry. Its finite crosses preserve all 11 local methods and all 9 server
+aggregators, and explicitly test *four* distinct overlap causal geometries.
 """
 from __future__ import annotations
-import argparse
+import argparse,gzip,json,time
+from dataclasses import asdict,replace
 from collections import Counter
-from dataclasses import asdict, replace
 from hashlib import sha256
 from itertools import product
-import json
 from pathlib import Path
-import time
+from .config import RunConfig
+from .simulator import run_experiment,atomic_json
+from .streaming import OVERLAP_KINDS,make_task_schedule
 
-from .planner import all_supported_suite, base_config
-from .simulator import atomic_json, run_experiment
-
-METHODS = ('sgd','gem','agem','replay','ewc','si','er_ace','der','derpp','mas','lwf')
-AGGS = ('fedavg','uniform','fedavgm','fedadam','class_balanced',
-        'inverse_participation','conflict_aware','conflict_projection','retention_aware')
-MAIN = ('disjoint','overlap','related','recurrence')
-POLICIES = (('random',1.),('random',.5),('random',.25),('coverage',.5),('coverage',.25))
-SELECTORS = ('random','fixed','round_robin','coverage','old','new','least_recent',
-             'related','recurrence','overlap','balanced','diversity','fairness',
-             'stochastic_related','historical_coverage','feature_max','feature_min',
-             'gradient_align','gradient_conflict','forgetting','gem_informed','history_adaptive')
-OTHER = ('iid','non_iid','asynchronous','mixed','stationary','domain',
-         'gradual_drift','shifted_recurrence','task_incremental')
-MEMORY = ('gem','agem','replay','er_ace','der','derpp','lwf')
-REGULARIZED = ('ewc','si','mas','lwf')
-SEEDS = (0,1,2)
-
-
-def raw_grids(dataset, seeds):
-    """Yield (family, kwargs, seed) in immutable, scientifically named order."""
-    for seed in seeds:
-        def grid(family, dimensions, fixed=None):
-            keys = tuple(dimensions)
-            for values in product(*(dimensions[k] for k in keys)):
-                yield family, {**dict(zip(keys,values)),**(fixed or {})}, seed
-        # Full 11 x 9 x 4 x 5 cross for each random realization.
-        for m,a,s,(selector,rate) in product(METHODS,AGGS,MAIN,POLICIES):
-            yield 'balanced',dict(method=m,aggregator=a,scenario=s,
-                                  selector=selector,participation=rate),seed
-        yield from grid('scenarios', dict(method=METHODS,aggregator=AGGS,scenario=OTHER))
-        yield from grid('selectors', dict(method=METHODS,aggregator=AGGS,
-                   scenario=('related','overlap','recurrence'),selector=SELECTORS))
-        yield from grid('participation',dict(method=METHODS,aggregator=AGGS,
-                   scenario=('overlap','related'),
-                   selector=('random','fixed','round_robin','coverage','least_recent'),
-                   participation=(.1,.25,.5,.75,1.)))
-        yield from grid('overlap',dict(method=METHODS,aggregator=AGGS,
-                   overlap=(0.,.25,.5,.75,1.),selector=('random','coverage')),
-                   dict(scenario='overlap'))
-        yield from grid('sample_overlap',dict(method=METHODS,aggregator=AGGS,
-                   sample_overlap_fraction=(0.,.25,.5,.75,1.)),dict(scenario='overlap'))
-        yield from grid('dirichlet',dict(method=METHODS,aggregator=AGGS,
-                   dirichlet_alpha=(.05,.1,.5,1.,10.)),dict(scenario='non_iid'))
-        yield from grid('local_optimization',dict(method=METHODS,aggregator=AGGS,
-                   lr=(.003,.01,.03,.1),epochs=(1,2,4),scenario=('disjoint','related')))
-        yield from grid('memory',dict(method=MEMORY,aggregator=AGGS,
-                   memory_per_class=(0,10,20,50,100),scenario=('disjoint','recurrence')))
-        yield from grid('regularization',dict(method=REGULARIZED,aggregator=AGGS,
-                   regularization_strength=(.1,1.,10.,100.),scenario=('disjoint','related')))
-        yield from grid('fedprox',dict(method=METHODS,aggregator=AGGS,
-                   fedprox_mu=(0.,.001,.01,.1),scenario=('disjoint','non_iid')))
-        yield from grid('server_optimization',dict(method=METHODS,
-                   aggregator=('fedadam','fedavgm'),server_lr=(.001,.01,.1,.5,1.),
-                   scenario=('disjoint','related')))
-        yield from grid('recurrence_timing',dict(method=METHODS,aggregator=AGGS,
-                   recurrence_round_delay=(1,5,15,30),
-                   recurrence_client_policy=('same','different')),dict(scenario='recurrence'))
-        yield from grid('imbalance',dict(method=METHODS,aggregator=AGGS,
-                   class_imbalance_power=(0.,.5,1.,2.)),dict(scenario='overlap'))
-        yield from grid('quantity_skew',dict(method=METHODS,aggregator=AGGS,
-                   client_sample_skew=(0.,1.,3.)),dict(scenario='overlap'))
-        yield from grid('backbone',dict(method=METHODS,aggregator=AGGS,
-                   model=('linear','mlp','smallcnn'),scenario=('disjoint','related')))
-        yield from grid('client_population',dict(method=METHODS,aggregator=AGGS,
-                   num_clients=(5,10,20),scenario=('overlap','related')))
-        yield from grid('local_momentum',dict(method=METHODS,aggregator=AGGS,
-                   momentum=(0.,.9),optimizer_state_policy=('reset','persist')),
-                   dict(scenario='disjoint'))
-        yield from grid('memory_policy',dict(method=MEMORY,aggregator=AGGS,
-                   memory_policy=('random_per_class','recent_per_class')),
-                   dict(scenario='overlap'))
-        yield from grid('replay_ratio',dict(method=('replay','er_ace','der','derpp'),
-                   aggregator=AGGS,replay_ratio=(.25,.5,1.,2.),
-                   scenario=('disjoint','related')))
-        yield from grid('distillation_alpha',dict(method=('der','derpp','lwf'),
-                   aggregator=AGGS,der_alpha=(.1,.3,.5,1.),
-                   scenario=('disjoint','related')))
-        yield from grid('replay_beta',dict(method=('er_ace','derpp'),aggregator=AGGS,
-                   der_beta=(.1,.3,.5,1.),scenario=('disjoint','related')))
-        yield from grid('si_damping',dict(aggregator=AGGS,si_xi=(.01,.1,1.),
-                   scenario=('disjoint','related')),dict(method='si'))
-        yield from grid('server_betas',dict(method=METHODS,server_beta1=(.5,.9,.99),
-                   server_beta2=(.9,.99,.999),scenario=('disjoint','related')),
-                   dict(aggregator='fedadam',server_lr=.001))
-        yield from grid('gem_constraints',dict(aggregator=AGGS,
-                   gem_grouping=('class','stage','all'),scenario=('disjoint','related')),
-                   dict(method='gem'))
-        for family,d,seed0 in grid('pending_data',dict(method=METHODS,aggregator=AGGS,
-                   pending_policy=('latest','retain_all','bounded'),
-                   scenario=('asynchronous','recurrence'))):
-            d['max_pending_samples']=400 if d['pending_policy']=='bounded' else 0
-            yield family,d,seed0
-        for family,d,seed0 in grid('participation_schedule',dict(method=METHODS,
-                   aggregator=AGGS,participation_schedule=('constant','increasing',
-                   'decreasing','alternating','stage','feedback'),
-                   scenario=('overlap','related'))):
-            if d['participation_schedule']=='stage':
-                d['stage_participation']=(.25,.75) if dataset=='cifar10' else (.25,)+(.75,)*9
-            yield family,d,seed0
-        yield from grid('target_client_interventions',dict(method=METHODS,aggregator=AGGS,
-                   force_target=('include','exclude'),scenario=('related','recurrence')),
-                   dict(target_client=2,intervention_round=20))
-        for family,d,seed0 in grid('spurious_features',dict(method=METHODS,
-                   aggregator=AGGS,spurious_strength=(0.,1.)),dict(scenario='related')):
-            d['spurious_ood_eval']=bool(d['spurious_strength'])
-            yield family,d,seed0
-        yield from grid('label_noise',dict(scenario=('disjoint','non_iid'),
-                   label_noise_rate=(0.,.1,.2)),
-                   dict(method='sgd',aggregator='fedavg',selector='random'))
-        yield from grid('heterogeneous_clients',dict(aggregator=AGGS,
-                   scenario=('disjoint','related'),client_heterogeneity=(False,True)),
-                   dict(method='sgd'))
-        if dataset=='cifar100':
-            for m,a,s,(selector,rate) in product(METHODS,AGGS,
-                            ('related','recurrence','overlap'),
-                            (('random',.5),('coverage',.5))):
-                yield 'cifar100_20', dict(dataset='cifar100_20',stages=2,
-                       method=m,aggregator=a,scenario=s,selector=selector,
-                       participation=rate),seed
+METHODS=('sgd','gem','agem','replay','ewc','si','er_ace','der','derpp','mas','lwf')
+AGGS=('fedavg','uniform','fedavgm','fedadam','class_balanced','inverse_participation',
+      'conflict_aware','conflict_projection','retention_aware')
+SEEDS=(0,1,2)
 
 
 def fingerprint(cfg):
-    payload=cfg.to_dict();payload.pop('job_id',None);payload.pop('block_id',None)
-    return sha256(json.dumps(payload,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    x=cfg.to_dict();x.pop('job_id',None);x.pop('block_id',None)
+    return sha256(json.dumps(x,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 
-def expand(dataset,seeds=SEEDS,include_legacy=True,families=None):
-    if dataset not in ('cifar10','cifar100'):raise ValueError(dataset)
-    if include_legacy:
-        for cfg in all_supported_suite(dataset):yield 'legacy',cfg
-    seen=set();selected=set(families) if families else None
-    base={s:base_config(dataset,seed=s) for s in seeds}
-    for family,changes,seed in raw_grids(dataset,seeds):
-        if selected is not None and family not in selected:continue
-        if changes.get('aggregator')=='fedadam' and 'server_lr' not in changes:
-            changes={**changes,'server_lr':.001}
-        cfg=replace(base[seed],**changes)
-        digest=fingerprint(cfg)
-        if digest in seen:continue
-        seen.add(digest)
-        cfg=replace(cfg,job_id=f'FX_{family}_{digest[:20]}',block_id='')
+def base(seed=0):
+    return RunConfig(dataset='cifar100',stream_protocol=True,class_pair_protocol='strict',
+        learning_setting='class_il',classes_per_local_task=2,local_tasks_per_round=2,
+        stream_overlap_kind='none',stream_overlap_fraction=0,
+        num_clients=10,participation=.8,selector='random',seed=seed,
+        stages=1,rounds_per_stage=1,batch_size=512)
+
+
+def raw_design(seeds=SEEDS):
+    for seed in seeds:
+        for method,agg,kind,rate in product(METHODS,AGGS,OVERLAP_KINDS,(1.,.8,.5)):
+            yield 'balanced',seed,dict(method=method,aggregator=agg,
+                stream_overlap_kind=kind,scenario='disjoint' if kind=='none' else 'overlap',
+                stream_overlap_fraction=0 if kind=='none' else .5,participation=rate)
+        # Independently ablate the number of contrasted classes and number
+        # of *sequential* local tasks processed before a communication round.
+        for method,agg,kind,classes,tasks in product(
+                METHODS,AGGS,OVERLAP_KINDS,(2,4),(1,2,3)):
+            yield 'task_length',seed,dict(method=method,aggregator=agg,
+                stream_overlap_kind=kind,scenario='disjoint' if kind=='none' else 'overlap',
+                stream_overlap_fraction=0 if kind=='none' else .5,
+                classes_per_local_task=classes,local_tasks_per_round=tasks)
+        # Exact-duration offline cohorts. D=2 is valid with the default
+        # 3-round no-overlap 100-class curriculum. D=3/4 are valid only
+        # with expressly configured recurrent rounds.
+        for method,agg,kind,rate,duration in product(
+                METHODS,AGGS,OVERLAP_KINDS,(.8,.5),(1,2,3,4)):
+            if kind=='none' and duration>3:continue
+            recur=0 if duration<=2 else 3
+            yield 'offline_duration',seed,dict(method=method,aggregator=agg,
+                stream_overlap_kind=kind,scenario='disjoint' if kind=='none' else 'overlap',
+                stream_overlap_fraction=0 if kind=='none' else .5,
+                participation=rate,offline_duration_rounds=duration,
+                stream_recurrence_rounds=recur)
+        # Distinct label overlap strengths and nonduplicate/raw-duplicate
+        # training examples. Cross-client same and later, same-client same/later.
+        for method,agg,kind,density in product(METHODS,AGGS,
+                OVERLAP_KINDS[1:],(.25,.5,1.)):
+            yield 'overlap_strength',seed,dict(method=method,aggregator=agg,
+                scenario='overlap',stream_overlap_kind=kind,
+                stream_overlap_fraction=density)
+        for method,agg,kind,raw in product(METHODS,AGGS,
+                ('inter_same_round','inter_cross_round'),(0.,.25,.5)):
+            yield 'raw_sample_overlap',seed,dict(method=method,aggregator=agg,
+                scenario='overlap',stream_overlap_kind=kind,
+                stream_overlap_fraction=.5,sample_overlap_fraction=raw)
+        for method,agg,relation in product(METHODS,AGGS,('natural','related','unrelated')):
+            yield 'semantic_order',seed,dict(method=method,aggregator=agg,relation=relation)
+        for method,agg,power in product(METHODS,AGGS,(0.,.5,1.,2.)):
+            yield 'class_imbalance',seed,dict(method=method,aggregator=agg,class_imbalance_power=power)
+        for method,agg,skew in product(METHODS,AGGS,(0.,1.,3.)):
+            yield 'client_quantity',seed,dict(method=method,aggregator=agg,client_sample_skew=skew)
+        # Participation and alternate selection on the shared default stream.
+        for method,agg,selector,rate in product(METHODS,AGGS,
+                ('random','fixed','round_robin','coverage','least_recent','old','new',
+                 'related','recurrence','overlap','balanced','diversity','fairness'),
+                (.5,.8,1.)):
+            yield 'selection',seed,dict(method=method,aggregator=agg,
+                                      selector=selector,participation=rate)
+        for method,agg,lr,epochs in product(METHODS,AGGS,(.003,.01,.03,.1),(1,2,4)):
+            yield 'local_optimization',seed,dict(method=method,aggregator=agg,lr=lr,epochs=epochs)
+        for method,agg,memory in product(
+                ('gem','agem','replay','er_ace','der','derpp','lwf'),AGGS,(0,10,20,50,100)):
+            yield 'memory',seed,dict(method=method,aggregator=agg,memory_per_class=memory)
+        for method,agg,reg in product(('ewc','si','mas','lwf'),AGGS,(.1,1.,10.,100.)):
+            yield 'regularization',seed,dict(method=method,aggregator=agg,regularization_strength=reg)
+        for method,agg,mu in product(METHODS,AGGS,(0.,.001,.01,.1)):
+            yield 'fedprox',seed,dict(method=method,aggregator=agg,fedprox_mu=mu)
+        for method,agg,server_lr in product(METHODS,('fedadam','fedavgm'),(.001,.01,.1,.5,1.)):
+            yield 'server_optimization',seed,dict(method=method,aggregator=agg,server_lr=server_lr)
+        for method,agg,ratio in product(('replay','er_ace','der','derpp'),AGGS,(.25,.5,1.,2.)):
+            yield 'replay_ratio',seed,dict(method=method,aggregator=agg,replay_ratio=ratio)
+        for method,agg,alpha in product(('der','derpp','lwf'),AGGS,(.1,.3,.5,1.)):
+            yield 'distillation',seed,dict(method=method,aggregator=agg,der_alpha=alpha)
+        for method,agg,beta in product(('er_ace','derpp'),AGGS,(.1,.3,.5,1.)):
+            yield 'replay_beta',seed,dict(method=method,aggregator=agg,der_beta=beta)
+        for agg,group in product(AGGS,('class','stage','all')):
+            yield 'gem_grouping',seed,dict(method='gem',aggregator=agg,gem_grouping=group)
+        for method,agg,n in product(METHODS,AGGS,(5,10,20)):
+            yield 'client_count',seed,dict(method=method,aggregator=agg,num_clients=n)
+        for method,agg,terminal_flush in product(METHODS,AGGS,(False,True)):
+            yield 'terminal_flush',seed,dict(method=method,aggregator=agg,
+                stream_terminal_flush=terminal_flush)
+        # Explicit recurrence extends disconnected-client histories without
+        # artificially claiming additional new classes.
+        for method,agg,kind,repeats in product(METHODS,AGGS,
+                    ('intra_cross_round','inter_cross_round','combined'),(0,2,4)):
+            yield 'recurrent_rounds',seed,dict(method=method,aggregator=agg,
+                scenario='overlap',stream_overlap_kind=kind,
+                stream_overlap_fraction=.5,stream_recurrence_rounds=repeats)
+
+
+def expand(dataset='cifar100',seeds=SEEDS,families=None):
+    if dataset!='cifar100':raise ValueError('CIFAR-10 and 20-class experiments have been retired')
+    included=set(families) if families else None
+    unique=set();bases={seed:base(seed) for seed in seeds}
+    for family,seed,changed in raw_design(seeds):
+        if included is not None and family not in included:continue
+        # Subset selectors may rely on simulator-privileged metadata; retain
+        # explicit oracle warning in the methodology documentation.
+        if changed.get('aggregator')=='fedadam' and 'server_lr' not in changed:
+            changed={**changed,'server_lr':.001}
+        cfg=replace(bases[seed],**changed)
         cfg.validate()
-        if cfg.batch_size != 512:raise RuntimeError('CIFAR batch size must be 512')
+        signature=fingerprint(cfg)
+        if signature in unique:continue
+        unique.add(signature)
+        cfg=replace(cfg,job_id=f'ST_{family}_{signature[:20]}',block_id='')
         yield family,cfg
 
 
-def plan(dataset,seeds=SEEDS,include_legacy=True,families=None):
-    counts=Counter();pairs=set();h=sha256()
-    for family,cfg in expand(dataset,seeds,include_legacy,families):
+def manifest(seeds=SEEDS,families=None):
+    counts=Counter();pairs=set();digest=sha256()
+    for family,cfg in expand(seeds=seeds,families=families):
         counts[family]+=1;pairs.add((cfg.method,cfg.aggregator))
-        h.update((cfg.job_id+':'+fingerprint(cfg)+'\n').encode())
-    return dict(dataset=dataset,seeds=list(seeds),batch_size=512,
-        total_jobs=sum(counts.values()),family_counts=dict(sorted(counts.items())),
-        method_server_pairs=len(pairs),possible_pairs=99,
-        manifest_sha256=h.hexdigest(),
-        warning='Finite grid of planned jobs, not executed CIFAR results or complete paper reproductions.')
+        digest.update((cfg.job_id+':'+fingerprint(cfg)+'\n').encode())
+    return dict(dataset='cifar100',batch_size=512,job_count=sum(counts.values()),
+                families=dict(sorted(counts.items())),method_aggregator_pairs=len(pairs),
+                sha256=digest.hexdigest(),seeds=list(seeds),
+                warning='These are planned runs, not trained CIFAR-100 results.')
 
 
-def main():
-    p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--dataset',choices=('cifar10','cifar100'),required=True)
-    p.add_argument('--suite',choices=('full','balanced','factorial','legacy'),default='full')
-    p.add_argument('--seeds',default='0,1,2');p.add_argument('--seed',type=int)
-    p.add_argument('--families',default='')
+def main(argv=None):
+    p=argparse.ArgumentParser(description='CIFAR-100 continuous local-task communication experiments')
+    p.add_argument('--dataset',choices=['cifar100'],default='cifar100')
+    p.add_argument('--suite',choices=['full','balanced'],default='full')
+    p.add_argument('--families',nargs='*',default=None)
+    p.add_argument('--seeds',nargs='+',type=int,default=[0,1,2])
+    p.add_argument('--seed',type=int,default=None)
+    p.add_argument('--limit',type=int,default=0)
+    p.add_argument('--start',type=int,default=0)
+    p.add_argument('--output-dir',default='results')
+    p.add_argument('--data-root',default='data')
     p.add_argument('--plan-only',action='store_true')
-    p.add_argument('--export-plan',default='')
-    p.add_argument('--limit',type=int,default=0);p.add_argument('--start',type=int,default=1)
-    p.add_argument('--output-dir',default='results');p.add_argument('--data-root',default='data')
-    p.add_argument('--download',action='store_true');p.add_argument('--allow-cpu',action='store_true')
-    p.add_argument('--continue-on-error',action='store_true');p.add_argument('--stop-on-error',action='store_true')
-    args=p.parse_args()
-    seeds=(args.seed,) if args.seed is not None else tuple(int(x) for x in args.seeds.split(','))
-    if not seeds or len(seeds)!=len(set(seeds)):p.error('seeds must be distinct')
-    families=tuple(x for x in args.families.split(',') if x) or None
-    if args.suite=='balanced':families=('balanced',)
-    if args.suite=='legacy':families=('__no_factorial__',)
-    legacy=args.suite in ('full','balanced','legacy')
-    root=Path(args.output_dir)/args.dataset;root.mkdir(parents=True,exist_ok=True)
-    info=plan(args.dataset,seeds,legacy,families)
-    planfile=root/f'{args.suite}_plan_summary.json'
-    if planfile.exists() and json.loads(planfile.read_text())['manifest_sha256'] != info['manifest_sha256']:
-        raise RuntimeError('Plan mismatch: use another RESULTS_ROOT for different axes/seeds')
-    atomic_json(planfile,info)
-    print(json.dumps(info,indent=2),flush=True)
+    p.add_argument('--export-plan',default=None)
+    p.add_argument('--download',action='store_true')
+    p.add_argument('--allow-cpu',action='store_true')
+    p.add_argument('--continue-on-error',action='store_true')
+    args=p.parse_args(argv)
+    seeds=[args.seed] if args.seed is not None else args.seeds
+    if len(seeds)!=len(set(seeds)):p.error('Seed values must be distinct')
+    families=['balanced'] if args.suite=='balanced' else args.families
+    plan=manifest(seeds=seeds,families=families)
+    root=Path(args.output_dir)/'cifar100_stream_v3';root.mkdir(parents=True,exist_ok=True)
+    atomic_json(root/'stream_manifest.json',plan)
+    print(json.dumps(plan,indent=2),flush=True)
     if args.export_plan:
-        import gzip
-        path=Path(args.export_plan);path.parent.mkdir(parents=True,exist_ok=True)
-        opener=gzip.open if path.suffix=='.gz' else open
-        with opener(path,'wt',encoding='utf8') as fp:
-            for ix,(family,cfg) in enumerate(expand(args.dataset,seeds,legacy,families),1):
-                fp.write(json.dumps(dict(index=ix,family=family,config=cfg.to_dict()))+'\n')
+        destination=Path(args.export_plan);destination.parent.mkdir(parents=True,exist_ok=True)
+        opener=gzip.open if str(destination).endswith('.gz') else open
+        with opener(destination,'wt') as fp:
+            for _,cfg in expand(seeds=seeds,families=families):
+                fp.write(json.dumps(cfg.to_dict(),sort_keys=True)+'\n')
     if args.plan_only:return
-    if not args.allow_cpu:
-        import torch
-        if not torch.cuda.is_available():raise RuntimeError('CUDA required; refusing silent CPU fallback')
-    if args.start<1 or args.limit<0:raise ValueError('Invalid start/limit')
-    import fcntl
-    attempts=completed=skipped=0;failed=[]
-    with (root/'.suite.lock').open('a+') as lock:
-        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        for index,(family,cfg) in enumerate(expand(args.dataset,seeds,legacy,families),1):
-            if index<args.start:continue
-            if args.limit and attempts>=args.limit:break
-            attempts+=1
-            print(f'[{index}/{info["total_jobs"]}] {cfg.job_id} {family}',flush=True)
-            try:
-                source=None
-                if cfg.fork_source_job:
-                    source=root/'runs'/cfg.fork_source_job/f'checkpoint_round_{cfg.fork_checkpoint_round:04d}.pt'
-                    if not source.is_file():raise RuntimeError(f'Missing fork dependency: {source}')
-                res=run_experiment(cfg,str(root/'runs'),args.data_root,args.download,
-                                   fork_from_checkpoint=source)
-                rd=root/'runs'/cfg.job_id
-                report=json.loads((rd/'summary.json').read_text())
-                if not args.allow_cpu and report.get('device')!='cuda':
-                    raise RuntimeError('Expected CUDA model training')
-                if json.loads((rd/'config.json').read_text()) != cfg.to_dict():
-                    raise RuntimeError('Artifact/config mismatch')
-                for name in ('status.json','metrics.json','model_final.pt'):
-                    if not (rd/name).exists():raise RuntimeError('Missing output '+name)
-                skipped+=res['status']=='already_completed'
-                completed+=res['status']!='already_completed'
-            except Exception as exc:
-                failed.append({'index':index,'job_id':cfg.job_id,'error':repr(exc)})
-            atomic_json(root/f'{args.suite}_status.json',dict(total_jobs=info['total_jobs'],
-                last_attempted=index,completed=completed,skipped=skipped,failed=failed,
-                manifest_sha256=info['manifest_sha256'],updated=time.time()))
-            if failed and not args.continue_on_error:break
-    print(f'completed={completed}, skipped={skipped}, failed={len(failed)}')
+    import torch
+    if not args.allow_cpu and not torch.cuda.is_available():
+        raise RuntimeError('GPU production requires CUDA; --allow-cpu is test-only')
+    attempted=0;failed=[];completed=0
+    for index,(family,cfg) in enumerate(expand(seeds=seeds,families=families)):
+        if index<args.start:continue
+        if args.limit and attempted>=args.limit:break
+        attempted+=1
+        try:
+            print(f'[{index+1}/{plan["job_count"]}] {family} {cfg.job_id}',flush=True)
+            result=run_experiment(cfg,str(root/'runs'),args.data_root,args.download)
+            if result['status']=='completed':completed+=1
+        except Exception as exc:
+            failed.append(dict(job_id=cfg.job_id,error=repr(exc)))
+            print('FAIL:',cfg.job_id,repr(exc),flush=True)
+            if not args.continue_on_error:break
+        finally:
+            atomic_json(root/'stream_suite_status.json',dict(planned=plan['job_count'],
+                attempted=attempted,completed=completed,failed=failed,
+                manifest_sha256=plan['sha256']))
     if failed:raise SystemExit(1)
 
 

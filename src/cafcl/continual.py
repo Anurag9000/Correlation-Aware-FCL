@@ -193,10 +193,10 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     model.to(device)
     model.train()
     if active_pair_classes is not None:
-        from .class_indexed import canonical_pair_loss,freeze_other_class_rows
+        from .class_indexed import canonical_active_loss,freeze_other_class_rows
         active_pair_classes=tuple(sorted(set(int(c) for c in active_pair_classes)))
-        if len(active_pair_classes)!=2:
-            raise ValueError('Local contrastive episode requires two distinct labels')
+        if len(active_pair_classes)<2:
+            raise ValueError('Local task requires at least two distinct labels')
     indices=list(dict.fromkeys(client.current_indices))
     if not indices:
         return None
@@ -286,7 +286,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
             optimizer.zero_grad(set_to_none=True)
             logits=model(x)
             if active_pair_classes is not None:
-                loss=canonical_pair_loss(logits,y,active_pair_classes)
+                loss=canonical_active_loss(logits,y,active_pair_classes)
             elif cfg.learning_setting=='task_il':
                 if task_classes is None or not set(y.tolist()).issubset(set(task_classes)):
                     raise RuntimeError('Task-IL labels do not match the known local task')

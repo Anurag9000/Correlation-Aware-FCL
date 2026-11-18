@@ -20,18 +20,29 @@ def classifier_parameter_names(model):
     return prefix+'weight', prefix+'bias' if layer.bias is not None else None
 
 
-def canonical_pair_loss(logits, labels, classes):
-    """Binary CE over exactly two GLOBAL class IDs, independent of local order."""
-    pair=sorted(set(int(c) for c in classes))
-    if len(pair)!=2 or pair[0]<0 or pair[-1]>=logits.shape[1]:
-        raise ValueError('Every contrastive episode must have two distinct valid classes')
-    ids=torch.as_tensor(pair,dtype=torch.long,device=logits.device)
+def canonical_active_loss(logits, labels, classes):
+    """CE over the canonical global rows of the current local task, >=2 labels.
+
+    Output rows for classes absent from the task are not in the softmax;
+    the caller additionally freezes their parameters during optimization.
+    """
+    active=sorted(set(int(c) for c in classes))
+    if len(active)<2 or active[0]<0 or active[-1]>=logits.shape[1]:
+        raise ValueError('Every local task needs >=2 distinct valid global class IDs')
     targets=labels.to(logits.device)
-    allowed=(targets==pair[0])|(targets==pair[1])
-    if not bool(torch.all(allowed)):
-        raise ValueError('Current episode includes a label outside its declared pair')
-    binary_targets=(targets==pair[1]).long()
-    return F.cross_entropy(logits.index_select(1,ids),binary_targets)
+    label_map={c:i for i,c in enumerate(active)}
+    if not set(targets.detach().cpu().tolist()).issubset(label_map):
+        raise ValueError('Current episode includes a label outside its declared task')
+    labels_mapped=torch.tensor([label_map[int(v)] for v in targets.tolist()],
+                               dtype=torch.long,device=logits.device)
+    ids=torch.as_tensor(active,dtype=torch.long,device=logits.device)
+    return F.cross_entropy(logits.index_select(1,ids),labels_mapped)
+
+
+def canonical_pair_loss(logits, labels, classes):
+    if len(set(classes))!=2:
+        raise ValueError('Binary task requires two distinct labels')
+    return canonical_active_loss(logits,labels,classes)
 
 
 def freeze_other_class_rows(model, active):

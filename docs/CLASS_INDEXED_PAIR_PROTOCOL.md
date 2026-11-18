@@ -1,39 +1,45 @@
-# Canonical class-indexed local continual learning and federated synchronization (v2)
+# CIFAR-100 v3: sequential local learning and class-indexed synchronization
 
-## What the code now does
+## Precise per-client clock
 
-Every client learns on its private model while connected or disconnected. At a communication round, participating clients upload accumulated updates, and **only synchronized clients** replace their private model weights with the newly aggregated global weights. Replay buffers, GEM/A-GEM memory, EWC/SI/MAS statistics and other private CL state survive ordinary synchronization. Offline clients retain their weights, unsent updates and memories. `full_sync=True` is an explicitly different synchronization ablation.
+The *communication interval* is the outer loop. Within each interval there are `local_tasks_per_round` **sequential** local learning events per client. Each event has `classes_per_local_task` distinct labeled classes. Default is `(two-class task A) → (two-class task B) → (optional server communication)`. Every client runs these events even if it will be offline at the upcoming server aggregation.
 
-The output layer has **one row per canonical class ID**, identical across clients and the server. There are **no task-specific classifier heads**. Class 10 on any client always maps to output row 10 at the server, including overlapping client streams and recurrent encounters. **Important:** the present implementation preallocates rows for known CIFAR labels; it activates them logically, but it does not physically grow the tensor at discovery time.
+For default **10 clients / 2 classes per task / 2 tasks per interval**, the first interval teaches classes 0–39, the second 40–79, and the third 80–99. No class is fabricated to fill the last interval. Clients that exhaust their scheduled events simply do not perform extra local updates. Training and communication are separate: a client may still upload previously accumulated updates even in an interval with no fresh training.
 
-## Two-class local training
+Local-method state (replay indices/logits, GEM/A-GEM memory, SI/MAS/EWC parameter importance, LwF teacher, etc.) is owned by the client and maintained across disconnections. **No client ever uploads raw replay samples to the server.** These clients continue updating their own model, and later upload accumulated *parameter deltas*.
 
-When two class labels `a,b` arrive at the same client and logical round, the local CE objective uses **only logits a and b**. A class sequence `(0,1)`, then `(2,3)` trains the first binary episode before the second, on the same evolving private model, before any server update.
+## Headless global classifier
 
-The classifier rows other than the active two are frozen, including after GEM/A-GEM projections, local regularization and retained SGD momentum. The feature extractor can still change: frozen class rows do **not** guarantee frozen predictions. GEM, A-GEM, replay, EWC, SI, ER-ACE, DER, DER++, MAS and LwF retain their method-specific local objectives under the active-pair rule. Historical memory or distillation still regularizes the backbone.
+There is **one** classifier with an output row indexed by global CIFAR-100 class ID `0..99`. For shape-stable disconnected clients, all rows are allocated from initialization, but **unseen rows are inactive**. A task involving e.g. labels `(10,20)` computes supervised cross-entropy using *only* logits 10 and 20. Rows for all other classes are frozen exactly, including against momentum drift and CL regularizers. Shared feature-extractor weights may still change, so these restrictions do **not** mathematically guarantee absence of forgetting or classifier calibration bias.
 
-An old label reused in a new pair, e.g. `(10,11)` followed by `(10,20)`, uses the **same canonical row 10**, never a second head. Two clients learning class 10 both map to that row upon upload.
+A repeated label such as 10 in `(10,11)` and then `(10,20)` is still **the same global row 10** on that client. There is no duplicate task-specific classifier head or task ID at inference. In cross-client overlap two local copies may temporarily exist, but a single corresponding server row is merged by canonical class ID.
 
-### Compatibility limitation — important
+The global test evaluator masks **never-arrived** output rows; all arrived classes are tested, including classes held only by inactive clients. Thus never-integrated classes may lower global accuracy without constituting forgetting of previously trained classes.
 
-`RunConfig.class_pair_protocol='strict'` rejects singleton arrivals rather than silently treating a one-class batch as a meaningful binary classification task. The original enormous job ledgers use `class_pair_protocol='compatible'` for backward compatibility: simultaneous labels are trained in pairs when possible, but **unpairable singletons still use a legacy full-softmax objective**. Those jobs are **not fully compliant** with the requested two binary episodes per client per step. Inspect `local_training_events[].classes` before treating a run as conformant.
+## Offline versus online clients
 
-This is a hard mathematical constraint for some original job layouts. Four class-disjoint CIFAR-10 clients each seeing four distinct class labels simultaneously require **16 labels**, while CIFAR-10 supplies only ten. A valid strict layout requires fewer data-bearing clients, different time schedules, permitted class overlap, or a richer dataset such as CIFAR-100. The historic 67,938/69,722 jobs are not certified strict solely by this update.
+At each interval `t`:
 
-## Class-wise server merge
+1. Generate client-local tasks and deliver fresh private training data to all clients.
+2. On **each client's persistent private model**, learn tasks sequentially using that client's configured local method. Update method-specific historical state and pending class-update counts.
+3. Select the online clients. With `participation=.8` and `num_clients=10`, precisely 8 clients are eligible to upload; 2 are offline. `offline_duration_rounds=D` creates seeded cohorts whose disconnections last D full intervals, overriding independent random selection as a deliberate ablation.
+4. Each online client uploads its accumulated change since its **last received server model**. For a client with anchor `A_k` and private model `L_k`, the server-frame candidate is `G_t + (L_k-A_k)`. This is an explicitly stale-delta variation of federated aggregation, **not identical to classic synchronous FedAvg**.
+5. Apply the chosen server update algorithm on participating uploads. For each classifier row `c`, consider only clients that have trained label `c` since their last synchronization. For basic average-style methods, fuse using recorded class-update counts and any historical row contribution. Other server update algorithms apply their own candidate corrections followed by row-wise class-aware retention. Increment class exposure counters once per actual local update contribution.
+6. Broadcast the new server model to **online clients only**; their full shared model weights are replaced while their private CL state remains. Offline clients do not download or reset anything.
+7. Record local/online/offline timelines, class-specific upload counts, server model version, class-wise accuracy, and unsent updates for audit.
 
-The client's uploaded weights are rebased using `G + (L - A)`, where `G` is the current global model, `L` is its private model, and `A` is the last global model it actually downloaded. This preserves offline learning and is a **stale-delta adaptation**, not ordinary synchronous FedAvg when the client has missed rounds.
+**Example:** Client 4 is offline after learning `(8,9) → (28,29)` and remains offline after `(48,49) → (68,69)`. Upon rejoining after `(88,89)` it uploads accumulated effects from **all five** binary tasks (ten class identities) in one server communication. Client 6 analogously can accumulate `(12,13),(32,33),(52,53),(72,73),(92,93)` while offline. No server access to private raw images is required.
 
-For every global classifier row c, the server reads only contributions from clients that **trained that class since their last synchronization**. With `classwise_head_merge=True`, prior server update counts and fresh client-local class update steps weight a class-specific fusion. Unchanged classes keep their previous row. For non-FedAvg optimizers, the algorithm-specific candidate delta is damped according to the share of new class updates. All counts are saved in resumable full-state checkpoints.
+## Final communication-only flush
 
-This is a **proposed class-wise fusion algorithm**, not a stock FedAvg/FedAdam implementation. Use `classwise_head_merge=False` if an uncontaminated original-server-method control is required. The network backbone still follows the selected server optimizer or aggregation method. Class-specific row fusion is a distinct research choice that must be ablated.
+Because a finite 100-class disjoint stream ends after 3 *training* intervals at default capacity, clients randomly offline in the last interval might never reconnect. `stream_terminal_flush=True` adds one **explicitly labeled, no-training server communication step** that selects all clients to send pending updates. It is **not** counted as a four-new-class learning interval. Disable it to study the never-synchronized terminal server state.
 
-On every aggregation success, **the server model replaces each selected client's shared weights exactly**, while preserving its historical CL memory; nonselected client weights are never overwritten. The next time an offline client participates, it uploads its accumulated effect before the replacement.
+## Scientific distinctions and limitations
 
-## What is verified, and what is not
-
-Offline tests cover all eleven local methods on two successive two-label episodes within the **same logical round**, disabled-client learning and later reconnection, remembered class histories, global row identity, frozen inactive classifier rows, checkpoint protocol gating and stale update accumulation. The suite ran **96 offline tests** at the time of this engineering update.
-
-The current model does **not** dynamically resize classifier tensors; it preallocates a canonical class registry. Nor are all historical class-holder allocations, arrival schedules, partial participation patterns and overlap variants converted to **strictly valid** two-pair-per-client jobs. Strict full-ledger feasibility checking, regenerated scientific factorial plans and real CIFAR-10/CIFAR-100 GPU results remain open work. No claim of exhaustive research closure or official CIFAR execution is made.
-
-**Terminology:** sequential local two-class episodes without task-specific inference heads constitute **task-structured local continual training with class-incremental global inference**, not conventional task-ID-assisted task-IL inference.
+- **Local sequential supervised tasks** do not make this conventional task-ID-assisted Task-IL. The server and inference use one global class-indexed classifier and no task ID; research classification is global class-incremental learning with known labels.
+- Preallocated output rows are used for shape stability instead of physically expanding network tensors. Unseen rows are never trained locally or merged until activated.
+- Frozen *classifier rows* do not freeze the shared representation; CL mechanisms still matter, and catastrophic forgetting remains possible.
+- A class-update count is a weighted-fusion heuristic, not an optimal proof of unbiased aggregation. Old-class calibration and sample/effective-update weight mismatches need GPU study.
+- Some local mechanisms (DER, EWC, MAS, ER-ACE, LwF) are faithful to the declared experiment code but are approximations of their literature counterparts. GEM's quadratic program currently uses SciPy on CPU; neural-network training can use CUDA.
+- Selectors using simulated class holdings or gradient relationships are oracle research controls, not secure privacy-preserving selectors.
+- No official CIFAR-100 training result or independent experimental validity claim is established by unit tests alone.

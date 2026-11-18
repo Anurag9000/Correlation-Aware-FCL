@@ -1,13 +1,19 @@
-"""Verify frozen deterministic factorial job counts and SHA-256 identities."""
-from cafcl.full_matrix import plan
-EXPECTED={
-  'cifar10':(67938,'56086a0234db8681458b514b1db87247b905b9721dfda496b71a686f24377b7b'),
-  'cifar100':(69722,'7eda27c5047cc740f2c8fa0ac61a32e8c977c0da1ba107d1c6fe2e02f9c22870'),
-}
-for dataset,(jobs,digest) in EXPECTED.items():
-    r=plan(dataset)
-    assert r['total_jobs']==jobs
-    assert r['manifest_sha256']==digest
-    assert r['method_server_pairs']==99
-    assert r['batch_size']==512
-    print(dataset,jobs,'jobs, 99 pairs, batch 512')
+"""One-pass verification of the source-generated CIFAR-100-only registry."""
+from pathlib import Path
+import json
+from cafcl.full_matrix import manifest
+
+
+def main():
+    expected=json.loads((Path(__file__).resolve().parents[1]/
+                         'configs/designs/stream_v3.json').read_text())
+    actual=manifest()
+    assert actual==expected, 'Active stream design differs from committed manifest'
+    assert actual['dataset']=='cifar100'
+    assert actual['batch_size']==512
+    assert actual['method_aggregator_pairs']==99
+    assert actual['job_count']==53805
+    print(f"CIFAR-100: {actual['job_count']} source jobs, 99/99 pairs, batch 512; sha256 {actual['sha256']}")
+
+
+if __name__=='__main__':main()

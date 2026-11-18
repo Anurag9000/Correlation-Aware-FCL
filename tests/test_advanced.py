@@ -12,7 +12,6 @@ from cafcl.selection import select_clients,effective_participation,participation
 from cafcl.simulator import aggregate,run_experiment,server_optimizer_step
 from cafcl.causal import pair_interaction,aggregation_leave_one_out
 from cafcl.models import create_model
-from cafcl.planner import all_supported_suite
 
 
 @pytest.mark.parametrize('method',['er_ace','der','derpp','mas','lwf','replay','ewc'])
@@ -184,25 +183,3 @@ def test_counterfactual_fork_rejects_scenario_change(tmp_path):
         run_experiment(changed,str(tmp_path),verbose=False,fork_from_checkpoint=ck)
 
 
-def test_registered_full_counterfactual_suite(tmp_path):
-    from cafcl.planner import causal_fork_suite
-    from dataclasses import replace
-    planned=causal_fork_suite('cifar10')
-    assert len(planned)==18
-    assert len([x for x in planned if x.fork_source_job])==12
-    baseline,include,exclude=planned[:3]
-    converted=[replace(x,dataset='synthetic',num_clients=4,model='linear',
-                       target_client=2,rounds_per_stage=2,
-                       intervention_round=2 if x.fork_source_job else -1,
-                       fork_checkpoint_round=2 if x.fork_source_job else 0)
-               for x in (baseline,include,exclude)]
-    run_experiment(converted[0],str(tmp_path),verbose=False)
-    for config in converted[1:]:
-        source=(tmp_path/config.fork_source_job/
-                f'checkpoint_round_{config.fork_checkpoint_round:04d}.pt')
-        assert source.is_file()
-        run_experiment(config,str(tmp_path),verbose=False,fork_from_checkpoint=source)
-    h1=json.loads((tmp_path/converted[1].job_id/'metrics.json').read_text())
-    h2=json.loads((tmp_path/converted[2].job_id/'metrics.json').read_text())
-    assert 2 in h1[2]['selected_clients']
-    assert 2 not in h2[2]['selected_clients']
