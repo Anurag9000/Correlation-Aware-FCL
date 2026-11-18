@@ -55,13 +55,13 @@ def main() -> int:
             "integrated_forgetting": forgetting, "training_seconds": seconds,
         })
 
-    # Primary objective is the old/new harmonic mean; the remaining metrics
-    # are prespecified tie-breakers in this order.
+    # Runtime remains recorded, but can vary with shared-host contention and
+    # therefore never determines the hyperparameter choice.
     ranked = sorted(rows, key=lambda r: (
         r["harmonic_old_new_validation_accuracy"],
         r["all_observed_validation_macro_accuracy"],
         r["integrated_class_coverage"], -r["integrated_forgetting"],
-        -r["training_seconds"]), reverse=True)
+    ), reverse=True)
     viable = [r for r in ranked if r["learning_gate_passed"]]
     selected = viable[0] if viable else None
     result = {
@@ -71,11 +71,11 @@ def main() -> int:
             "old_and_new_validation_accuracy_must_exceed": CHANCE_ACCURACY,
             "rationale": "10-class class-incremental chance accuracy",
         },
+        "runtime_used_for_selection": False,
         "window_rounds": args.window,
         "selection_order": ["harmonic_old_new_validation_accuracy",
                             "all_observed_validation_macro_accuracy",
-                            "integrated_class_coverage", "lower_integrated_forgetting",
-                            "lower_training_seconds"],
+                            "integrated_class_coverage", "lower_integrated_forgetting"],
         "decision": ("selected" if selected else "no_candidate_passed_old_new_learning_gate"),
         "selected_job_id": selected["job_id"] if selected else None,
         "selected_candidate": selected,

@@ -52,6 +52,58 @@ def wait_for_exclusive_gpu(current_pid: int, poll_seconds: int) -> None:
         time.sleep(max(5, poll_seconds))
 
 
+def gpu_snapshot() -> tuple[int, list[int]]:
+    memory = subprocess.run(
+        ["nvidia-smi", "-i", "0", "--query-gpu=memory.free",
+         "--format=csv,noheader,nounits"], capture_output=True, text=True, check=True)
+    values = [int(line.strip()) for line in memory.stdout.splitlines()
+              if line.strip().isdigit()]
+    if not values:
+        raise RuntimeError("Cannot read free VRAM for CUDA device 0")
+    processes = subprocess.run(
+        ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader,nounits"],
+        capture_output=True, text=True, check=True)
+    pids = sorted({int(line.strip()) for line in processes.stdout.splitlines()
+                   if line.strip().isdigit()})
+    return values[0], pids
+
+
+def wait_for_minimum_free_vram(minimum_gib: float, poll_seconds: int) -> None:
+    minimum_mib = int(minimum_gib * 1024)
+    while True:
+        free_mib, _ = gpu_snapshot()
+        if free_mib >= minimum_mib:
+            return
+        print(f"Waiting for VRAM headroom: {free_mib/1024:.1f} GiB free; "
+              f"minimum is {minimum_gib:.1f} GiB", flush=True)
+        time.sleep(max(5, poll_seconds))
+
+
+def record_gpu_context(output: Path, cfg: RunConfig, event: str,
+                       free_mib: int, pids: list[int], current_pid: int,
+                       result_status: str | None = None) -> None:
+    available_kib = None
+    with open("/proc/meminfo", encoding="ascii") as fh:
+        for line in fh:
+            if line.startswith("MemAvailable:"):
+                available_kib = int(line.split()[1])
+                break
+    row = {
+        "job_id": cfg.job_id, "event": event, "unix_time": time.time(),
+        "runner_pid": current_pid, "free_vram_mib": free_mib,
+        "observed_compute_pids": [pid for pid in pids if pid != current_pid],
+        "cpu_only_allowlisted_pids": sorted(
+            int(value) for value in os.environ.get("CAFCL_GPU_CPU_ONLY_PIDS", "").split()
+            if value.isdigit()),
+        "mem_available_kib": available_kib,
+    }
+    if result_status is not None:
+        row["result_status"] = result_status
+    with (output / "execution_context.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, sort_keys=True) + "\n")
+        fh.flush()
+
+
 def wait_for_host_memory(minimum_gib: float, poll_seconds: int) -> None:
     """Keep a shared server from entering memory pressure between jobs."""
     minimum_kib = int(minimum_gib * 1024 * 1024)
@@ -108,6 +160,9 @@ def main() -> int:
     parser.add_argument("--data-root", default="data")
     parser.add_argument("--gpu-poll-seconds", type=int, default=30)
     parser.add_argument("--minimum-memory-gib", type=float, default=8.0)
+    parser.add_argument("--allow-concurrent-gpu", action="store_true",
+                        help="Run alongside other CUDA processes when VRAM headroom permits")
+    parser.add_argument("--minimum-free-vram-gib", type=float, default=4.0)
     parser.add_argument("--plan-only", action="store_true")
     args = parser.parse_args()
     payload, jobs = load_plan(Path(args.plan))
@@ -127,20 +182,31 @@ def main() -> int:
     failures = []
     for index, cfg in enumerate(jobs, 1):
         wait_for_host_memory(args.minimum_memory_gib, args.gpu_poll_seconds)
-        wait_for_exclusive_gpu(os.getpid(), args.gpu_poll_seconds)
+        if args.allow_concurrent_gpu:
+            wait_for_minimum_free_vram(args.minimum_free_vram_gib, args.gpu_poll_seconds)
+        else:
+            wait_for_exclusive_gpu(os.getpid(), args.gpu_poll_seconds)
+            wait_for_minimum_free_vram(args.minimum_free_vram_gib, args.gpu_poll_seconds)
         if device is None:
             device = torch.device("cuda")
             device_name = torch.cuda.get_device_name(device)
         print(f"\n=== TUNING [{index}/{len(jobs)}] {cfg.job_id} (batch 512) ===", flush=True)
+        free_mib, compute_pids = gpu_snapshot()
+        record_gpu_context(output, cfg, "start", free_mib, compute_pids, os.getpid())
         try:
             result = run_experiment(cfg, str(output / "runs"), args.data_root, download=False)
             if result.get("status") == "already_completed":
                 already_completed += 1
             else:
                 completed += 1
+            record_gpu_context(output, cfg, "end", *gpu_snapshot(), os.getpid(),
+                               result_status=str(result.get("status", "completed")))
             del result
             release_job_resources(torch, device)
         except Exception as exc:
+            end_free_mib, end_pids = gpu_snapshot()
+            record_gpu_context(output, cfg, "failed", end_free_mib, end_pids,
+                               os.getpid(), result_status=repr(exc))
             failures.append({"job_id": cfg.job_id, "error": repr(exc),
                              "traceback": traceback.format_exc()})
             atomic_json(status_path, {

@@ -23,7 +23,11 @@ is the registered baseline. Candidate outputs are independent under
 `results/cifar10_full_validation_v2/runs/`; selection and artifact verification
 are not complete until the full plan finishes. A candidate must exceed the
 10-class chance accuracy separately on old and new classes over the final-stage
-selection window before it can be ranked by harmonic mean.
+selection window before it can be ranked by harmonic mean. This v2 execution is
+authorized to overlap the existing CUDA workload when at least 4 GiB of VRAM
+and 8 GiB of host-available RAM remain. Per-job GPU PIDs and memory snapshots
+are recorded in `execution_context.jsonl`; runtime is reported but excluded
+from candidate ranking because concurrent load affects timing.
 
 An earlier attempt is retained in `results/cifar10_full_validation_v1/` for
 provenance. Its 0.01/0 candidate completed before another CUDA job started. Its
