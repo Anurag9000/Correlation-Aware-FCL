@@ -37,8 +37,10 @@ The selected setting is `lr=0.1, momentum=0.0`:
 
 The selected candidate and detailed ranking are recorded in
 `results/cifar10_full_validation_v2/selection.json` and `selection.csv`; the
-independent verifier receipt is `verification.json`. Per-job GPU PIDs and
-memory snapshots are in `execution_context.jsonl`. The v2 run overlapped the
+independent verifier receipt is `verification.json`. A compact committed copy
+of the plan, selection, environment, execution log, and model hashes is in
+[`docs/evidence/cifar10_full_validation_v2/`](evidence/cifar10_full_validation_v2/README.md).
+Per-job GPU PIDs and memory snapshots are in `execution_context.jsonl`. The v2 run overlapped the
 existing CUDA workload with a 4 GiB free-VRAM gate and 5 GiB inter-job host-RAM
 gate. Runtime is recorded but excluded from ranking because shared load affects
 timing. Final official-test metrics are saved per candidate but are not used in
