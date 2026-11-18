@@ -12,6 +12,8 @@ from cafcl.continual import gem_project,agem_project,LocalState
 from cafcl.selection import select_clients
 from cafcl.simulator import aggregate,run_experiment
 from cafcl.planner import core_suite,all_supported_suite
+from cafcl.cli import wait_for_exclusive_gpu
+from types import SimpleNamespace
 
 
 def test_catalogue_complete():
@@ -27,6 +29,27 @@ def test_plans(dataset,count):
     assert all(x.require_cuda for x in jobs)
     assert len(core_suite(dataset))==60
     for j in jobs:j.validate()
+
+
+def test_sequential_suite_gpu_gate_waits_for_foreign_compute_pid(monkeypatch):
+    responses=iter([
+        SimpleNamespace(returncode=0,stdout='77\n88\n',stderr=''),
+        SimpleNamespace(returncode=0,stdout='77\n',stderr=''),
+    ])
+    sleeps=[]
+    monkeypatch.delenv('CAFCL_GPU_CPU_ONLY_PIDS',raising=False)
+    monkeypatch.setattr('cafcl.cli.subprocess.run',lambda *a,**k:next(responses))
+    monkeypatch.setattr('cafcl.cli.time.sleep',sleeps.append)
+    wait_for_exclusive_gpu(current_pid=77,poll_seconds=1)
+    assert sleeps==[5]
+
+
+def test_sequential_suite_gpu_gate_allows_explicit_cpu_only_context(monkeypatch):
+    monkeypatch.setenv('CAFCL_GPU_CPU_ONLY_PIDS','88')
+    monkeypatch.setattr('cafcl.cli.subprocess.run',lambda *a,**k:
+                        SimpleNamespace(returncode=0,stdout='77\n88\n',stderr=''))
+    monkeypatch.setattr('cafcl.cli.time.sleep',lambda _:pytest.fail('unexpected wait'))
+    wait_for_exclusive_gpu(current_pid=77,poll_seconds=1)
 
 
 def test_synthetic_data_complete_unique_allocations():
