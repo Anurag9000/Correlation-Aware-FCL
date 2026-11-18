@@ -12,7 +12,7 @@ from cafcl.continual import gem_project,agem_project,LocalState
 from cafcl.selection import select_clients
 from cafcl.simulator import aggregate,run_experiment
 from cafcl.planner import core_suite,all_supported_suite
-from cafcl.cli import wait_for_exclusive_gpu
+from cafcl.cli import select_jobs,wait_for_exclusive_gpu
 from types import SimpleNamespace
 
 
@@ -29,6 +29,17 @@ def test_plans(dataset,count):
     assert all(x.require_cuda for x in jobs)
     assert len(core_suite(dataset))==60
     for j in jobs:j.validate()
+
+
+def test_named_job_selection_preserves_plan_order_and_rejects_invalid_ids():
+    jobs=all_supported_suite('cifar10')
+    selected=select_jobs(jobs,['A01_disjoint_sgd_random25','A01_disjoint_sgd_full'])
+    assert [job.job_id for job in selected]==[
+        'A01_disjoint_sgd_full','A01_disjoint_sgd_random25']
+    with pytest.raises(ValueError,match='unique'):
+        select_jobs(jobs,['A01_disjoint_sgd_full','A01_disjoint_sgd_full'])
+    with pytest.raises(ValueError,match='Unknown job IDs'):
+        select_jobs(jobs,['NO_SUCH_JOB'])
 
 
 def test_sequential_suite_gpu_gate_waits_for_foreign_compute_pid(monkeypatch):

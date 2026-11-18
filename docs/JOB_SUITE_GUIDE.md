@@ -47,7 +47,7 @@ bash scripts/run_all_cifar100.sh
 bash scripts/run_both_sequentially.sh
 ```
 
-Use `--limit 1` for a smoke test and `--stop-on-error` to stop after a failure. `DATA_ROOT` and `RESULTS_ROOT` override input/output roots. The CLI regenerates jobs from source; the frozen plan JSON files should be checked with `PYTHONPATH=src python scripts/validate_plans.py`. A different `--seed` is a different realization, and should use a **different results root** to avoid collision.
+Use `--limit 1` for a smoke test, `--job-ids JOB_A JOB_B` to run named planned jobs in canonical plan order, and `--stop-on-error` to stop after a failure. Named selections retain the original job IDs and write to the usual per-dataset results tree, so completed representative validations can be reused by a later full-suite run. `DATA_ROOT` and `RESULTS_ROOT` override input/output roots. The CLI regenerates jobs from source; the frozen plan JSON files should be checked with `PYTHONPATH=src python scripts/validate_plans.py`. A different `--seed` is a different realization, and should use a **different results root** to avoid collision.
 
 **Training status:** The documented jobs are configured, not executed official CIFAR findings. A job may fail at runtime and still appear in this inventory. Partial and approximate methods have not become validated paper reproductions by being listed here.
 

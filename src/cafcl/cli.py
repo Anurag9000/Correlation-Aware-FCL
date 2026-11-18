@@ -9,6 +9,21 @@ from .simulator import run_experiment,atomic_json
 from .catalogue import CATALOGUE,IMPLEMENTED,catalogue_report
 
 
+def select_jobs(jobs, requested_ids):
+    """Select named jobs while preserving their validated plan order."""
+    if not requested_ids:
+        return list(jobs)
+    requested=list(requested_ids)
+    if len(requested)!=len(set(requested)):
+        raise ValueError('Requested job IDs must be unique')
+    by_id={job.job_id:job for job in jobs}
+    missing=sorted(set(requested)-set(by_id))
+    if missing:
+        raise ValueError(f'Unknown job IDs: {missing}')
+    selected=set(requested)
+    return [job for job in jobs if job.job_id in selected]
+
+
 def wait_for_exclusive_gpu(current_pid, poll_seconds=30):
     """Pause suite progression while another non-allowlisted CUDA job is active."""
     allowlisted={int(value) for value in os.environ.get(
@@ -39,6 +54,8 @@ def main():
     suite.add_argument('--download',action='store_true',help='Download official CIFAR datasets if unavailable')
     suite.add_argument('--stop-on-error',action='store_true')
     suite.add_argument('--limit',type=int,default=0,help='First N jobs for smoke testing')
+    suite.add_argument('--job-ids',nargs='+',default=[],
+                       help='Run these planned job IDs in canonical plan order')
     suite.add_argument('--include-incomplete',action='store_true',help='Fail if any planned block is unimplemented')
     suite.add_argument('--wait-for-exclusive-gpu',action='store_true',
                        help='Wait between jobs while another CUDA compute process is active')
@@ -83,11 +100,15 @@ def main():
         root=Path(args.output_dir)/args.dataset
         root.mkdir(parents=True,exist_ok=True)
         plan=write_plan(root/'job_plan.json',jobs,args.dataset)
+        registered_job_count=len(jobs)
+        jobs=select_jobs(jobs,args.job_ids)
+        jobs_to_run=jobs[:args.limit] if args.limit else jobs
         print(f'Prepared {len(jobs)} sequential {args.dataset} jobs, '
               f'{len(IMPLEMENTED)}/{len(CATALOGUE)} block IDs with implementation coverage.',flush=True)
+        if args.job_ids:
+            print(f'Selected {len(jobs_to_run)} named jobs from {registered_job_count} planned jobs.',flush=True)
         if args.plan_only:return
         failures=[];completed=0;skipped=0
-        jobs_to_run=jobs[:args.limit] if args.limit else jobs
         for i,cfg in enumerate(jobs_to_run,1):
             if args.wait_for_exclusive_gpu:
                 wait_for_exclusive_gpu(os.getpid(),args.gpu_poll_seconds)
@@ -108,7 +129,10 @@ def main():
                 print(f'FAILED {cfg.job_id}: {exc}',flush=True)
                 if args.stop_on_error:break
             atomic_json(root/'suite_status.json',{
-                'dataset':args.dataset,'planned':len(jobs),'attempted':i,
+                'dataset':args.dataset,'planned':len(jobs_to_run),
+                'registered_plan_jobs':registered_job_count,
+                'selected_job_ids':[job.job_id for job in jobs_to_run],
+                'attempted':i,
                 'completed_this_invocation':completed,'already_completed':skipped,
                 'failures':failures,'batch_size':512,
                 'catalogue_unimplemented':[k for k in CATALOGUE if k not in IMPLEMENTED]})
