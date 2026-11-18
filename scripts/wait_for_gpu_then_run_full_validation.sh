@@ -47,6 +47,16 @@ while (( stable < 4 )); do
   sleep 30
 done
 
+printf '[PREFLIGHT] Running the complete test suite with CUDA hidden.\n'
+CUDA_VISIBLE_DEVICES='' "$ROOT/.venv/bin/pytest" -q
+printf '[PREFLIGHT] Validating committed CIFAR plans.\n'
+CUDA_VISIBLE_DEVICES='' "$ROOT/.venv/bin/python" scripts/validate_plans.py
+CUDA_VISIBLE_DEVICES='' bash scripts/run_all_cifar10.sh --plan-only \
+  --stop-on-error --wait-for-exclusive-gpu --minimum-memory-gib 8
+CUDA_VISIBLE_DEVICES='' "$ROOT/.venv/bin/python" scripts/run_cifar10_tuning.py \
+  --plan results/cifar10_full_validation_v2/job_plan.json \
+  --output-dir results/cifar10_full_validation_v2 --plan-only
+
 printf '[START] Launching the resumable six-candidate full-data validation.\n'
 export CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=1 PYTHONUNBUFFERED=1
 export CAFCL_GPU_CPU_ONLY_PIDS="${allowed:-}"
