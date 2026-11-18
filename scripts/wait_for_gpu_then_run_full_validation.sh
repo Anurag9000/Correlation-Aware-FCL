@@ -24,8 +24,8 @@ while (( stable < 4 )); do
     allowed="15190"
   fi
 
-  gpu_pids="$(nvidia-smi --query-compute-apps=pid --format=csv,noheader,nounits | tr -d '[:space:]')"
-  for pid in ${gpu_pids//,/ }; do
+  gpu_pids="$(nvidia-smi --query-compute-apps=pid --format=csv,noheader,nounits | tr '\n' ' ')"
+  for pid in $gpu_pids; do
     [[ "$pid" =~ ^[0-9]+$ ]] || continue
     if [[ " $allowed " != *" $pid "* ]]; then
       reason="CUDA compute process $pid is active"
