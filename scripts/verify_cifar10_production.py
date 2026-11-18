@@ -29,7 +29,7 @@ def finite_tree(value, where):
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--plan", default="configs/plans/cifar10_jobs.json")
-    parser.add_argument("--output-dir", default="results/cifar10_gpu_production_v1")
+    parser.add_argument("--output-dir", default="results/cifar10")
     args = parser.parse_args()
     import torch
     from cafcl.config import RunConfig
@@ -119,8 +119,11 @@ def main() -> int:
                 never = set(row.get("never_integrated_classes", []))
                 if old & new or old | new != observed:
                     raise AssertionError(f"round {row.get('round')} old/new classes do not partition observed classes")
-                if not integrated <= observed or integrated & never:
+                if not integrated <= observed or integrated & never or integrated | never != observed:
                     raise AssertionError(f"round {row.get('round')} integrated/never classes are inconsistent")
+                expected_per_class = {str(label) for label in observed}
+                if set(row.get("per_class", {})) != expected_per_class:
+                    raise AssertionError(f"round {row.get('round')} global evaluation omitted an observed class")
                 if row.get("selected_count") != len(row.get("selected_clients", [])):
                     raise AssertionError(f"round {row.get('round')} selected-client count mismatch")
                 if row.get("uploaded_count", 0) > row.get("selected_count", 0):
@@ -136,6 +139,9 @@ def main() -> int:
                 if any(int(v) != row.get("model_version")
                        for v in row.get("client_training_versions", {}).values()):
                     raise AssertionError(f"round {row.get('round')} selected client sync version mismatch")
+                if set(row.get("client_training_versions", {})) != {
+                        str(client) for client in row.get("selected_clients", [])}:
+                    raise AssertionError(f"round {row.get('round')} is missing selected-client sync evidence")
             summary = json.loads((run / "summary.json").read_text())
             if summary.get("require_cuda") is not True or not str(
                     summary.get("model_execution_device", "")).startswith("cuda"):
