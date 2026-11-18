@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
+import gc
 import json
 import os
 import subprocess
@@ -69,6 +71,20 @@ def wait_for_host_memory(minimum_gib: float, poll_seconds: int) -> None:
         time.sleep(max(5, poll_seconds))
 
 
+def release_job_resources(torch, device) -> None:
+    """Return per-job tensor and allocator memory before the next resource gate."""
+    if torch.cuda.is_initialized():
+        torch.cuda.synchronize(device)
+        torch.cuda.empty_cache()
+    gc.collect()
+    # CPython's allocator may retain freed NumPy/PyTorch backing arenas. Mtech
+    # uses glibc; keep this optional so the runner remains portable elsewhere.
+    try:
+        ctypes.CDLL(None).malloc_trim(0)
+    except (AttributeError, OSError):
+        pass
+
+
 def load_plan(path: Path) -> tuple[dict, list[RunConfig]]:
     payload = json.loads(path.read_text())
     if payload.get("dataset") != "cifar10" or payload.get("suite") != "validation_hyperparameter_tuning":
@@ -118,6 +134,8 @@ def main() -> int:
                 already_completed += 1
             else:
                 completed += 1
+            del result
+            release_job_resources(torch, device)
         except Exception as exc:
             failures.append({"job_id": cfg.job_id, "error": repr(exc),
                              "traceback": traceback.format_exc()})
