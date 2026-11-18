@@ -1,8 +1,10 @@
-"""Six-run, class-disjoint A-GEM/FedAvg pilot for indirect class effects.
+"""Five-run CIFAR-10 A-GEM/FedAvg pilot with exact 25% CLIENT exclusion.
 
-One all-client reference + five non-overlapping permanent client omissions.
-With five clients owning two classes each, this is **20%** omission, not 25%:
-five non-repeated 25% omissions are mathematically impossible on CIFAR-10.
+Four disjoint clients own randomized 3/3/2/2 label partitions. The baseline
+includes all four; four arms permanently exclude one different client each.
+Exactly one quarter of clients are absent, but 20% or 30% of labels are absent
+according to the excluded owner. Four labels per client cannot be arranged
+without overlap on a ten-class dataset.
 
 The official ten-class global-evaluation invariant is preserved in the simulator.
 Paired *research comparisons* exclude the two omitted labels from BOTH arms.
@@ -27,7 +29,7 @@ from .simulator import atomic_json, run_experiment
 
 CLASS_NAMES = ('airplane', 'automobile', 'bird', 'cat', 'deer',
                'dog', 'frog', 'horse', 'ship', 'truck')
-CLIENTS = 5
+CLIENTS = 4
 CLASS_IDS = tuple(range(10))
 
 
@@ -51,12 +53,14 @@ def make_ledger(*, seed=0, quick=False, rounds_per_stage=None, memory_per_class=
     if memory_per_class < 1:
         raise ValueError('A-GEM pilot requires positive historical memory')
     rng = np.random.default_rng(seed + 20261118)
-    early = tuple(map(int, rng.permutation(range(5))))
-    late = tuple(map(int, rng.permutation(range(5, 10))))
-    holders = {str(cls): (client_id,) for client_id, pair in enumerate(zip(early, late))
-               for cls in pair}
-    pairs = tuple(tuple(sorted((early[k], late[k]))) for k in range(CLIENTS))
-    assert sorted(cls for pair in pairs for cls in pair) == list(CLASS_IDS)
+    early = tuple(map(int,rng.permutation(range(5))))
+    late = tuple(map(int,rng.permutation(range(5,10))))
+    groups = ((early[0],early[1],late[0]),
+              (early[2],late[1],late[2]),
+              (early[3],late[3]),
+              (early[4],late[4]))
+    holders = {str(cls):(cid,) for cid,group in enumerate(groups) for cls in group}
+    assert sorted(cls for group in groups for cls in group)==list(CLASS_IDS)
     common = RunConfig(
         dataset='cifar10', num_clients=CLIENTS, stages=2,
         rounds_per_stage=rounds_per_stage, epochs=1, batch_size=512,
@@ -74,9 +78,9 @@ def make_ledger(*, seed=0, quick=False, rounds_per_stage=None, memory_per_class=
     plans.append(dict(position=1, kind='baseline', off_client=None,
                       off_classes=[], included_classes=list(CLASS_IDS),
                       job_id=baseline.job_id, config=json.loads(json.dumps(baseline.to_dict()))))
-    for k, pair in enumerate(pairs):
+    for k, pair in enumerate(groups):
         cfg = replace(common, job_id=f'P{k+1:02d}_omit_client_{k}', block_id='P01',
-                      participation=0.8, target_client=k, force_target='exclude',
+                      participation=0.75, target_client=k, force_target='exclude',
                       intervention_round=-1)
         cfg.validate()
         included = sorted(set(CLASS_IDS) - set(pair))
@@ -84,22 +88,22 @@ def make_ledger(*, seed=0, quick=False, rounds_per_stage=None, memory_per_class=
                           off_classes=list(pair), included_classes=included,
                           job_id=cfg.job_id, config=json.loads(json.dumps(cfg.to_dict()))))
     ledger = {
-        'design_id': 'primary_cifar10_agem_fedavg_disjoint_v1',
+        'design_id': 'primary_cifar10_agem_fedavg_disjoint_25pct_clients_v2',
         'mode': mode, 'seed': seed, 'batch_size': 512,
         'method': 'agem', 'aggregation': 'fedavg',
-        'note': 'Five unique 20% class/client omissions, NOT 25%; 25% x 5 disjoint exclusions is impossible for ten labels.',
-        'randomness': 'Randomly permute first-stage and second-stage class assignments ONCE, shared by all six jobs. Each arm permanently omits one distinct client.',
-        'selection': 'Baseline all five clients each round; partial arm the other four clients each round. This is a fixed exclusion, not independently random dropout each round.',
-        'data_partition': 'No cross-client class or raw-sample overlap; each client has one class from each of the two stages.',
+        'note': 'Four unique omissions: exactly one of four clients off (25%) per arm. Class omissions are 30%,30%,20%,20% because ten labels cannot be split evenly among four disjoint owners.',
+        'randomness': 'Randomly permute first-stage and second-stage class assignments ONCE, shared by all five jobs. Each arm permanently omits one distinct client.',
+        'selection': 'Baseline all four clients each round; partial arms the other three clients each round (75% participation, 25% off). Fixed exclusion, not random dropout each round.',
+        'data_partition': 'No cross-client class or raw-sample overlap; clients own randomized 3/3/2/2 classes. Some stages contain singleton class arrivals, so strict two-pair-per-client learning is mathematically impossible here.',
         'stage0_classes': list(range(5)), 'stage1_classes': list(range(5, 10)),
-        'client_class_pairs': {str(i): list(p) for i, p in enumerate(pairs)},
+        'client_class_groups': {str(i): list(p) for i, p in enumerate(groups)},
         'class_names': list(CLASS_NAMES),
-        'final_comparison': 'For each partial arm, evaluate BOTH saved final models on precisely its eight included classes in the official CIFAR-10 test split. Never compare withheld labels.',
+        'final_comparison': 'For each partial arm, evaluate BOTH saved final models on precisely its identical 7- or 8-class official-test subset. Never compare withheld labels.',
         'global_evaluation': 'Simulator still evaluates all arrived classes, including permanently inactive holders. Only the paired comparison excludes omitted labels.',
-        'limitations': ['A 20% client/data reduction is confounded with removing two class identities.',
+        'limitations': ['A 25% client reduction is confounded with removing 20% or 30% of class identities.',
                         'Single shared training seed is a diagnostic pilot, not a statistical causal estimate.',
-                        'Not 25% fixed dropout; a 25% dropout with five nonrepeated arms is impossible with this dataset.',
-                        'Training uses full 10-output classifier and cross-entropy; comparison filters test targets, not logits.',
+                        'Exactly 25% of CLIENTS, not classes; ten labels cannot be divided into four equal integer sets.',
+                        'Compatible paired episodes are used where two labels arrive together; singleton arrivals remain and do not satisfy the requested strict two-pair curriculum.',
                         'Validation/tuning should use training-derived validation only; this pilot does not tune hyperparameters.'],
         'jobs': plans,
     }
@@ -109,17 +113,17 @@ def make_ledger(*, seed=0, quick=False, rounds_per_stage=None, memory_per_class=
 
 
 def verify_partition(bank, cfg):
-    """Fail before training if the intended two-class-per-client design drifts."""
+    """Verify a disjoint, stage-exposed 3/3/2/2 allocation."""
     s = compile_scenario(bank, cfg)
     for k in range(CLIENTS):
         expected = {int(c) for c, holder in cfg.holders_override.items() if tuple(holder) == (k,)}
         actual = {c for c, holders in s.label_holders.items() if k in holders}
-        if actual != expected or len(actual) != 2:
+        if actual != expected or len(actual) != len(expected) or len(expected)<2:
             raise AssertionError(f'Incorrect class holder {k}: {actual} != {expected}')
         stage0 = expected & set(range(5))
         stage1 = expected & set(range(5, 10))
-        if len(stage0) != 1 or len(stage1) != 1:
-            raise AssertionError('Every client must learn one old and one new class')
+        if not stage0 or not stage1:
+            raise AssertionError('Every client must hold at least one earlier and one later class')
     if s.duplicate_sample_ids:
         raise AssertionError('Pilot may not duplicate training images across clients')
     if set(s.label_holders) != set(CLASS_IDS):
@@ -190,32 +194,32 @@ def compare_finished(ledger, root, data_root, download, allow_cpu=False):
         partial_dir = _check_complete(run_root, record['job_id'], cfg, active)
         partial_model = _load_final(partial_dir, cfg, device)
         seen = record['included_classes']
-        baseline_eight, _ = evaluate(baseline_model, bank, set(seen), 512, device, peak={})
-        partial_eight, _ = evaluate(partial_model, bank, set(seen), 512, device, peak={})
+        baseline_seen, _ = evaluate(baseline_model, bank, set(seen), 512, device, peak={})
+        partial_seen, _ = evaluate(partial_model, bank, set(seen), 512, device, peak={})
         row = {
             'partial_job': record['job_id'], 'off_client': record['off_client'],
             'off_classes': ','.join(map(str, record['off_classes'])),
             'off_class_names': ','.join(CLASS_NAMES[c] for c in record['off_classes']),
             'included_classes': ','.join(map(str,seen)),
             'baseline_all10_accuracy_pct':100 * baseline_all['accuracy'],
-            'baseline_seen8_accuracy_pct':100 * baseline_eight['accuracy'],
-            'partial_seen8_accuracy_pct':100 * partial_eight['accuracy'],
-            'delta_seen8_percentage_points':100 * (partial_eight['accuracy']-baseline_eight['accuracy']),
-            'baseline_seen8_macro_pct':100 * baseline_eight['macro_accuracy'],
-            'partial_seen8_macro_pct':100 * partial_eight['macro_accuracy'],
-            'delta_macro_percentage_points':100 * (partial_eight['macro_accuracy']-baseline_eight['macro_accuracy']),
-            'paired_test_samples':baseline_eight['test_samples'],
+            'baseline_seen_accuracy_pct':100 * baseline_seen['accuracy'],
+            'partial_seen_accuracy_pct':100 * partial_seen['accuracy'],
+            'delta_seen_percentage_points':100 * (partial_seen['accuracy']-baseline_seen['accuracy']),
+            'baseline_seen_macro_pct':100 * baseline_seen['macro_accuracy'],
+            'partial_seen_macro_pct':100 * partial_seen['macro_accuracy'],
+            'delta_macro_percentage_points':100 * (partial_seen['macro_accuracy']-baseline_seen['macro_accuracy']),
+            'paired_test_samples':baseline_seen['test_samples'],
         }
-        if baseline_eight['test_samples'] != partial_eight['test_samples']:
+        if baseline_seen['test_samples'] != partial_seen['test_samples']:
             raise AssertionError('Baseline and partial evaluated on different test populations')
         summary_rows.append(row)
         for cls in seen:
             class_rows.append({'partial_job':record['job_id'], 'off_client':record['off_client'],
                                'off_classes':','.join(map(str,record['off_classes'])),
                                'evaluated_class':cls,'evaluated_class_name':CLASS_NAMES[cls],
-                               'baseline_accuracy_pct':100 * baseline_eight['per_class'][cls],
-                               'partial_accuracy_pct':100 * partial_eight['per_class'][cls],
-                               'delta_percentage_points':100 *(partial_eight['per_class'][cls] -baseline_eight['per_class'][cls])})
+                               'baseline_accuracy_pct':100 * baseline_seen['per_class'][cls],
+                               'partial_accuracy_pct':100 * partial_seen['per_class'][cls],
+                               'delta_percentage_points':100 *(partial_seen['per_class'][cls] -baseline_seen['per_class'][cls])})
     reports=run_root/'reports';reports.mkdir(parents=True,exist_ok=True)
     for name,rows in [('paired_summary.csv',summary_rows),('seen_class_effects.csv',class_rows)]:
         with (reports/name).open('w',newline='') as fh:
@@ -227,15 +231,15 @@ def compare_finished(ledger, root, data_root, download, allow_cpu=False):
         'comparable_labels_only':True,
         'interpretation':'Descriptive differences, not a pure causal effect of class identity or a population confidence interval.'})
     lines=['# Primary A-GEM/FedAvg class-omission pilot: paired final-server accuracy','',
-           'Five non-repeating 20% class omissions; all results on the same **included eight official-test classes** per arm.','',
+           'Four non-repeating 25%-of-client omissions; compare the same **7 or 8 included official-test classes** in each arm.','',
            f'Full-participation baseline on all ten test classes: **{100*baseline_all["accuracy"]:.3f}%** (context only).','',
-           '| Partial job | Withheld class labels | Baseline (same 8) | Partial (same 8) | Change (pp) |',
+           '| Partial job | Withheld class labels | Baseline (same seen) | Partial (same seen) | Change (pp) |',
            '|---|---|---:|---:|---:|']
     for row in summary_rows:
         lines.append(f'| {row["partial_job"]} | {row["off_classes"]} ({row["off_class_names"]}) | '
-                     f'{row["baseline_seen8_accuracy_pct"]:.3f}% | {row["partial_seen8_accuracy_pct"]:.3f}% | '
-                     f'{row["delta_seen8_percentage_points"]:+.3f} |')
-    lines.extend(['', 'The withheld classes are **never** part of any paired comparison.',
+                     f'{row["baseline_seen_accuracy_pct"]:.3f}% | {row["partial_seen_accuracy_pct"]:.3f}% | '
+                     f'{row["delta_seen_percentage_points"]:+.3f} |')
+    lines.extend(['', 'Withheld classes are never included in the paired comparison.',
                   'Negative delta = worse accuracy on *other, actually participated* classes.',
                   'The full model sees more training data and one additional contributor; this is a diagnostic comparison, not proof of a class-specific causal effect.',
                   '', 'Per-class differences for every included class: `seen_class_effects.csv`.'])
@@ -244,7 +248,7 @@ def compare_finished(ledger, root, data_root, download, allow_cpu=False):
 
 
 def main(argv=None):
-    p=argparse.ArgumentParser(description='Six-run disjoint CIFAR-10 A-GEM/FedAvg class omission pilot')
+    p=argparse.ArgumentParser(description='Five-run disjoint CIFAR-10 A-GEM/FedAvg 25%-of-clients omission pilot')
     p.add_argument('--output-dir',default='results/primary_agem_cifar10')
     p.add_argument('--data-root',default='data')
     p.add_argument('--seed',type=int,default=0)

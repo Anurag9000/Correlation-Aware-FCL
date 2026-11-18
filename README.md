@@ -1,6 +1,6 @@
 # Correlation-Aware Federated Continual Learning (CA-FCL)
 
-> **Protocol correction (2026-11-19):** Every data-bearing client now trains a persistent local continual learner in **every round**, even without participating in federation. Selection controls communications only; disconnected updates are accumulated and transmitted on reconnection. All 11 local methods and all client/server factorial jobs share the corrected `continuous_local_cl_v1` training loop. See [continuous local CL protocol](docs/CONTINUOUS_LOCAL_CL_PROTOCOL.md). New results are **not** interchangeable with old-protocol checkpoints.
+> **Protocol update (2026-11-19):** All 11 local learning methods keep client-local training independent from communications; selected clients upload before replacing their weights with the server model, while disconnected clients retain their own weights and CL memory. The new `class_indexed_shared_stream_v2` protocol pairs simultaneously arriving class labels, trains a binary softmax on the active canonical output rows, freezes inactive rows, and merges class rows by identity at the server. **Existing job schedules with singleton class arrivals are compatibility fallbacks, not strictly two-pair-per-client runs.** Full details: [class-indexed protocol](docs/CLASS_INDEXED_PAIR_PROTOCOL.md) and [continuous local CL protocol](docs/CONTINUOUS_LOCAL_CL_PROTOCOL.md). Old-protocol checkpoints and results cannot be reused.
 
 
 ## Full factorial methodology sweeps — 2026-11-18
@@ -141,14 +141,16 @@ This implementation **does not** complete every planned methodology. Eight block
 
 The actual frozen sequential job manifests have a readable, source-grounded inventory: [complete run guide](docs/JOB_SUITE_GUIDE.md), [423 CIFAR-10 jobs](docs/JOBS_CIFAR10.md), [425 CIFAR-100 jobs](docs/JOBS_CIFAR100.md), and [848-row filterable job index](docs/JOB_INDEX.csv). Each entry includes the exact execution position, experiment block and implementation status, dataset loader, training method, participation, selector, aggregation, stage/round configuration, all parameter differences from a clearly documented suite reference, causal dependencies and output naming. These are **planned jobs**, not completed CIFAR findings.
 
-## Small primary investigation: A-GEM/FedAvg, no class overlap, six CIFAR-10 jobs
+## Small primary investigation: A-GEM/FedAvg, no class overlap, five CIFAR-10 jobs
 
-A dedicated **six-job** CIFAR-10 pilot tests whether withholding the client that uniquely holds two classes changes **final server accuracy on the other eight classes**. One baseline selects all five clients; five arms each permanently exclude a different client. All ten classes are omitted **exactly once** across the five arms; that means **20% per arm**, not 25% (five nonoverlapping 25% omissions cannot fit in ten classes). Each client has one old and one new class, so local A-GEM has real historical memory to protect. Server: FedAvg; batch: **512**; no overlap. The official test comparison excludes the omitted classes **from both models' evaluation populations**.
+The targeted suite contains **one full-communication baseline and four permanent 25%-of-clients exclusion runs**. Four clients own randomized non-overlapping 3/3/2/2 class groups. Each partial run excludes one different client (3 of 4 communicate), and no class is excluded twice. With ten labels this removes 30%, 30%, 20%, 20% of class identities respectively—**25% refers to clients, not classes**. The final server models are evaluated side by side on the same 7 or 8 included true-label test classes, never on omitted labels.
+
+**Feasibility qualification:** Ten disjoint labels cannot support four clients each learning four different labels every round; those would require sixteen labels. Some pilot class arrivals remain singleton compatibility fallbacks. See [pilot protocol and limits](docs/PRIMARY_AGEM_CIFAR10.md) and [paired class learning protocol](docs/CLASS_INDEXED_PAIR_PROTOCOL.md).
 
 ```bash
 bash scripts/run_primary_agem_cifar10.sh --plan-only --seed 0
-bash scripts/run_primary_agem_cifar10.sh --quick --seed 0  # separate short diagnostic
+bash scripts/run_primary_agem_cifar10.sh --quick --seed 0 --allow-cpu
 CUDA_VISIBLE_DEVICES=0 bash scripts/run_primary_agem_cifar10.sh --seed 0
 ```
 
-Complete protocol, randomized omissions, limitations and report definitions: [primary A-GEM/FedAvg pilot](docs/PRIMARY_AGEM_CIFAR10.md). This pilot is independent of the 67,938-job factorial ledger.
+The five-job pilot is independent of the declared finite-grid 67,938-job CIFAR-10 factorial suite; **neither suite has been executed on official CIFAR data in this commit**.

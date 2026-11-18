@@ -73,8 +73,8 @@ def test_local_sequential_class_events_within_same_round(tmp_path):
     run_experiment(cfg,str(tmp_path),verbose=False)
     saved=torch.load(tmp_path/cfg.job_id/'model_final.pt',map_location='cpu',weights_only=False)
     c=saved['clients'][0]
-    assert [r['class'] for r in c['local_training_events']]==[0,5]
-    assert [r['local_experience'] for r in c['local_training_events']]==[0,1]
+    assert [r['classes'] for r in c['local_training_events']]==[[0,5]]
+    assert [r['local_experience'] for r in c['local_training_events']]==[0]
     assert c['model_version']==0 and c['pending_upload_steps']>0
     assert {0,5}<=set(c['memory'])
 
