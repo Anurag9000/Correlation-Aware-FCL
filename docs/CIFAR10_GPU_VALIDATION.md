@@ -30,6 +30,11 @@ potentially resource-contaminated in `execution_notes.json`; exclude it from
 selection and runtime comparisons. The runner stopped between jobs at the RAM
 gate. No output was deleted or overwritten.
 
+The completed 0.01/0 v1 run recorded 40 CUDA rounds at batch 512, with 568.79
+summed per-round seconds (14.22 seconds per round) in `metrics.json`. This is a
+single-job timing observation, not a full-suite runtime guarantee; the
+overlapping 0.1/0 candidate is excluded from timing estimates.
+
 ## Representative production configurations
 
 After the finalist choice, validate these existing production job IDs with
