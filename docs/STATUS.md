@@ -29,7 +29,7 @@
 - Bounded retrospective aggregation subset enumeration, pair interactions, class-gradient diagnostics, optional pre/post historical losses, old-feature drift, communication bytes, per-round runtime, and full observed global accuracy/forgetting separation.
 - Tests and CI with a validator requiring both committed batch-512 job manifests to match the actual source planner.
 - Deterministic class-stratified validation partition reserved from original CIFAR training data; optional class-stratified training-only pilot subsampling; per-run source-index hashes and class counts.
-- Per-round metrics, forgetting history, causal diagnostics and adaptive selection use validation data. Official CIFAR test evaluation is isolated to the final saved model.
+- Per-round metrics, forgetting history, full-label confusion counts, causal diagnostics and adaptive selection use validation data. Official CIFAR test evaluation is isolated to the final saved model.
 - CIFAR planner jobs set `require_cuda=true`; no-GPU execution fails before output creation. Local SGD updates, global aggregation/server optimization, GEM dual solve and model evaluation use the selected CUDA device. Runtime device and communication costs are recorded.
 - Every successful round records normalized per-client aggregation weights and validates their finiteness and sum. The pilot verifier checks these alongside round counts, CUDA execution, validation-only feedback, synchronization versions, communication accounting, checkpoints, and reloaded model inference.
 

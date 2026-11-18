@@ -97,6 +97,12 @@ def test_task_oracle_masks_other_task_logit():
                       task_class_groups=[[0,1],[2,3]])
     assert masked['accuracy']>ordinary['accuracy']
     assert masked['task_id_at_inference'] is True
+    ordinary_confusion=ordinary['confusion_matrix']['counts']
+    masked_confusion=masked['confusion_matrix']['counts']
+    assert ordinary_confusion[0][2]==1 and ordinary_confusion[2][0]==1
+    assert masked_confusion[0][0]==1 and masked_confusion[2][2]==1
+    assert sum(map(sum,ordinary_confusion))==ordinary['evaluation_samples']
+    assert ordinary['confusion_matrix']['labels']==list(range(bank.num_classes))
 
 
 def test_class_balanced_aggregation():

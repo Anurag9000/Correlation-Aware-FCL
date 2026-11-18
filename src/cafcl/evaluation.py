@@ -22,13 +22,17 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
             raise ValueError('Validation evaluation requested without a validation split')
         dataset=bank.test
     if not observed:
-        return {'accuracy':None,'macro_accuracy':None,'per_class':{},'forgetting':0.,
+        return {'accuracy':None,'macro_accuracy':None,'per_class':{},
+                'confusion_matrix':{'labels':list(range(bank.num_classes)),
+                                    'counts':[[0]*bank.num_classes for _ in range(bank.num_classes)]},
+                'forgetting':0.,
                 'unlearned':[],'evaluation_split':split,'evaluation_samples':0},peak or {}
     ids=[i for i,y in enumerate(dataset.targets) if int(y) in observed]
     loader=DataLoader(Subset(dataset,ids),batch_size=batch_size,shuffle=False,num_workers=0)
     model.eval()
     correct={c:0 for c in observed};count={c:0 for c in observed}
     class_losses={c:0. for c in observed}
+    confusion=torch.zeros((bank.num_classes,bank.num_classes),dtype=torch.int64)
     for x,y in loader:
         logits=model(x.to(device))
         if task_class_groups is None:
@@ -50,6 +54,10 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
                     processed|=mask
             if not processed.all():
                 raise ValueError('Task-IL evaluation encountered labels without a task')
+        confusion+=torch.bincount(
+            y*bank.num_classes+pred,
+            minlength=bank.num_classes*bank.num_classes).reshape(
+                bank.num_classes,bank.num_classes)
         # Cross-entropy is measured under the same prediction universe as
         # the official accuracy: task IDs are given only for task-IL.
         if task_class_groups is None:
@@ -98,6 +106,8 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
     group_accuracy=lambda group: (float(np.mean([per_class[c] for c in group])) if group else None)
     unlearned=[c for c in per_class if historical[c] <= chance + 0.02]
     return {'accuracy':micro,'macro_accuracy':macro,'per_class':per_class,
+            'confusion_matrix':{'labels':list(range(bank.num_classes)),
+                                'counts':confusion.tolist()},
             'cross_entropy_loss':micro_loss,'per_class_loss':per_class_loss,
             'forgetting':forgetting, 'all_observed_peak_drop':observed_peak_drop,
             'integrated_forgetting':float(np.mean(list(integrated_prior.values()))) if integrated_prior else 0.,
