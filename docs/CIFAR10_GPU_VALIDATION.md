@@ -62,4 +62,8 @@ blocks. The 17 representative jobs above do not complete that suite and do not
 claim exhaustive implementation of all 152 catalogue blocks. After the
 validation gates pass, run the full suite sequentially with `--stop-on-error`,
 `--wait-for-exclusive-gpu`, and `--minimum-memory-gib 8`; then independently
-verify all 423 job artifacts and produce the required analyses and reports.
+verify all 423 job artifacts and produce the required analyses and reports with
+`python scripts/analyze_cifar10_production.py --results-root results/cifar10`.
+The analyzer exports registries, per-round and per-class CSVs, causal and
+runtime/communication tables, and per-job curves and heatmaps under
+`results/cifar10/analysis/`.
