@@ -137,3 +137,15 @@ This implementation **does not** complete every planned methodology. Eight block
 ## Complete job-by-job CIFAR suite documentation
 
 The actual frozen sequential job manifests have a readable, source-grounded inventory: [complete run guide](docs/JOB_SUITE_GUIDE.md), [423 CIFAR-10 jobs](docs/JOBS_CIFAR10.md), [425 CIFAR-100 jobs](docs/JOBS_CIFAR100.md), and [848-row filterable job index](docs/JOB_INDEX.csv). Each entry includes the exact execution position, experiment block and implementation status, dataset loader, training method, participation, selector, aggregation, stage/round configuration, all parameter differences from a clearly documented suite reference, causal dependencies and output naming. These are **planned jobs**, not completed CIFAR findings.
+
+## Small primary investigation: A-GEM/FedAvg, no class overlap, six CIFAR-10 jobs
+
+A dedicated **six-job** CIFAR-10 pilot tests whether withholding the client that uniquely holds two classes changes **final server accuracy on the other eight classes**. One baseline selects all five clients; five arms each permanently exclude a different client. All ten classes are omitted **exactly once** across the five arms; that means **20% per arm**, not 25% (five nonoverlapping 25% omissions cannot fit in ten classes). Each client has one old and one new class, so local A-GEM has real historical memory to protect. Server: FedAvg; batch: **512**; no overlap. The official test comparison excludes the omitted classes **from both models' evaluation populations**.
+
+```bash
+bash scripts/run_primary_agem_cifar10.sh --plan-only --seed 0
+bash scripts/run_primary_agem_cifar10.sh --quick --seed 0  # separate short diagnostic
+CUDA_VISIBLE_DEVICES=0 bash scripts/run_primary_agem_cifar10.sh --seed 0
+```
+
+Complete protocol, randomized omissions, limitations and report definitions: [primary A-GEM/FedAvg pilot](docs/PRIMARY_AGEM_CIFAR10.md). This pilot is independent of the 67,938-job factorial ledger.
