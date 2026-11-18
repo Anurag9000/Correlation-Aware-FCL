@@ -62,6 +62,54 @@ def wait_for_exclusive_gpu(current_pid, poll_seconds=30):
         time.sleep(max(5,poll_seconds))
 
 
+def gpu_snapshot():
+    memory=subprocess.run(['nvidia-smi','-i','0','--query-gpu=memory.free',
+                           '--format=csv,noheader,nounits'],
+                          capture_output=True,text=True)
+    if memory.returncode:
+        raise RuntimeError(f'Cannot read free VRAM: {memory.stderr.strip()}')
+    values=[int(line.strip()) for line in memory.stdout.splitlines()
+            if line.strip().isdigit()]
+    if not values:
+        raise RuntimeError('Cannot read free VRAM for CUDA device 0')
+    processes=subprocess.run(['nvidia-smi','--query-compute-apps=pid',
+                              '--format=csv,noheader,nounits'],
+                             capture_output=True,text=True)
+    if processes.returncode:
+        raise RuntimeError(f'Cannot read CUDA process IDs: {processes.stderr.strip()}')
+    pids=sorted({int(line.strip()) for line in processes.stdout.splitlines()
+                 if line.strip().isdigit()})
+    return values[0],pids
+
+
+def wait_for_minimum_free_vram(minimum_gib,poll_seconds=30):
+    """Pause between jobs until a shared GPU has the requested free VRAM."""
+    if minimum_gib<=0:return
+    minimum_mib=int(minimum_gib*1024)
+    while True:
+        free_mib,_=gpu_snapshot()
+        if free_mib>=minimum_mib:return
+        print(f'Waiting for VRAM headroom: {free_mib/1024:.1f} GiB free; '
+              f'minimum is {minimum_gib:.1f} GiB',flush=True)
+        time.sleep(max(5,poll_seconds))
+
+
+def record_execution_context(path,cfg,event,free_mib,pids,result_status=None):
+    available_kib=None
+    with open('/proc/meminfo',encoding='ascii') as fh:
+        for line in fh:
+            if line.startswith('MemAvailable:'):
+                available_kib=int(line.split()[1]);break
+    row={'job_id':cfg.job_id,'event':event,'unix_time':time.time(),
+         'runner_pid':os.getpid(),'free_vram_mib':free_mib,
+         'observed_compute_pids':[pid for pid in pids if pid!=os.getpid()],
+         'mem_available_kib':available_kib}
+    if result_status is not None:row['result_status']=result_status
+    path.parent.mkdir(parents=True,exist_ok=True)
+    with path.open('a',encoding='utf-8') as fh:
+        fh.write(json.dumps(row,sort_keys=True)+'\n');fh.flush()
+
+
 def main():
     p=argparse.ArgumentParser(prog='cafcl')
     sp=p.add_subparsers(dest='action',required=True)
@@ -83,6 +131,8 @@ def main():
     suite.add_argument('--gpu-poll-seconds',type=int,default=30)
     suite.add_argument('--minimum-memory-gib',type=float,default=0.0,
                        help='Wait between jobs until MemAvailable reaches this value')
+    suite.add_argument('--minimum-free-vram-gib',type=float,default=0.0,
+                       help='Wait between jobs until this much CUDA VRAM is free')
     single=sp.add_parser('run',help='Run one experiment configuration JSON')
     single.add_argument('config');single.add_argument('--output-dir',default='results')
     single.add_argument('--data-root',default='data');single.add_argument('--download',action='store_true')
@@ -132,11 +182,16 @@ def main():
             print(f'Selected {len(jobs_to_run)} named jobs from {registered_job_count} planned jobs.',flush=True)
         if args.plan_only:return
         failures=[];completed=0;skipped=0
+        execution_context=root/'execution_context.jsonl'
         for i,cfg in enumerate(jobs_to_run,1):
             wait_for_host_memory(args.minimum_memory_gib,args.gpu_poll_seconds)
             if args.wait_for_exclusive_gpu:
                 wait_for_exclusive_gpu(os.getpid(),args.gpu_poll_seconds)
+            if cfg.require_cuda:
+                wait_for_minimum_free_vram(args.minimum_free_vram_gib,args.gpu_poll_seconds)
             print(f'\n=== [{i}/{len(jobs_to_run)}] {cfg.job_id} ({args.dataset}, batch 512) ===',flush=True)
+            if cfg.require_cuda:
+                record_execution_context(execution_context,cfg,'start',*gpu_snapshot())
             try:
                 source=None
                 if cfg.fork_source_job:
@@ -148,9 +203,18 @@ def main():
                                       fork_from_checkpoint=source)
                 if result['status']=='already_completed':skipped+=1
                 else:completed+=1
+                if cfg.require_cuda:
+                    record_execution_context(execution_context,cfg,'end',*gpu_snapshot(),
+                                             result_status=str(result['status']))
             except Exception as exc:
                 failures.append({'job_id':cfg.job_id,'error':repr(exc)})
                 print(f'FAILED {cfg.job_id}: {exc}',flush=True)
+                if cfg.require_cuda:
+                    try:
+                        record_execution_context(execution_context,cfg,'failed',*gpu_snapshot(),
+                                                 result_status=repr(exc))
+                    except Exception as context_exc:
+                        failures[-1]['context_record_error']=repr(context_exc)
                 if args.stop_on_error:break
             atomic_json(root/'suite_status.json',{
                 'dataset':args.dataset,'planned':len(jobs_to_run),

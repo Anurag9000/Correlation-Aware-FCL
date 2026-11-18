@@ -11,6 +11,9 @@ def base_config(dataset, model='smallcnn', seed=0):
     return RunConfig(dataset=dataset,stages=2 if dataset=='cifar10' else 10,
                      num_clients=10 if dataset=='cifar10' else 20,
                      batch_size=512,model=model,seed=seed,
+                     # Full-data CIFAR-10 validation selected lr=0.1, momentum=0.
+                     # Keep CIFAR-100's baseline and explicit momentum ablations.
+                     lr=0.1 if dataset=='cifar10' else 0.03,
                      require_cuda=dataset!='synthetic',validation_fraction=.1)
 
 

@@ -19,15 +19,30 @@ short screen did not establish the production hyperparameters.
 candidates: learning rates 0.01, 0.03, and 0.1 crossed with momentum 0 and 0.9.
 Each uses all eligible training data, two experiences, 20 rounds per
 experience, batch size 512, and validation-only selection. The 0.03/0 candidate
-is the registered baseline. Candidate outputs are independent under
-`results/cifar10_full_validation_v2/runs/`; selection and artifact verification
-are not complete until the full plan finishes. A candidate must exceed the
-10-class chance accuracy separately on old and new classes over the final-stage
-selection window before it can be ranked by harmonic mean. This v2 execution is
-authorized to overlap the existing CUDA workload when at least 4 GiB of VRAM
-and 6 GiB of host-available RAM remain. Per-job GPU PIDs and memory snapshots
-are recorded in `execution_context.jsonl`; runtime is reported but excluded
-from candidate ranking because concurrent load affects timing.
+preserves the original baseline configuration. All six completed and passed the independent
+artifact verifier, including complete round histories, CUDA execution records,
+finite metrics and final models, and successful CUDA reload/inference. Selection
+uses the final four rounds, requires both old and new accuracy to exceed 10%,
+then ranks by harmonic old/new accuracy, macro accuracy, coverage and forgetting.
+The selected setting is `lr=0.1, momentum=0.0`:
+
+| Candidate | Old validation | New validation | Harmonic mean | Macro accuracy | Forgetting | Chance gate |
+|---|---:|---:|---:|---:|---:|---|
+| `lr=0.1, momentum=0.0` | 19.69% | 36.79% | 25.65% | 28.24% | 0.4415 | Pass |
+| `lr=0.01, momentum=0.0` | 19.77% | 17.36% | 18.49% | 18.57% | 0.2050 | Pass |
+| `lr=0.01, momentum=0.9` | 16.80% | 13.37% | 14.89% | 15.09% | 0.6786 | Pass |
+| `lr=0.03, momentum=0.9` | 18.36% | 11.57% | 14.19% | 14.97% | 0.7244 | Pass |
+| `lr=0.1, momentum=0.9` | 12.35% | 14.15% | 13.19% | 13.25% | 0.6809 | Pass |
+| `lr=0.03, momentum=0.0` | 39.04% | 6.09% | 10.54% | 22.57% | 0.0638 | Fail |
+
+The selected candidate and detailed ranking are recorded in
+`results/cifar10_full_validation_v2/selection.json` and `selection.csv`; the
+independent verifier receipt is `verification.json`. Per-job GPU PIDs and
+memory snapshots are in `execution_context.jsonl`. The v2 run overlapped the
+existing CUDA workload with a 4 GiB free-VRAM gate and 5 GiB inter-job host-RAM
+gate. Runtime is recorded but excluded from ranking because shared load affects
+timing. Final official-test metrics are saved per candidate but are not used in
+selection.
 
 An earlier attempt is retained in `results/cifar10_full_validation_v1/` for
 provenance. Its 0.01/0 candidate completed before another CUDA job started. Its
@@ -63,8 +78,9 @@ suite, so completed valid jobs can be reused by the 423-job run.
 | Gradient-aware selection | `N04_closure_gem_informed_gem` |
 
 The canonical plan order keeps each causal fork baseline before its dependent
-branches. A final review must confirm the frozen hyperparameters are matched
-across arms intended to isolate a different factor.
+branches. The tuned `lr=0.1` is shared across CIFAR-10 jobs, while the H04
+momentum value 0.9 remains an explicit experimental factor in both matched arms.
+The CIFAR-100 plan retains its existing `lr=0.03` baseline.
 
 ## Production boundary
 
@@ -72,8 +88,11 @@ The repository has 423 registered CIFAR-10 jobs across 144 scheduled research
 blocks. The 17 representative jobs above do not complete that suite and do not
 claim exhaustive implementation of all 152 catalogue blocks. After the
 validation gates pass, run the full suite sequentially with `--stop-on-error`,
-`--wait-for-exclusive-gpu`, and `--minimum-memory-gib 8`; then independently
-verify all 423 job artifacts and produce the required analyses and reports with
+`--minimum-free-vram-gib 4`, and `--minimum-memory-gib 5`. The user authorized
+concurrent CUDA work when VRAM is available; the suite still runs one CAFCL job
+at a time. Per-job start and end VRAM, RAM, and CUDA PID snapshots are recorded
+in `results/cifar10/execution_context.jsonl`. Then independently verify all 423
+job artifacts and produce the required analyses and reports with
 `python scripts/analyze_cifar10_production.py --results-root results/cifar10`.
 The analyzer exports registries, per-round and per-class CSVs, causal and
 runtime/communication tables, and per-job curves and heatmaps under

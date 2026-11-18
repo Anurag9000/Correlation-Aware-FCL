@@ -29,7 +29,7 @@
 | `scenario` | `"disjoint"` |
 | `stages` | `2` |
 | `memory_per_class` | `20` |
-| `lr` | `0.03` |
+| `lr` | `0.1` |
 | `model` | `"smallcnn"` |
 | `seed` | `0` |
 | `full_sync` | `false` |

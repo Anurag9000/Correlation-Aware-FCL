@@ -13,7 +13,8 @@ from cafcl.continual import gem_project,agem_project,LocalState
 from cafcl.selection import select_clients
 from cafcl.simulator import aggregate,run_experiment
 from cafcl.planner import core_suite,all_supported_suite
-from cafcl.cli import select_jobs,wait_for_exclusive_gpu,wait_for_host_memory
+from cafcl.cli import (select_jobs,wait_for_exclusive_gpu,wait_for_host_memory,
+                       wait_for_minimum_free_vram)
 from types import SimpleNamespace
 
 
@@ -30,6 +31,16 @@ def test_plans(dataset,count):
     assert all(x.require_cuda for x in jobs)
     assert len(core_suite(dataset))==60
     for j in jobs:j.validate()
+
+
+def test_full_data_cifar10_tuning_sets_planner_default_without_changing_cifar100():
+    cifar10=all_supported_suite('cifar10')
+    cifar100=all_supported_suite('cifar100')
+    assert {job.lr for job in cifar10}=={0.1}
+    assert {job.lr for job in cifar100}=={0.03}
+    momentum_jobs={job.job_id:job.momentum for job in cifar10 if job.momentum}
+    assert momentum_jobs=={'H04_closure_momentum_reset':0.9,
+                           'H04_closure_momentum_persist':0.9}
 
 
 def test_named_job_selection_preserves_plan_order_and_rejects_invalid_ids():
@@ -49,6 +60,15 @@ def test_host_memory_gate_waits_until_available_memory_meets_threshold(monkeypat
     monkeypatch.setattr('builtins.open',lambda *a,**k:io.StringIO(next(readings)))
     monkeypatch.setattr('cafcl.cli.time.sleep',sleeps.append)
     wait_for_host_memory(8.0,poll_seconds=1)
+    assert sleeps==[5]
+
+
+def test_vram_gate_waits_until_requested_free_memory_is_available(monkeypatch):
+    readings=iter([(1024,[]),(4096,[])])
+    sleeps=[]
+    monkeypatch.setattr('cafcl.cli.gpu_snapshot',lambda:next(readings))
+    monkeypatch.setattr('cafcl.cli.time.sleep',sleeps.append)
+    wait_for_minimum_free_vram(4.0,poll_seconds=1)
     assert sleeps==[5]
 
 
