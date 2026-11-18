@@ -18,7 +18,7 @@ while (( stable < 1 )); do
   fi
 
   available_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
-  if (( available_kib < 8*1024*1024 )); then
+  if (( available_kib < 6*1024*1024 )); then
     reason="only $((available_kib/1024/1024)) GiB MemAvailable"
   fi
 
@@ -39,7 +39,7 @@ CUDA_VISIBLE_DEVICES='' "$ROOT/.venv/bin/pytest" -q
 printf '[PREFLIGHT] Validating committed CIFAR plans.\n'
 CUDA_VISIBLE_DEVICES='' "$ROOT/.venv/bin/python" scripts/validate_plans.py
 CUDA_VISIBLE_DEVICES='' bash scripts/run_all_cifar10.sh --plan-only \
-  --stop-on-error --wait-for-exclusive-gpu --minimum-memory-gib 8
+  --stop-on-error --wait-for-exclusive-gpu --minimum-memory-gib 6
 CUDA_VISIBLE_DEVICES='' "$ROOT/.venv/bin/python" scripts/run_cifar10_tuning.py \
   --plan results/cifar10_full_validation_v2/job_plan.json \
   --output-dir results/cifar10_full_validation_v2 --plan-only
@@ -50,5 +50,5 @@ export PATH="$ROOT/.venv/bin:$PATH"
 exec "$ROOT/.venv/bin/python" -u scripts/run_cifar10_tuning.py \
   --plan results/cifar10_full_validation_v2/job_plan.json \
   --output-dir results/cifar10_full_validation_v2 \
-  --gpu-poll-seconds 30 --minimum-memory-gib 8 \
+  --gpu-poll-seconds 30 --minimum-memory-gib 6 \
   --allow-concurrent-gpu --minimum-free-vram-gib 4

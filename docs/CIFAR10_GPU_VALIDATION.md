@@ -25,7 +25,7 @@ are not complete until the full plan finishes. A candidate must exceed the
 10-class chance accuracy separately on old and new classes over the final-stage
 selection window before it can be ranked by harmonic mean. This v2 execution is
 authorized to overlap the existing CUDA workload when at least 4 GiB of VRAM
-and 8 GiB of host-available RAM remain. Per-job GPU PIDs and memory snapshots
+and 6 GiB of host-available RAM remain. Per-job GPU PIDs and memory snapshots
 are recorded in `execution_context.jsonl`; runtime is reported but excluded
 from candidate ranking because concurrent load affects timing.
 
