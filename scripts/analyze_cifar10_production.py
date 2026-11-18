@@ -24,6 +24,17 @@ def encoded(value) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
+def flatten_numbers(value, prefix=""):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            yield from flatten_numbers(child, f"{prefix}/{key}" if prefix else str(key))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from flatten_numbers(child, f"{prefix}/{index}")
+    elif isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value)):
+        yield prefix, float(value)
+
+
 def svg_line_chart(path: Path, job_id: str, rows: list[dict]) -> None:
     width, height, left, right, top, bottom = 960, 520, 72, 28, 46, 70
     plot_w, plot_h = width-left-right, height-top-bottom
@@ -85,6 +96,35 @@ def svg_heatmap(path: Path, title: str, matrix: list[list[float]], labels: list[
     path.write_text("\n".join(parts)+"\n", encoding="utf-8")
 
 
+def svg_causal_curve(path: Path, source_id: str, branch_id: str,
+                     source_rows: list[dict], branch_rows: list[dict]) -> None:
+    width, height, left, right, top, bottom = 960, 520, 72, 28, 46, 70
+    plot_w, plot_h = width-left-right, height-top-bottom
+    count=max(1,min(len(source_rows),len(branch_rows))-1)
+    parts=[f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">',
+           '<rect width="100%" height="100%" fill="white"/>',
+           f'<text x="{left}" y="27" font-family="sans-serif" font-size="16">Paired causal trajectory: {html.escape(source_id)} vs {html.escape(branch_id)}</text>']
+    for tick in range(6):
+        value=tick/5; y=top+(1-value)*plot_h
+        parts.append(f'<path d="M {left} {y:.1f} H {width-right}" stroke="#e5e7eb"/>')
+        parts.append(f'<text x="{left-12}" y="{y+4:.1f}" text-anchor="end" font-family="sans-serif" font-size="11">{value:.1f}</text>')
+    for rows,color in ((source_rows,"#2563eb"),(branch_rows,"#dc2626")):
+        pts=[]
+        for i,row in enumerate(rows[:count+1]):
+            value=row.get("accuracy")
+            if value is None: continue
+            x=left+i/count*plot_w; y=top+(1-float(value))*plot_h
+            pts.append(f"{x:.1f},{y:.1f}")
+        if pts: parts.append(f'<polyline fill="none" stroke="{color}" stroke-width="2" points="{" ".join(pts)}"/>')
+    parts.extend([f'<path d="M {left} {top} V {height-bottom} H {width-right}" fill="none" stroke="#374151"/>',
+                  f'<path d="M {left+20} {height-38} h 22" stroke="#2563eb" stroke-width="3"/>',
+                  f'<text x="{left+48}" y="{height-34}" font-family="sans-serif" font-size="11">Source</text>',
+                  f'<path d="M {left+140} {height-38} h 22" stroke="#dc2626" stroke-width="3"/>',
+                  f'<text x="{left+168}" y="{height-34}" font-family="sans-serif" font-size="11">Intervention</text>', '</svg>'])
+    path.parent.mkdir(parents=True,exist_ok=True)
+    path.write_text("\n".join(parts)+"\n",encoding="utf-8")
+
+
 def mean(rows, key):
     values = [float(row[key]) for row in rows if row.get(key) is not None]
     return statistics.fmean(values) if values else None
@@ -117,8 +157,8 @@ def main() -> int:
             raise SystemExit("Production receipt does not prove all 423 jobs valid")
 
     registry, rounds_out, classes_out = [], [], []
-    confusion_out, participation_out, aggregation_out, diagnostics_out = [], [], [], []
-    checkpoint_out, causal_out, resource_out = [], [], []
+    confusion_out, participation_out, aggregation_out, diagnostics_out, gradient_pairs_out = [], [], [], [], []
+    checkpoint_out, causal_out, causal_trajectory_out, causal_class_out, resource_out = [], [], [], [], []
     grouped = defaultdict(list)
     cache = {}
     errors = []
@@ -211,6 +251,12 @@ def main() -> int:
                 "subset_diagnostics": encoded(row.get("subset_diagnostics")),
                 "representation_drift": encoded(row.get("representation_drift")),
                 "causal_diagnostics": encoded(row.get("causal_diagnostics"))})
+            for name in ("gradient_relationships", "client_update_cosines",
+                         "old_gradient_vs_client_updates"):
+                for pair, value in flatten_numbers(row.get(name)):
+                    gradient_pairs_out.append({"job_id": job_id, "round": row.get("round"),
+                                               "diagnostic": name, "pair_or_index": pair,
+                                               "value": value})
 
         labels = [str(i) for i in range(10)]
         confusion = final_test.get("confusion_matrix", {})
@@ -319,6 +365,36 @@ def main() -> int:
             row["source_final_validation_accuracy"] = source_final
             if source_final is not None and branch_final is not None:
                 row["paired_final_accuracy_delta"] = float(branch_final)-float(source_final)
+            cfg, source_metrics = source
+            branch_cfg, branch_metrics = branch
+            intervention = int(branch_cfg.get("intervention_round", -1))
+            paired_rounds = min(len(source_metrics),len(branch_metrics))
+            for index in range(paired_rounds):
+                source_row, branch_row = source_metrics[index], branch_metrics[index]
+                causal_trajectory_out.append({
+                    "source_job_id": row["source_job_id"], "branch_job_id": row["branch_job_id"],
+                    "round": index, "post_intervention": index >= intervention,
+                    "source_accuracy": source_row.get("accuracy"),
+                    "branch_accuracy": branch_row.get("accuracy"),
+                    "accuracy_delta": (float(branch_row["accuracy"])-float(source_row["accuracy"])
+                                       if source_row.get("accuracy") is not None and branch_row.get("accuracy") is not None else None),
+                    "source_old_accuracy": source_row.get("old_accuracy"),
+                    "branch_old_accuracy": branch_row.get("old_accuracy"),
+                    "source_new_accuracy": source_row.get("new_accuracy"),
+                    "branch_new_accuracy": branch_row.get("new_accuracy"),
+                    "source_integrated_forgetting": source_row.get("integrated_forgetting"),
+                    "branch_integrated_forgetting": branch_row.get("integrated_forgetting")})
+                source_per_class = source_row.get("per_class", {})
+                branch_per_class = branch_row.get("per_class", {})
+                for label in sorted(set(source_per_class)|set(branch_per_class),key=int):
+                    a,b=source_per_class.get(label),branch_per_class.get(label)
+                    causal_class_out.append({"source_job_id":row["source_job_id"],
+                        "branch_job_id":row["branch_job_id"],"round":index,
+                        "class_id":label,"source_accuracy":a,"branch_accuracy":b,
+                        "accuracy_delta":float(b)-float(a) if a is not None and b is not None else None,
+                        "post_intervention":index>=intervention})
+            svg_causal_curve(out/"causal_curves"/f"{row['branch_job_id']}.svg",
+                             row["source_job_id"],row["branch_job_id"],source_metrics,branch_metrics)
 
     write_csv(out/"job_execution_registry.csv", list(registry[0]) if registry else ["job_id"], registry)
     write_csv(out/"per_round_metrics.csv", list(rounds_out[0]) if rounds_out else ["job_id"], rounds_out)
@@ -328,7 +404,10 @@ def main() -> int:
     write_csv(out/"aggregation_diagnostics.csv", list(aggregation_out[0]) if aggregation_out else ["job_id"], aggregation_out)
     write_csv(out/"gpu_runtime_communication.csv", list(resource_out[0]) if resource_out else ["job_id"], resource_out)
     write_csv(out/"gradient_and_causal_diagnostics.csv", list(diagnostics_out[0]) if diagnostics_out else ["job_id"], diagnostics_out)
+    write_csv(out/"gradient_interference_pairs.csv", list(gradient_pairs_out[0]) if gradient_pairs_out else ["job_id", "round", "diagnostic", "pair_or_index", "value"], gradient_pairs_out)
     write_csv(out/"causal_comparisons.csv", list(causal_out[0]) if causal_out else ["source_job_id", "branch_job_id"], causal_out)
+    write_csv(out/"causal_trajectory_deltas.csv", list(causal_trajectory_out[0]) if causal_trajectory_out else ["source_job_id", "branch_job_id", "round"], causal_trajectory_out)
+    write_csv(out/"causal_per_class_deltas.csv", list(causal_class_out[0]) if causal_class_out else ["source_job_id", "branch_job_id", "round", "class_id"], causal_class_out)
     write_csv(out/"checkpoint_inventory.csv", list(checkpoint_out[0]) if checkpoint_out else ["job_id", "artifact", "size_bytes", "path"], checkpoint_out)
     write_csv(out/"analysis_errors.csv", ["job_id", "error"], errors)
     suite_status_path = root/"suite_status.json"
@@ -338,6 +417,34 @@ def main() -> int:
                      "fix_reference": "docs/STATUS.md or per-job recovery notes"}
                     for item in suite_status.get("failures", [])]
     write_csv(out/"failure_fix_log.csv", ["job_id", "error", "traceback", "fix_reference"], failure_rows)
+
+    gem_rows=[]
+    local_by_job=defaultdict(list)
+    for row in participation_out:
+        if row.get("method_used") in {"gem","agem"}:
+            local_by_job[row["job_id"]].append(row)
+    for job_id,(cfg,_) in cache.items():
+        local=local_by_job.get(job_id,[])
+        if local:
+            gem_rows.append({"job_id":job_id,"method":cfg.get("method"),
+                "local_update_records":len(local),
+                "total_qp_calls":sum(int(row.get("qp_calls") or 0) for row in local),
+                "total_constraint_violations":sum(int(row.get("constraint_violations") or 0) for row in local),
+                "total_local_steps":sum(int(row.get("steps") or 0) for row in local),
+                "mean_memory_samples":mean(local,"memory_samples"),
+                "mean_last_projection_norm":mean(local,"projection_norm_last")})
+    write_csv(out/"gem_constraint_summary.csv", list(gem_rows[0]) if gem_rows else ["job_id","method"], gem_rows)
+    gradient_groups=defaultdict(list)
+    for row in gradient_pairs_out:
+        gradient_groups[(row["job_id"],row["diagnostic"])].append(float(row["value"]))
+    gradient_summary=[]
+    for (job_id,diagnostic),values in sorted(gradient_groups.items()):
+        gradient_summary.append({"job_id":job_id,"diagnostic":diagnostic,
+            "pair_or_value_count":len(values),"mean":statistics.fmean(values),
+            "minimum":min(values),"maximum":max(values),
+            "negative_count":sum(value<0 for value in values),
+            "negative_fraction":sum(value<0 for value in values)/len(values)})
+    write_csv(out/"gradient_interference_summary.csv", list(gradient_summary[0]) if gradient_summary else ["job_id","diagnostic"], gradient_summary)
 
     family_rows = []
     for key, rows in sorted(grouped.items(), key=lambda item: str(item[0])):
