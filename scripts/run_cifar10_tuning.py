@@ -118,7 +118,8 @@ def main() -> int:
     import torch
     if not torch.cuda.is_available():
         raise SystemExit("CUDA is required for tuning; no jobs were started")
-    device = torch.device("cuda")
+    device = None
+    device_name = None
     output = Path(args.output_dir)
     output.mkdir(parents=True, exist_ok=True)
     status_path = output / "tuning_status.json"
@@ -127,6 +128,9 @@ def main() -> int:
     for index, cfg in enumerate(jobs, 1):
         wait_for_host_memory(args.minimum_memory_gib, args.gpu_poll_seconds)
         wait_for_exclusive_gpu(os.getpid(), args.gpu_poll_seconds)
+        if device is None:
+            device = torch.device("cuda")
+            device_name = torch.cuda.get_device_name(device)
         print(f"\n=== TUNING [{index}/{len(jobs)}] {cfg.job_id} (batch 512) ===", flush=True)
         try:
             result = run_experiment(cfg, str(output / "runs"), args.data_root, download=False)
@@ -142,14 +146,14 @@ def main() -> int:
             atomic_json(status_path, {
                 "suite": payload["suite"], "planned": len(jobs), "attempted": index,
                 "completed_this_invocation": completed, "already_completed": already_completed,
-                "failed": failures, "cuda_device": torch.cuda.get_device_name(device),
+                "failed": failures, "cuda_device": device_name,
                 "updated_unix": time.time(),
             })
             raise
         atomic_json(status_path, {
             "suite": payload["suite"], "planned": len(jobs), "attempted": index,
             "completed_this_invocation": completed, "already_completed": already_completed,
-            "failed": failures, "cuda_device": torch.cuda.get_device_name(device),
+            "failed": failures, "cuda_device": device_name,
             "updated_unix": time.time(),
         })
     print(f"Tuning finished: completed={completed}, already_completed={already_completed}, failed=0")
