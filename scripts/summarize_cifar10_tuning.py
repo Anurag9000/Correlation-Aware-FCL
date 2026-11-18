@@ -73,7 +73,13 @@ def main() -> int:
         "selected_job_id": selected["job_id"] if selected else None,
         "selected_candidate": selected,
         "ranked_candidates": ranked,
-        "limitations": "50% training subset and 8 rounds per experience; finalists require full-data full-schedule validation before production freeze.",
+        "limitations": (
+            f"Training fraction {plan.get('training_fraction_of_eligible_data', 'per-job')}; "
+            f"{plan.get('rounds_per_stage', 'per-job')} rounds per experience across "
+            f"{len(plan['jobs'][0].get('stages', [])) if isinstance(plan['jobs'][0].get('stages'), list) else plan['jobs'][0].get('stages', 'unknown')} "
+            "experiences. Selection uses validation only; this ranking does not establish "
+            "statistical significance or replace production artifact verification."
+        ),
     }
     root.mkdir(parents=True, exist_ok=True)
     (root / "selection.json").write_text(json.dumps(result, indent=2) + "\n")
