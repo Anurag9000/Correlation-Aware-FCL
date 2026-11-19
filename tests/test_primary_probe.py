@@ -45,6 +45,13 @@ def test_report_requires_both_complete_and_all_classes(tmp_path):
     assert report['delta']==pytest.approx(.1)
     assert len(json.loads((root/'comparison'/'per_class.json').read_text()))==100
     assert (root/'comparison'/'comparison.md').exists()
+    # Cardinality alone is not enough: 100 out-of-range labels are invalid.
+    path=root/'runs'/partial.job_id/'summary.json'
+    invalid=json.loads(path.read_text())
+    invalid['final_metrics']['globally_integrated_classes']=list(range(1,101))
+    path.write_text(json.dumps(invalid))
+    with pytest.raises(RuntimeError,match='exactly 0..99'):
+        build_report(root,(full,partial))
 
 
 def test_mathematical_audit_discards_impossible_overlap_arms():

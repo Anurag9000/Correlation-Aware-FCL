@@ -169,20 +169,36 @@ def _example_loader(dataset,indices,batch_size,seed,shuffle=True):
 
 def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,active_pair_classes=None):
     model.zero_grad(set_to_none=True)
-    # Logical reference gradient: weighted accumulation over bounded physical
-    # batches, without materializing 1024 images/backbone activations on the GPU.
-    total=min(len(indices),batch_size)
-    micro=min(batch_size,16)  # same objective, bounded ViT reference memory
-    # Sample uniformly across all historical examples, not just the prefix.
-    order=torch.randperm(len(indices),generator=torch.Generator().manual_seed(seed))[:total]
-    selected=[indices[int(i)] for i in order]
-    for x,y in _example_loader(dataset,selected,micro,seed,shuffle=False):
-        x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
-        (F.cross_entropy(model(x),y)*(len(y)/total)).backward()
-    if active_pair_classes is not None:
-        from .class_indexed import freeze_other_class_rows
-        freeze_other_class_rows(model,active_pair_classes)
-    return _flatten_grads(params)
+    # Reference gradients are read-only with respect to BatchNorm running
+    # statistics. Otherwise A-GEM/GEM accidentally trains CNN buffers on
+    # reference examples, changing the federated model even if no replay loss
+    # was requested. Retain training-mode gradients, restore only buffers.
+    bn_snapshots=[]
+    for layer in model.modules():
+        if isinstance(layer,torch.nn.modules.batchnorm._BatchNorm) and layer.track_running_stats:
+            bn_snapshots.append((layer,layer.running_mean.detach().clone(),
+                layer.running_var.detach().clone(),layer.num_batches_tracked.detach().clone()))
+    try:
+        # Logical reference gradient: weighted accumulation over bounded physical
+        # batches, without materializing 1024 images/backbone activations on the GPU.
+        total=min(len(indices),batch_size)
+        micro=min(batch_size,16)
+        order=torch.randperm(len(indices),generator=torch.Generator().manual_seed(seed))[:total]
+        selected=[indices[int(i)] for i in order]
+        for x,y in _example_loader(dataset,selected,micro,seed,shuffle=False):
+            x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
+            (F.cross_entropy(model(x),y)*(len(y)/total)).backward()
+        if active_pair_classes is not None:
+            from .class_indexed import freeze_other_class_rows
+            freeze_other_class_rows(model,active_pair_classes)
+        result=_flatten_grads(params)
+    finally:
+        with torch.no_grad():
+            for layer,mean,variance,count in bn_snapshots:
+                layer.running_mean.copy_(mean)
+                layer.running_var.copy_(variance)
+                layer.num_batches_tracked.copy_(count)
+    return result
 
 
 def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experience_end=False,active_pair_classes=None):

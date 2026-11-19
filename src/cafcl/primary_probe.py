@@ -75,8 +75,10 @@ def build_report(root,jobs):
                  delta=float(partial['accuracy'])-float(full['accuracy']),
                  final_integrated_full=len(full['globally_integrated_classes']),
                  final_integrated_offline=len(partial['globally_integrated_classes']))
-    if overall['final_integrated_full']!=100 or overall['final_integrated_offline']!=100:
-        raise RuntimeError('Unintegrated CIFAR-100 labels after final flush')
+    expected=set(range(100))
+    if set(map(int,full['globally_integrated_classes']))!=expected or \
+       set(map(int,partial['globally_integrated_classes']))!=expected:
+        raise RuntimeError('Final integrated CIFAR-100 label IDs must be exactly 0..99')
     folder=root/'comparison';folder.mkdir(exist_ok=True,parents=True)
     atomic_json(folder/'summary.json',overall)
     atomic_json(folder/'per_class.json',rows)
@@ -151,6 +153,8 @@ def main(argv=None):
     if any(c!=0 for c in codes):
         raise RuntimeError(f'One or both pilot jobs failed: {codes}. Inspect per-job logs; no false success reported.')
     report=build_report(root,jobs)
+    if report is None:
+        raise RuntimeError('A worker reported success without both final summary files')
     print('FINAL PAIRED RESULT',json.dumps(report,indent=2),flush=True)
     print('Report:',root/'comparison'/'comparison.md',flush=True)
 

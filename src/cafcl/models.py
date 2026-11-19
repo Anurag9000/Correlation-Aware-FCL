@@ -19,7 +19,6 @@ from torch.nn import functional as F
 VIT_ID='vit_tiny_patch16_32'
 CNN_ID='resnet18_cifar32'
 BACKBONE_ID=VIT_ID  # backward-compatible default-model constant
-MODEL_IDS=(VIT_ID,CNN_ID)
 INPUT_SIZE=32
 NORMALIZATION_MEAN=(.5071,.4867,.4408)
 NORMALIZATION_STD=(.2675,.2565,.2761)
@@ -108,11 +107,17 @@ class CIFARResNet18Feature(nn.Module):
         x=self.layer4(self.layer3(self.layer2(self.layer1(x))))
         return self.pool(x).flatten(1)
 
+# Feature-builder registry: registering a new CNN or ViT is a single, explicit
+# factory addition. Public CLI aliases remain intentionally limited to the
+# requested two production variants until another architecture is approved.
+FEATURE_FACTORIES={VIT_ID:ViTTinyFeature,CNN_ID:CIFARResNet18Feature}
+MODEL_IDS=tuple(FEATURE_FACTORIES)
+
 class CanonicalClassifier(nn.Module):
     def __init__(self, backbone_name:str, classes:int):
         super().__init__()
         if backbone_name not in MODEL_IDS:raise ValueError(f'Unknown research backbone: {backbone_name}')
-        self.features=ViTTinyFeature() if backbone_name==VIT_ID else CIFARResNet18Feature()
+        self.features=FEATURE_FACTORIES[backbone_name]()
         self.classifier=nn.Linear(self.features.num_features,classes)
         self.backbone_description=dict(model_id=backbone_name,model_family='vit' if backbone_name==VIT_ID else 'cnn',
             input_size=32,classes=classes,pretrained=False,initialization='seeded_random',

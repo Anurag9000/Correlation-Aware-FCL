@@ -148,7 +148,8 @@ class RunConfig:
         if self.dataset == 'synthetic':
             assert self.model in {'test_linear','test_mlp','test_smallcnn','vit_tiny_patch16_32','resnet18_cifar32'}
         else:
-            assert self.model in {'vit_tiny_patch16_32','resnet18_cifar32'}, 'Research requires native ViT-Tiny/16 or CIFAR-stem ResNet-18'
+            from .models import MODEL_IDS
+            assert self.model in MODEL_IDS, 'Research requires an explicitly registered native 32x32 research backbone'
         assert self.memory_per_class >= 0
         assert self.causal_max_clients >= 1 and self.checkpoint_every >= 0
         assert self.participation_schedule in {"feedback", "stage", "constant", "increasing", "decreasing", "alternating"}
