@@ -2,7 +2,7 @@
 
 **Primary goal: run exactly TWO initial investigation jobs**, not the ~50K-job factorial sweep. This project simulates independent continuous client learning under partial server participation. Every client sees consecutive supervised tasks, continues training even when disconnected, and eventually uploads accumulated parameter changes since its last synchronization. Every connected client receives the newly aggregated server model after the upload; the disconnected clients receive nothing. Private A-GEM/GEM/replay/EWC/SI/DER/etc. memories persist through normal sync.
 
-## Selected architectures — identical native 32×32 image data and effective batch 1024
+## Selected architectures — identical native 32×32 image data
 
 | Choice | `--backbone` | Production model ID | Initialization |
 |---|---|---|---|
@@ -11,7 +11,7 @@
 
 Both are fully implemented directly in `src/cafcl/models.py`; no 224×224 resize, mandatory DeiT pretrained weights, standard CNN, or silent fallback. The 100-output classifier uses canonical global label IDs. A two-class task trains the active two-label softmax while other class rows remain frozen; the shared feature extractor remains trainable. ViT-Tiny/16 has only **2×2 = four image patches** at 32×32, an important accuracy limitation. See [BACKBONES.md](docs/BACKBONES.md).
 
-Every CIFAR production job uses effective **batch size 1024** and physical microbatch 16 by default for gradient accumulation. For ResNet-18, BatchNorm running statistics reflect microbatches, not an actual physical 1024 batch; see methodology caveats.
+The full factorial suite defaults to effective **batch size 1024**. The two-job primary probe accepts effective batch sizes 64 or 1024 through `--batch-size` and uses physical microbatch 4 by default. For ResNet-18, BatchNorm running statistics reflect physical microbatches; see methodology caveats.
 
 ## First: two-job primary investigation
 
@@ -20,7 +20,7 @@ Five clients each learn **four new distinct classes per server interval**, organ
 1. **Full baseline:** all five clients upload and synchronize each interval.
 2. **Rotating-offline intervention:** exactly one different client is offline during each of the five intervals, so each client is withheld once, with its continuing local model/memory preserved.
 
-Both arms use **Replay with independently reservoir-sampled 10%-per-class private buffers, FedAvg + class-aware row fusion at the server, the same class stream, same seed 0, no label overlap, batch 1024**, and a final communication-only flush. Official test accuracy is evaluated **only once at the end**, after verifying all 100 labels reached the server. The pilot produces paired overall and per-class accuracy comparisons. This is **two jobs total**, not one per backbone; select which model the two jobs use.
+Both arms use **Replay with independently reservoir-sampled per-class private buffers, FedAvg + class-aware row fusion at the server, the same class stream, same seed 0, no label overlap**, and a final communication-only flush. Set `--replay-fraction 0.11111111` for 50 images per class from the 450-image train split; set `--batch-size 64` to use effective batch 64 in both arms. Official test accuracy is evaluated **only once at the end**, after verifying all 100 labels reached the server. The pilot produces paired overall and per-class accuracy comparisons. This is **two jobs total**, not one per backbone; select which model the two jobs use.
 
 ```bash
 python -m pip install -e '.[test]'

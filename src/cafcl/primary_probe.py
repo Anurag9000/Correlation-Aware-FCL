@@ -17,9 +17,9 @@ from .simulator import run_experiment,atomic_json
 from .selection import participation_budget
 
 
-def make_jobs(*,backbone='vit',seed=0,lr=.003,epochs=10,memory_per_class=20,replay_fraction=.10,micro_batch_size=4):
+def make_jobs(*,backbone='vit',seed=0,lr=.003,epochs=10,memory_per_class=20,replay_fraction=.10,batch_size=1024,micro_batch_size=4):
     pct_tag=f'{100*replay_fraction:g}'.replace('.','p')
-    cfg=replace(base(seed=seed,model=backbone),num_clients=5,micro_batch_size=micro_batch_size,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
+    cfg=replace(base(seed=seed,model=backbone),num_clients=5,batch_size=batch_size,micro_batch_size=micro_batch_size,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
         aggregator='fedavg',scenario='disjoint',stream_overlap_kind='none',
         stream_overlap_fraction=0.,classes_per_local_task=2,local_tasks_per_round=2,
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
@@ -53,7 +53,7 @@ def audited_plan(jobs):
             offline_classes=sorted({c for rr,cid,_,labels,_ in stream if rr==r and cid==offline[r] for c in labels}),
             online_clients=[c for c in range(5) if c!=offline[r]]))
         assert len(by_round[-1]['offline_classes'])==4
-    return dict(dataset='cifar100',seed=baseline.seed,backbone=baseline.model,batch_size=1024,
+    return dict(dataset='cifar100',seed=baseline.seed,backbone=baseline.model,batch_size=baseline.batch_size,
         micro_batch_size=baseline.micro_batch_size,
         client_execution_mode='parallel_task_barriers',
         client_models_per_run=baseline.num_clients,
@@ -113,6 +113,8 @@ def main(argv=None):
     p.add_argument('--seed',type=int,default=0)
     p.add_argument('--lr',type=float,default=.003)
     p.add_argument('--epochs',type=int,default=10)
+    p.add_argument('--batch-size',type=int,default=1024,
+                   help='Effective logical SGD batch size shared by both jobs (default: 1024)')
     p.add_argument('--memory-per-class',type=int,default=20)
     p.add_argument('--micro-batch-size',type=int,default=4,
                    help='Physical GPU microbatch; logical optimizer batch remains 1024')
@@ -128,12 +130,13 @@ def main(argv=None):
     p.add_argument('--allow-cpu',action='store_true',help='Synthetic/debug only; does not make a GPU production run')
     p.add_argument('--worker',type=int,choices=(0,1),default=None,help=argparse.SUPPRESS)
     args=p.parse_args(argv)
-    jobs=make_jobs(backbone=args.backbone,seed=args.seed,lr=args.lr,epochs=args.epochs,
+    jobs=make_jobs(backbone=args.backbone,seed=args.seed,lr=args.lr,epochs=args.epochs,batch_size=args.batch_size,
                    memory_per_class=args.memory_per_class,replay_fraction=args.replay_fraction,
                    micro_batch_size=args.micro_batch_size)
     design=audited_plan(jobs)
     root=Path(args.output_dir)/('primary_cifar100_single_gpu_parallel_v10_'+args.backbone+
-        ('' if abs(args.replay_fraction-.1)<1e-12 else '_pct'+f'{100*args.replay_fraction:g}'.replace('.','p'))+f'_seed{args.seed}')
+        ('' if abs(args.replay_fraction-.1)<1e-12 else '_pct'+f'{100*args.replay_fraction:g}'.replace('.','p'))+
+        f'_bs{args.batch_size}_seed{args.seed}')
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',design)
     if args.plan_only:
@@ -155,6 +158,7 @@ def main(argv=None):
         available=alias
     cmd=[sys.executable,'-m','cafcl.primary_probe','--backbone',args.backbone,
          '--seed',str(args.seed),'--lr',str(args.lr),'--epochs',str(args.epochs),
+         '--batch-size',str(args.batch_size),
          '--memory-per-class',str(args.memory_per_class),'--replay-fraction',str(args.replay_fraction),
          '--micro-batch-size',str(args.micro_batch_size),'--data-root',args.data_root,
          '--output-dir',args.output_dir,'--no-download']

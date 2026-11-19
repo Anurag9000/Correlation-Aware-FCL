@@ -627,7 +627,6 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         client.optimizer_state=None
     client.train_steps+=step_count
     client.trained_classes.update(int(bank.train.targets[i]) for i in indices)
-    from collections import Counter
     class_counts=dict(Counter(int(bank.train.targets[i]) for i in indices))
     if active_pair_classes is not None:
         client.activated_labels.update(active_pair_classes)

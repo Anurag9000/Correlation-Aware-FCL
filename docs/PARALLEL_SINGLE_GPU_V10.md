@@ -15,7 +15,7 @@ For each communication interval with two local tasks:
 
 For the two-run preliminary campaign, a separate **baseline process** (5/5 participating) and **rotating-offline process** (4/5 participating) start concurrently, **both on one GPU**. They do not share model weights or sample archives across experiments. Logical model states: two servers + ten client models. The device executes CUDA work from ten independent client streams over two processes; actual individual kernel overlap depends on scheduling and resource availability. A single GPU does not guarantee literally simultaneous physical execution of all kernels; the enforced contract is concurrent execution requests, persistent independent model instances, and strict task barriers.
 
-This is GPU memory intensive. Effective optimizer batch remains **1024**, but the physical pilot microbatch defaults to **4** to reduce the resident activation cost. Microbatching does not alter the user-requested effective logical batch. OOM must cause an explicit run failure; there is no silent fallback to sequential training. Lower `--micro-batch-size` explicitly if necessary, and monitor GPU VRAM. ResNet BatchNorm running statistics reflect physical microbatches (as already documented).
+This is GPU memory intensive. The primary probe accepts effective optimizer batch sizes of **64** or **1024** through `--batch-size`; the physical pilot microbatch defaults to **4** to reduce resident activation cost. Microbatching does not alter the selected effective logical batch. OOM must cause an explicit run failure; there is no silent fallback to sequential training. Lower `--micro-batch-size` explicitly if necessary, and monitor GPU VRAM. ResNet BatchNorm running statistics reflect physical microbatches (as already documented).
 
 ## Reproducible launch on one-GPU mtechdeserver
 
@@ -30,12 +30,12 @@ bash scripts/run_primary_probe_cifar100.sh --backbone vit --plan-only
 
 mkdir -p logs
 nohup bash scripts/run_primary_probe_cifar100.sh \
-    --backbone vit --gpu 0 --seed 0 --micro-batch-size 4 \
-    --replay-fraction 0.10 --epochs 10 --lr 0.003 \
+    --backbone cnn --gpu 0 --seed 0 --batch-size 64 --micro-batch-size 4 \
+    --replay-fraction 0.11111111 --epochs 10 --lr 0.003 \
     > logs/primary_single_gpu_v10.log 2>&1 < /dev/null &
 tail -f logs/primary_single_gpu_v10.log
 ```
 
-The legacy `--gpus 0,0` spelling is supported; distinct GPU IDs like `--gpu 0` are explicitly rejected. Run outputs are isolated under `results/primary_cifar100_single_gpu_parallel_v10_vit_seed0` with two independent experiment workers. Every communication interval records `client_execution_mode`, `independent_live_client_models`, and `task_barriers` in `metrics.json`.
+The legacy `--gpus 0,0` spelling is supported; distinct GPU IDs like `--gpu 0` are explicitly rejected. Run outputs include the selected backbone and batch size in their isolated result directory, with two independent experiment workers. Every communication interval records `client_execution_mode`, `independent_live_client_models`, and `task_barriers` in `metrics.json`.
 
 **Verification boundary:** CPU scheduling/barrier tests establish worker overlap and correct task ordering, not GPU hardware occupancy or accuracy. The single-GPU deployment must validate available VRAM and CUDA operation empirically. The algorithm is unchanged apart from execution ordering/physical model instances; A-GEM/GEM/replay and other CL methods use their existing objectives and synchronized histories.

@@ -19,7 +19,7 @@
 | Official test | Once at the end | Once at the end |
 | Global classifier | 100 canonical output rows | Identical |
 | Model choice | `--backbone vit` by default; alternatively `--backbone cnn` | Same chosen backbone |
-| Effective batch | 1024 | 1024 |
+| Effective batch | 64 (or 1024 by default) | 64 (or 1024 by default) |
 | Random seed | 0 | 0 |
 
 ## Exact feasibility and arithmetic
@@ -37,18 +37,15 @@ Clone/pull `main` on that machine, install dependencies, check CUDA, then:
 ```bash
 python -m pip install -e '.[test]'
 python scripts/validate_factorial_plans.py
-bash scripts/run_primary_probe_cifar100.sh --plan-only
-# Single GPU: two independent job processes share GPU 0
-bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0
-# One GPU (both processes share it; benchmark capacity first)
-bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0
-# Alternative, still only two jobs and same schedule, with ResNet-18
-bash scripts/run_primary_probe_cifar100.sh --backbone cnn --gpu 0
+bash scripts/run_primary_probe_cifar100.sh --backbone cnn --gpu 0 --seed 0 \
+  --batch-size 64 --micro-batch-size 4 --epochs 10 --lr 0.003 \
+  --replay-fraction 0.11111111 --plan-only
+# Launch the same two jobs together on one GPU by removing --plan-only.
 ```
 
-`--gpu` chooses the **one physical GPU shared by both runs**; distinct GPU IDs are rejected. Within each run five independent client models train each task ordinal concurrently, with an explicit barrier before the next task and before FedAvg. Running both backbone types would produce four experiments, not the requested two. `--seed 0`, `--lr .003`, `--epochs 10`, `--replay-fraction 0.10`, `--data-root`, `--output-dir`, `--no-download`, `--plan-only` are configurable. The parent ensures CIFAR-100 is cached before spawning the two worker processes to avoid concurrent download races. Production requires CUDA by default. Independent logs, checkpoints, and status files are saved for both jobs.
+`--gpu` chooses the **one physical GPU shared by both runs**; distinct GPU IDs are rejected. Within each run five independent client models train each task ordinal concurrently, with an explicit barrier before the next task and before FedAvg. Running both backbone types would produce four experiments, not the requested two. `--seed 0`, `--lr .003`, `--epochs 10`, `--batch-size` (64 or 1024), `--micro-batch-size`, `--replay-fraction`, `--data-root`, `--output-dir`, `--no-download`, and `--plan-only` are configurable. Use `--replay-fraction 0.11111111` for 50 images per class from the 450-image training split. The parent ensures CIFAR-100 is cached before spawning the two worker processes to avoid concurrent download races. Production requires CUDA by default. Independent logs, checkpoints, and status files are saved for both jobs.
 
-Final outputs: `results/primary_cifar100_shared_cl_v7_<vit|cnn>_seed0/comparison/summary.json`, `per_class.csv`, `per_class.json`, and `comparison.md`; all computed only after **both** runs succeed and after verifying all 100 classes have been integrated.
+Final outputs are written under `results/primary_cifar100_single_gpu_parallel_v10_<backbone>[_pct<replay>]_bs<batch>_seed<seed>/comparison/`; the paired report is computed only after **both** runs succeed and all 100 classes are verified as integrated.
 
 **Scientific scope:** This is a feasibility/proof-of-concept ablation, not a published statistical finding. One seed is insufficient for uncertainty estimates. Participation changes communication frequency and the trajectory of stale updates, not merely class identities. The terminal flush changes the protocol but is essential to measure the final 100-class model fairly. Study per-round coverage and pre-flush sensitivity separately later.
 

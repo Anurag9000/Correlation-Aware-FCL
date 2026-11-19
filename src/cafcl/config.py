@@ -113,7 +113,7 @@ class RunConfig:
 
     def validate(self):
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
-        assert self.batch_size == 1024 or self.dataset == "synthetic", "All CIFAR production jobs require batch size 1024"
+        assert self.batch_size in {64, 1024} or self.dataset == "synthetic", "CIFAR production jobs support effective batch sizes 64 or 1024"
         assert 1 <= self.micro_batch_size <= self.batch_size, "Invalid physical microbatch size"
         assert self.num_clients >= 2
         assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
