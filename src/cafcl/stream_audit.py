@@ -63,6 +63,39 @@ def check_stream(seed,clients,classes,tasks,kind,overlap,recurrences,participati
     if outage:
         if outage>=total_rounds:return 'no-controlled-outage-reconnection'
         if not 0<participation<1:return 'controlled-outage-requires-partial-participation'
+    # Verify ACTUAL outage episodes, not just D < total rounds. The final
+    # communication-only flush is a reconnection, not a hidden training round.
+    # A last, truncated cohort would violate the advertised exact-D experiment.
+    if outage:
+        from .selection import participation_budget
+        from .streaming import select_offline_cohort
+        hidden_count=clients-participation_budget(clients,participation)
+        if hidden_count<1 or hidden_count>=clients:
+            return 'controlled-outage-participation-budget-invalid'
+        if not flush:
+            return 'controlled-outage-requires-final-reconnection-flush'
+        hidden_by_round=[]
+        for r in range(train_rounds):
+            try:
+                chosen=set(select_offline_cohort(cfg,r,total_rounds,
+                    list(range(clients-hidden_count))))
+            except (ValueError, AssertionError) as exc:
+                return 'controlled-outage-schedule-invalid:'+str(exc)
+            hidden=set(range(clients))-chosen
+            if len(hidden)!=hidden_count:
+                return 'controlled-outage-client-count-mismatch'
+            hidden_by_round.append(hidden)
+        for cid in range(clients):
+            start=None
+            # Sentinel event at the final communication-only flush.
+            for r in range(train_rounds+1):
+                missing=r<train_rounds and cid in hidden_by_round[r]
+                if missing and start is None:
+                    start=r
+                elif not missing and start is not None:
+                    if r-start!=outage:
+                        return 'truncated-or-extended-offline-duration'
+                    start=None
     # In CIFAR-100 there are 500 raw train examples per class; splits are
     # partitioned between that class's task occurrences, without duplication.
     for c,n in counts.items():
@@ -73,15 +106,41 @@ def check_stream(seed,clients,classes,tasks,kind,overlap,recurrences,participati
     return None
 
 
+
+def check_job(cfg):
+    """Full declared-plan feasibility, including semantic experimental no-ops.
+
+    Structural checks are memoized by stream axes. These additional checks
+    intentionally distinguish a runnable configuration from an identifiable
+    experiment in which the named factor actually varies.
+    """
+    from .selection import participation_budget
+    if cfg.selector in {'fairness','diversity','balanced'}:
+        # Implementations are exact aliases: fairness==least_recent,
+        # diversity==coverage, balanced==coverage because old/new form
+        # a disjoint partition of all classes currently held.
+        return 'selection-policy-exact-alias'
+    if (cfg.selector!='random' and
+            participation_budget(cfg.num_clients,cfg.participation)==cfg.num_clients):
+        return 'selection-policy-inert-at-full-participation'
+    if (cfg.selector=='recurrence' and
+            cfg.stream_overlap_kind=='none' and cfg.stream_recurrence_rounds==0):
+        return 'recurrence-selector-has-no-recurrence-signal'
+    if cfg.selector=='overlap' and cfg.stream_overlap_kind=='none':
+        return 'overlap-selector-has-no-overlap-signal'
+    return check_stream(cfg.seed,cfg.num_clients,cfg.classes_per_local_task,
+                        cfg.local_tasks_per_round,cfg.stream_overlap_kind,
+                        cfg.stream_overlap_fraction,cfg.stream_recurrence_rounds,
+                        cfg.participation,cfg.offline_duration_rounds,
+                        cfg.stream_terminal_flush,cfg.class_imbalance_power,
+                        cfg.client_sample_skew,cfg.sample_overlap_fraction)
+
+
 def audit(jobs):
     dropped=Counter();kept=Counter();examples={};n=0
     for family,cfg in jobs:
         n+=1
-        reason=check_stream(cfg.seed,cfg.num_clients,cfg.classes_per_local_task,
-                cfg.local_tasks_per_round,cfg.stream_overlap_kind,cfg.stream_overlap_fraction,
-                cfg.stream_recurrence_rounds,cfg.participation,cfg.offline_duration_rounds,
-                cfg.stream_terminal_flush,cfg.class_imbalance_power,cfg.client_sample_skew,
-                cfg.sample_overlap_fraction)
+        reason=check_job(cfg)
         if reason:
             dropped[(family,reason)]+=1;examples.setdefault((family,reason),cfg.job_id)
         else:kept[family]+=1

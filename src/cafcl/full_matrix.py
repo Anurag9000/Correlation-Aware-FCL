@@ -15,7 +15,7 @@ from .config import RunConfig
 from .simulator import run_experiment,atomic_json
 from .streaming import OVERLAP_KINDS,make_task_schedule
 from .models import BACKBONES,resolve_backbone
-from .stream_audit import check_stream
+from .stream_audit import check_job
 
 METHODS=('sgd','gem','agem','replay','ewc','si','er_ace','der','derpp','mas','lwf')
 AGGS=('fedavg','uniform','fedavgm','fedadam','class_balanced','inverse_participation',
@@ -135,11 +135,7 @@ def expand(dataset='cifar100',seeds=SEEDS,families=None,model='vit',include_inva
         cfg=replace(bases[seed],**changed)
         cfg.validate()
         if not include_invalid:
-            reason=check_stream(cfg.seed,cfg.num_clients,cfg.classes_per_local_task,
-                cfg.local_tasks_per_round,cfg.stream_overlap_kind,cfg.stream_overlap_fraction,
-                cfg.stream_recurrence_rounds,cfg.participation,cfg.offline_duration_rounds,
-                cfg.stream_terminal_flush,cfg.class_imbalance_power,cfg.client_sample_skew,
-                cfg.sample_overlap_fraction)
+            reason=check_job(cfg)
             if reason:continue
         signature=fingerprint(cfg)
         if signature in unique:continue

@@ -13,6 +13,10 @@ jobs:
           python-version: '3.11'
       - name: Install package
         run: python -m pip install -e '.[test]'
+      - name: Print fresh source-generated ledger before frozen-ledger check
+        run: |
+          python -m cafcl.full_matrix --plan-only --seed 0 --backbone vit
+          python scripts/audit_stream_math.py
       - name: Run offline regression tests
         run: pytest -q
       - name: Verify the CIFAR-100-only factorial registry
