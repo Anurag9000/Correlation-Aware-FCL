@@ -232,3 +232,5 @@ experiments.
   weighted mean); float BatchNorm parameters/buffers are averaged.
   Neither distinction should be hidden when attributing accuracy.
 
+
+**Per-sync zero-prediction-class integrity:** The collapse count only includes classes that have actually arrived by that communication interval. The preallocated 100-way output rows for future unarrived classes are excluded; treating all 100 output slots as eligible at early rounds would falsely report unavoidable future-class masking as catastrophic collapse.

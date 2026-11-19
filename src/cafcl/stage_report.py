@@ -49,8 +49,10 @@ def render_sync_report(run_dir, *, round_number, model_version, num_clients,
     confusion=test_metrics['confusion_matrix']['counts']
     n_classes=len(confusion)
     predicted=[sum(int(row[c]) for row in confusion) for c in range(n_classes)]
-    zero_labels=[int(c) for c,n in enumerate(predicted) if n==0]
     seen=sorted(per_class)
+    # Exclude unarrived output slots: they are deliberately masked at
+    # inference and MUST NOT be described as collapsed learned classes.
+    zero_labels=[int(c) for c in seen if predicted[c]==0]
     accuracy=float(test_metrics['accuracy'] or 0.0)
     bias_summary={}
     if classifier_bias is not None:

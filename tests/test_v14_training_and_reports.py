@@ -199,3 +199,20 @@ def test_final_only_diagnostics_still_update_validation_forgetting_history(tmp_p
     # Audit TEST and selection VALIDATION predictions remain segregated.
     assert 'per_sync_test_per_class' in metrics[0]
     assert metrics[0]['per_class']=={}
+
+
+def test_unarrived_future_outputs_not_false_flagged_as_prediction_collapse(tmp_path):
+    mat=[[0]*100 for _ in range(100)]
+    mat[0][0]=10
+    mat[1][1]=10
+    report=render_sync_report(tmp_path,round_number=1,model_version=1,
+        num_clients=2,
+        arrivals=[SimpleNamespace(round_id=0,client_id=0,labels=(0,1))],
+        test_metrics={'accuracy':1.,'per_class':{0:1.,1:1.},
+                      'confusion_matrix':{'labels':list(range(100)),'counts':mat}},
+        selected_clients=[0],integrated_classes={0,1},backbone='test_linear')
+    assert report['never_predicted_classes']==0
+    result=json.loads((tmp_path/'per_sync_accuracy'/'sync_001.json').read_text())
+    assert result['zero_prediction_classes']==[]
+    assert result['observed_class_count']==2
+    assert len(result['predicted_class_counts'])==2
