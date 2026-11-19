@@ -34,7 +34,7 @@ def load_plan(path: Path) -> tuple[dict, list[RunConfig]]:
         job.validate()
         if not job.job_id.startswith("PILOT_"):
             raise ValueError(f"Pilot job ID lacks PILOT_ prefix: {job.job_id}")
-        if job.dataset != "cifar10" or job.batch_size != 512 or not job.require_cuda:
+        if job.dataset != "cifar10" or job.batch_size != 64 or not job.require_cuda:
             raise ValueError(f"Pilot GPU/data invariant failed: {job.job_id}")
         if job.train_fraction != 0.15 or job.rounds_per_stage != 2 or job.epochs != 1:
             raise ValueError(f"Pilot quick-run invariant failed: {job.job_id}")
@@ -125,7 +125,7 @@ def main() -> int:
                                attempted=index-1, completed=completed,
                                already_completed=already_completed,
                                poll_seconds=args.gpu_poll_seconds)
-        print(f"\n=== PILOT [{index}/{len(jobs)}] {config.job_id} (batch 512) ===", flush=True)
+        print(f"\n=== PILOT [{index}/{len(jobs)}] {config.job_id} (batch 64) ===", flush=True)
         source = None
         if config.fork_source_job:
             source = (output_root / "runs" / config.fork_source_job /
@@ -137,7 +137,7 @@ def main() -> int:
                     "suite": payload["suite"], "planned": len(jobs), "attempted": index,
                     "completed_this_invocation": completed,
                     "already_completed": already_completed, "failures": failures,
-                    "batch_size": 512, "cuda_device": torch.cuda.get_device_name(device),
+                    "batch_size": 64, "cuda_device": torch.cuda.get_device_name(device),
                 })
                 print(error, file=sys.stderr, flush=True)
                 return 1
@@ -157,7 +157,7 @@ def main() -> int:
                 "suite": payload["suite"], "planned": len(jobs), "attempted": index,
                 "completed_this_invocation": completed,
                 "already_completed": already_completed, "failures": failures,
-                "batch_size": 512, "cuda_device": torch.cuda.get_device_name(device),
+                "batch_size": 64, "cuda_device": torch.cuda.get_device_name(device),
                 "updated_unix": time.time(),
             })
             print(f"FAILED {config.job_id}: {exc}", file=sys.stderr, flush=True)
@@ -166,7 +166,7 @@ def main() -> int:
             "suite": payload["suite"], "planned": len(jobs), "attempted": index,
             "completed_this_invocation": completed,
             "already_completed": already_completed, "failures": failures,
-            "batch_size": 512, "cuda_device": torch.cuda.get_device_name(device),
+            "batch_size": 64, "cuda_device": torch.cuda.get_device_name(device),
             "updated_unix": time.time(),
         })
 

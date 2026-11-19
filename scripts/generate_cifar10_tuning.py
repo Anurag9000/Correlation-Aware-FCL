@@ -45,7 +45,7 @@ def main() -> int:
         "dataset": "cifar10",
         "suite": "validation_hyperparameter_tuning",
         "seed": 0,
-        "batch_size": 512,
+        "batch_size": 64,
         "validation_fraction": baseline.validation_fraction,
         "training_fraction_of_eligible_data": args.train_fraction,
         "rounds_per_stage": args.rounds_per_stage,

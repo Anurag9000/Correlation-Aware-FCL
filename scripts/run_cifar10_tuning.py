@@ -146,7 +146,7 @@ def load_plan(path: Path) -> tuple[dict, list[RunConfig]]:
         raise ValueError("Tuning plan must contain uniquely named jobs")
     for job in jobs:
         job.validate()
-        if not job.job_id.startswith("TUNE_C10_") or job.batch_size != 512 or not job.require_cuda:
+        if not job.job_id.startswith("TUNE_C10_") or job.batch_size != 64 or not job.require_cuda:
             raise ValueError(f"Tuning execution invariant failed: {job.job_id}")
         if job.fork_source_job:
             raise ValueError("Hyperparameter candidates may not depend on causal fork checkpoints")
@@ -190,7 +190,7 @@ def main() -> int:
         if device is None:
             device = torch.device("cuda")
             device_name = torch.cuda.get_device_name(device)
-        print(f"\n=== TUNING [{index}/{len(jobs)}] {cfg.job_id} (batch 512) ===", flush=True)
+        print(f"\n=== TUNING [{index}/{len(jobs)}] {cfg.job_id} (batch 64) ===", flush=True)
         free_mib, compute_pids = gpu_snapshot()
         record_gpu_context(output, cfg, "start", free_mib, compute_pids, os.getpid())
         try:

@@ -41,7 +41,7 @@ def main() -> int:
     manifest = json.loads(Path(args.plan).read_text())
     raw_jobs = manifest.get("jobs", [])
     jobs = [RunConfig(**raw) for raw in raw_jobs]
-    if manifest.get("dataset") != "cifar10" or manifest.get("batch_size") != 512:
+    if manifest.get("dataset") != "cifar10" or manifest.get("batch_size") != 64:
         raise AssertionError("Production manifest dataset or batch-size header is invalid")
     expected = json.loads(json.dumps([cfg.to_dict() for cfg in all_supported_suite("cifar10", 0)]))
     if raw_jobs != expected:
@@ -51,8 +51,8 @@ def main() -> int:
     ids = [cfg.job_id for cfg in jobs]
     if len(ids) != len(set(ids)):
         raise AssertionError("Production manifest contains duplicate job IDs")
-    if any(cfg.dataset != "cifar10" or cfg.batch_size != 512 or not cfg.require_cuda for cfg in jobs):
-        raise AssertionError("A production job violates CIFAR-10/batch-512/CUDA requirements")
+    if any(cfg.dataset != "cifar10" or cfg.batch_size != 64 or not cfg.require_cuda for cfg in jobs):
+        raise AssertionError("A production job violates CIFAR-10/batch-64/CUDA requirements")
 
     root = Path(args.output_dir)
     errors = []
@@ -202,7 +202,7 @@ def main() -> int:
     receipt = {
         "dataset": "cifar10", "planned_jobs": len(jobs),
         "verified_jobs": len(inspected), "failed_or_invalid_jobs": len(errors),
-        "batch_size_512_jobs": sum(cfg.batch_size == 512 for cfg in jobs),
+        "batch_size_64_jobs": sum(cfg.batch_size == 64 for cfg in jobs),
         "cuda_required_jobs": sum(cfg.require_cuda for cfg in jobs),
         "jobs": inspected, "errors": errors,
     }
@@ -210,7 +210,7 @@ def main() -> int:
     (root / "suite_verification.json").write_text(json.dumps(receipt, indent=2) + "\n")
     print(json.dumps({k: receipt[k] for k in (
         "planned_jobs", "verified_jobs", "failed_or_invalid_jobs",
-        "batch_size_512_jobs", "cuda_required_jobs")}, indent=2))
+        "batch_size_64_jobs", "cuda_required_jobs")}, indent=2))
     if errors or len(inspected) != len(jobs):
         print("See suite_verification.json for per-job failures")
         return 1

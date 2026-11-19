@@ -1,4 +1,4 @@
-"""Generate a separate, batch-512 representative GPU pilot from registered jobs."""
+"""Generate a separate, batch-64 representative GPU pilot from registered jobs."""
 from __future__ import annotations
 
 import argparse
@@ -126,7 +126,7 @@ def pilot_config(cfg):
                                           cfg.stages*2-1)
     result=replace(cfg,**changes)
     result.validate()
-    if result.batch_size!=512:
+    if result.batch_size!=64:
         raise AssertionError(f'Pilot batch size changed: {result.job_id}')
     return result
 
@@ -159,14 +159,14 @@ def main():
     path=Path(args.output)
     path.parent.mkdir(parents=True,exist_ok=True)
     payload={'dataset':'cifar10','suite':'representative_gpu_pilot',
-             'batch_size':512,'training_fraction_of_eligible_data':.15,
+             'batch_size':64,'training_fraction_of_eligible_data':.15,
              'rounds_per_stage':2,'registered_source_job_count':len(registered),
              'covered_features':sorted(coverage),
              'coverage_warning':'Pilot results are not production results.',
              'jobs':[cfg.to_dict() for cfg in jobs]}
     path.write_text(json.dumps(payload,indent=2)+'\n')
     print(f'Prepared {len(jobs)} independent CUDA pilot jobs covering '
-          f'{len(coverage)} registered mechanisms; batch size 512; output={path}')
+          f'{len(coverage)} registered mechanisms; batch size 64; output={path}')
 
 
 if __name__=='__main__':
