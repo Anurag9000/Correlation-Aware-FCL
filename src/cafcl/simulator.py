@@ -507,14 +507,19 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 slices=[(cid,stage,sorted(labels))
                         for (cid,stage),labels in sorted(domain_labels.items())]
                 domain_test=GlobalDomainTest(bank.test,slices,cfg.scenario)
+                domain_validation=(GlobalDomainTest(bank.validation,slices,cfg.scenario)
+                                   if bank.validation is not None else None)
                 evaluation_bank=DataBank(bank.train,domain_test,bank.num_classes,
-                                         bank.coarse_by_fine,bank.original_labels)
+                                         bank.coarse_by_fine,bank.original_labels,
+                                         domain_validation)
             if cfg.spurious_strength:
                 from .data import DataBank
                 from .domains import SpuriousTest
                 evaluation_bank=DataBank(bank.train,
                     SpuriousTest(evaluation_bank.test,cfg.spurious_strength),
-                    bank.num_classes,bank.coarse_by_fine,bank.original_labels)
+                    bank.num_classes,bank.coarse_by_fine,bank.original_labels,
+                    (SpuriousTest(evaluation_bank.validation,cfg.spurious_strength)
+                     if evaluation_bank.validation is not None else None))
             pre_aggregation_metrics=None
             pre_representation=None
             if accepted and cfg.prepost_diagnostics:
@@ -524,7 +529,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 pre_aggregation_metrics,_=evaluate(model,evaluation_bank,observed,cfg.batch_size,
                                                     device,peak.copy(),integrated=integrated,
                                                     old=old,new=new,
-                                                    task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None)
+                                                    task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                                                    split='validation')
             if accepted and cfg.representation_diagnostics and old:
                 model.load_state_dict(global_state)
                 model.to(device)
@@ -625,11 +631,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 result={'accuracy':None,'macro_accuracy':None,'forgetting':None,
                         'per_class':{},'cross_entropy_loss':None,'evaluation_deferred':True,
                         'observed_classes':sorted(observed),
-                        'globally_integrated_classes':sorted(integrated)}
+                        'globally_integrated_classes':sorted(integrated),
+                        'evaluation_split':None,'evaluation_samples':0}
             else:
                 result,peak=evaluate(model,evaluation_bank,observed,cfg.batch_size,device,peak,
                                      integrated=integrated,old=old,new=new,
-                                     task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None)
+                                     task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                                     split=('test' if cfg.evaluate_final_only else 'validation'))
                 result['evaluation_deferred']=False
             if cfg.spurious_ood_eval and cfg.spurious_strength:
                 from .data import DataBank
@@ -663,6 +671,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'local_details':local_details,
                            'seconds':time.monotonic()-round_start,
                            'global_test_includes_inactive':True,
+                           'global_evaluation_includes_inactive':True,
                            'domain_evaluation_slices':(len(slices) if cfg.scenario in {'domain','gradual_drift','shifted_recurrence'} else None),
                            'causal_diagnostics':causal,
                            'subset_diagnostics':subset_analysis,

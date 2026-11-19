@@ -44,7 +44,7 @@ def aggregation_leave_one_out(model, bank, observed, updates, base_weights,
     from .evaluation import evaluate
     original = {k: v.detach().cpu().clone() for k,v in model.state_dict().items()}
     def score(chosen):
-        candidate = aggregate(chosen, base_weights, aggregator,device=device)
+        candidate = aggregate(chosen, base_weights, aggregator)
         model.load_state_dict(candidate)
         vals, _ = evaluate(model, bank, observed, batch_size, device, peak={},split='validation')
         return vals
@@ -92,7 +92,7 @@ def aggregation_subset_report(model,bank,observed,updates,base_weights,aggregato
             for chosen in combinations(ids,size):
                 cohort=frozenset(chosen)
                 selected=[u for u in updates if u['client_id'] in cohort]
-                weights=aggregate(selected,base_weights,aggregator,device=device)
+                weights=aggregate(selected,base_weights,aggregator)
                 model.load_state_dict(weights)
                 value,_=evaluate(model,bank,observed,batch_size,device,peak={},split='validation')
                 scores[cohort]=value['accuracy']
