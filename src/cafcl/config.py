@@ -7,7 +7,7 @@ import json
 @dataclass(frozen=True)
 class RunConfig:
     dataset: str = "cifar100"
-    batch_size: int = 1024
+    batch_size: int = 64
     num_clients: int = 10
     rounds_per_stage: int = 20
     epochs: int = 1
@@ -17,9 +17,7 @@ class RunConfig:
     aggregator: str = "fedavg"
     scenario: str = "disjoint"
     stages: int = 2
-    micro_batch_size: int = 16  # physical batch; effective SGD step remains batch_size=1024
     memory_per_class: int = 20
-    replay_buffer_capacity: int = 1000  # legacy private total-budget mode
     replay_reservoir_fraction: float = 0.0  # positive => fixed per-class Algorithm R reservoir
     share_continual_state: bool = True
     lr: float = 0.03
@@ -79,7 +77,7 @@ class RunConfig:
     stage_participation: tuple[float, ...] = ()
     # Local continual-learning and optimizer ablations.
     gem_grouping: str = "class"
-    optimizer_state_policy: str = "reset"
+    optimizer_state_policy: str = "persist"
     momentum: float = 0.9
     weight_decay: float = 5e-4
     si_xi: float = 0.1
@@ -115,8 +113,7 @@ class RunConfig:
 
     def validate(self):
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
-        assert self.batch_size in {64, 1024} or self.dataset == "synthetic", "CIFAR production jobs support effective batch sizes 64 or 1024"
-        assert 1 <= self.micro_batch_size <= self.batch_size, "Invalid physical microbatch size"
+        assert self.batch_size == 64 or self.dataset == "synthetic", "All production optimization must use physical batch 64"
         assert self.num_clients >= 2
         assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
         assert self.stream_overlap_kind in {'none','intra_same_round','intra_cross_round','inter_same_round','inter_cross_round','combined'}
@@ -157,7 +154,6 @@ class RunConfig:
             from .models import MODEL_IDS
             assert self.model in MODEL_IDS, 'Research requires an explicitly registered native 32x32 research backbone'
         assert self.memory_per_class >= 0
-        assert self.replay_buffer_capacity>=1
         assert 0 <= self.replay_reservoir_fraction <= 1, 'Reservoir fraction must be within [0,1]'
         if self.replay_reservoir_fraction:
             assert self.method == 'replay', 'Per-class reservoir fraction applies to Replay only'
@@ -262,7 +258,6 @@ class RunConfig:
         if data['classwise_head_merge'] is True:data.pop('classwise_head_merge')
         # Preserve the frozen v6 geometry ledger. Execution semantics and roots are v7.
         if data['importance_samples_per_experience']==32:data.pop('importance_samples_per_experience')
-        if data['replay_buffer_capacity']==1000:data.pop('replay_buffer_capacity')
         if data['replay_reservoir_fraction']==0.0:data.pop('replay_reservoir_fraction')
         if data['share_continual_state'] is True:data.pop('share_continual_state')
         return data

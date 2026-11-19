@@ -24,7 +24,7 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
                 'evaluation_samples':0,'test_samples':0},peak or {}
     ids=[i for i,y in enumerate(dataset.targets) if int(y) in observed]
     test_samples=sum(1 for y in bank.test.targets if int(y) in observed)
-    loader=DataLoader(Subset(dataset,ids),batch_size=min(batch_size,32),shuffle=False,num_workers=0)
+    loader=DataLoader(Subset(dataset,ids),batch_size=batch_size,shuffle=False,num_workers=0)
     model.eval()
     correct={c:0 for c in observed};count={c:0 for c in observed}
     class_losses={c:0. for c in observed}

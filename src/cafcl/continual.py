@@ -256,10 +256,35 @@ class _IndexedDataset(Dataset):
         return x,y,int(index)
 
 
-def _example_loader(dataset,indices,batch_size,seed,shuffle=True,*,include_indices=False):
-    generator=torch.Generator().manual_seed(seed)
+class _FixedBatchSampler:
+    """No short optimizer batches: replay final samples from the same TRAIN pool."""
+    def __init__(self,size,batch_size,seed,shuffle):
+        if size<1 or batch_size<1:raise ValueError('Empty training batch source')
+        self.size,self.batch_size,self.seed,self.shuffle=size,batch_size,seed,shuffle
+    def __len__(self):
+        from math import ceil
+        return ceil(self.size/self.batch_size)
+    def __iter__(self):
+        gen=torch.Generator().manual_seed(self.seed)
+        order=(torch.randperm(self.size,generator=gen) if self.shuffle else torch.arange(self.size))
+        for start in range(0,self.size,self.batch_size):
+            selection=order[start:start+self.batch_size].tolist()
+            if len(selection)<self.batch_size:
+                extra=torch.randint(self.size,(self.batch_size-len(selection),),generator=gen)
+                selection.extend(order[extra].tolist())
+            assert len(selection)==self.batch_size
+            yield selection
+
+
+def _example_loader(dataset,indices,batch_size,seed,shuffle=True,*,include_indices=False,full_batch=False):
     source=_IndexedDataset(dataset) if include_indices else dataset
-    return DataLoader(Subset(source,list(indices)),batch_size=batch_size,shuffle=shuffle,
+    subset=Subset(source,list(indices))
+    if full_batch:
+        sampler=_FixedBatchSampler(len(subset),batch_size,seed,shuffle)
+        return DataLoader(subset,batch_sampler=sampler,num_workers=0,
+                          pin_memory=torch.cuda.is_available())
+    generator=torch.Generator().manual_seed(seed)
+    return DataLoader(subset,batch_size=batch_size,shuffle=shuffle,
                       num_workers=0,generator=generator,pin_memory=torch.cuda.is_available())
 
 
@@ -275,13 +300,15 @@ def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,acti
             bn_snapshots.append((layer,layer.running_mean.detach().clone(),
                 layer.running_var.detach().clone(),layer.num_batches_tracked.detach().clone()))
     try:
-        # Logical reference gradient: weighted accumulation over bounded physical
-        # batches, without materializing 1024 images/backbone activations on the GPU.
-        total=min(len(indices),batch_size)
-        micro=min(batch_size,16)
-        order=torch.randperm(len(indices),generator=torch.Generator().manual_seed(seed))[:total]
-        selected=[indices[int(i)] for i in order]
-        for x,y in _example_loader(dataset,selected,micro,seed,shuffle=False):
+        # One true physical reference batch; scarce history is drawn with replacement.
+        count=len(indices)
+        if not count:raise ValueError('No historical constraint samples')
+        gen=torch.Generator().manual_seed(seed)
+        draw=(torch.randperm(count,generator=gen)[:batch_size] if count>=batch_size
+              else torch.randint(count,(batch_size,),generator=gen))
+        selected=[indices[int(i)] for i in draw]
+        total=len(selected)
+        for x,y in _example_loader(dataset,selected,batch_size,seed,shuffle=False):
             x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
             reference_logits=model(x)
             if reference_classes is not None:
@@ -430,7 +457,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         was_train=model.training
         model.eval()
         with torch.no_grad():
-            subset=oldmemory[:min(cfg.micro_batch_size,len(oldmemory))]
+            subset=oldmemory[:min(cfg.batch_size,len(oldmemory))]
             batch=torch.stack([training_data[i][0] for i in subset]).to(device)
             labels=torch.tensor([bank.train.targets[i] for i in subset],device=device)
             value=float(F.cross_entropy(model(batch),labels).item())
@@ -438,29 +465,46 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         return value
     old_loss_before=local_old_loss() if cfg.prepost_diagnostics else None
     step_count=0; loss_total=0.; last_projection=0.; num_violations=0;qp_calls=0
+    def draw_history(n,tag):
+        """CPU retrieval for assembly into a single physical model input of 64."""
+        chosen=rng.choice(oldmemory,size=n,replace=len(oldmemory)<n).tolist()
+        x,y=next(iter(_example_loader(training_data,chosen,n,
+                     cfg.seed+round_id+client.client_id+tag,shuffle=False)))
+        return x,y,chosen
+
+    def full_training_batches(loaded):
+        x,y=loaded[:2]
+        original_ids=loaded[2] if len(loaded)>2 else None
+        if cfg.method!='replay' or not oldmemory or cfg.replay_ratio<=0:
+            yield x,y,original_ids
+            return
+        # One supervised CE over a MIXED current/history physical batch of 64.
+        # This eliminates doubled separately averaged Replay gradients.
+        fresh=max(1,min(cfg.batch_size-1,int(round(cfg.batch_size/(1+cfg.replay_ratio)))))
+        for offset in range(0,len(y),fresh):
+            nx,ny=x[offset:offset+fresh],y[offset:offset+fresh]
+            if len(ny)<fresh:
+                fill=torch.as_tensor(rng.integers(0,len(y),size=fresh-len(ny)),dtype=torch.long)
+                nx=torch.cat((nx,x[fill]),dim=0)
+                ny=torch.cat((ny,y[fill]),dim=0)
+            hx,hy,_=draw_history(cfg.batch_size-fresh,offset)
+            yield torch.cat((nx,hx),dim=0),torch.cat((ny,hy),dim=0),None
+
     for epoch in range(cfg.epochs):
-        if cfg.method=='replay' and oldmemory and active_pair_classes is None:
-            replay_count=min(len(oldmemory),int(round(len(indices)*cfg.replay_ratio)))
-            chosen=rng.choice(oldmemory,size=replay_count,replace=len(oldmemory)<replay_count).tolist()
-            batch_indices=indices+chosen
-        else:
-            batch_indices=indices
         online_der=cfg.method in {'der','derpp'}
-        for loaded in _example_loader(training_data,batch_indices,cfg.batch_size,
+        for loaded in _example_loader(training_data,indices,cfg.batch_size,
                                    cfg.seed+round_id*100_003+client.client_id*127+epoch,
-                                   include_indices=online_der):
-            batch_x,batch_y=loaded[:2]
-            batch_ids=loaded[2] if online_der else None
-            optimizer.zero_grad(set_to_none=True)
-            logical_size=len(batch_y)
-            macro_loss=0.
-            si_task_grads=None
-            captured_logits={}
-            ids_chunks=(batch_ids.split(cfg.micro_batch_size) if batch_ids is not None
-                        else [None]*len(batch_y.split(cfg.micro_batch_size)))
-            for x,y,original_ids in zip(batch_x.split(cfg.micro_batch_size),
-                                        batch_y.split(cfg.micro_batch_size),ids_chunks):
-                x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
+                                   include_indices=online_der,full_batch=True):
+            for x,y,original_ids in full_training_batches(loaded):
+                optimizer.zero_grad(set_to_none=True)
+                logical_size=len(y)
+                macro_loss=0.
+                si_task_grads=None
+                captured_logits={}
+                if logical_size!=cfg.batch_size:
+                    raise RuntimeError('Training forward does not have exactly 64 images')
+                x=x.to(device,non_blocking=True)
+                y=y.to(device,non_blocking=True)
                 logits=model(x)
                 if original_ids is not None:
                     for idx,z in zip(original_ids.tolist(),logits.detach().cpu()):
@@ -480,7 +524,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     logits=logits.masked_fill(task_mask.unsqueeze(0),-1e9)
                 if active_pair_classes is None and cfg.method=='er_ace':
                     # ER-ACE stream loss: mask historical classes absent from the
-                    # *current* minibatch, but retain future/unseen output columns.
+                    # *current* physical batch, but retain future/unseen output columns.
                     mask=torch.zeros(logits.shape[1],dtype=torch.bool,device=device)
                     current_labels=set(int(v) for v in y.unique().tolist())
                     for past_cls in client.observed_classes:
@@ -501,22 +545,13 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     for j,(parameter,grad) in enumerate(zip(params,task_grad)):
                         if grad is not None:
                             si_task_grads[j]+=grad.detach().cpu()*(len(y)/logical_size)
-                if cfg.method=='replay' and oldmemory and active_pair_classes is not None:
-                    ref_count=min(len(oldmemory),cfg.micro_batch_size,max(1,int(round(len(y)*cfg.replay_ratio))))
-                    chosen=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
-                    rx,ry=next(iter(_example_loader(training_data,chosen,ref_count,
-                        cfg.seed+round_id+client.client_id,shuffle=False)))
-                    loss=loss+canonical_active_loss(
-                        model(rx.to(device)),ry.to(device),seen_classes)
                 if cfg.method in {'er_ace','der','derpp'} and oldmemory:
-                    ref_count=min(len(oldmemory),cfg.micro_batch_size,max(1,int(round(len(y)*cfg.replay_ratio))))
-                    chosen=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
-                    rx,ry=next(iter(_example_loader(training_data,chosen,ref_count,
-                                                   cfg.seed+round_id+client.client_id,shuffle=False)))
+                    ref_count=cfg.batch_size
+                    rx,ry,chosen=draw_history(ref_count,1000)
                     rx,ry=rx.to(device,non_blocking=True),ry.to(device,non_blocking=True)
                     replay_logits=model(rx)
                     if cfg.method=='er_ace':
-                        loss=loss+cfg.der_beta*(
+                        loss=loss+cfg.replay_ratio*cfg.der_beta*
                             canonical_active_loss(replay_logits,ry,seen_classes)
                             if active_pair_classes is not None else F.cross_entropy(replay_logits,ry))
                     else:
@@ -526,17 +561,15 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                         old_logits=torch.stack([client.memory_logits[int(i)] for i in chosen]).to(device)
                         if old_logits.shape!=replay_logits.shape:
                             raise RuntimeError('DER logits incompatible with classifier schema')
-                        loss=loss+cfg.der_alpha*F.mse_loss(replay_logits,old_logits)
+                        loss=loss+cfg.replay_ratio*cfg.der_alpha*F.mse_loss(replay_logits,old_logits)
                         if cfg.method=='derpp':
-                            # The original DER++ samples TWO memory minibatches:
+                            # DER++ draws TWO independent full-size historical batches:
                             # one for old trajectory-logit MSE, one independently
                             # for supervised old-label CE. Sharing a single draw
                             # couples their gradient estimators unnecessarily.
-                            cls_idx=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
-                            bx,by=next(iter(_example_loader(training_data,cls_idx,ref_count,
-                                cfg.seed+round_id+client.client_id+913,shuffle=False)))
+                            bx,by,cls_idx=draw_history(ref_count,1913)
                             supervised_logits=model(bx.to(device))
-                            loss=loss+cfg.der_beta*(
+                            loss=loss+cfg.replay_ratio*cfg.der_beta*
                                 canonical_active_loss(supervised_logits,by.to(device),seen_classes)
                                 if active_pair_classes is not None else F.cross_entropy(supervised_logits,by.to(device)))
                 if cfg.method=='lwf' and teacher is not None:
@@ -575,82 +608,82 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     loss=loss+.5*cfg.regularization_strength*pen
                 macro_loss+=float(loss.detach().item())*(len(y)/logical_size)
                 (loss*(len(y)/logical_size)).backward()
-            if cfg.method in {'gem','agem'} and oldmemory:
+                if cfg.method in {'gem','agem'} and oldmemory:
+                    if active_pair_classes is not None:
+                        freeze_other_class_rows(model,seen_classes)
+                    g=_flatten_grads(params)
+                    if cfg.method=='agem':
+                        refidx=rng.choice(oldmemory,size=min(cfg.batch_size,len(oldmemory)),replace=False).tolist()
+                        ref=_reference_gradient(model,params,training_data,refidx,cfg.batch_size,device,
+                                                cfg.seed+round_id+client.client_id,seen_classes)
+                        z,last_projection,v=agem_project(g,ref)
+                    else:
+                        refs=[]
+                        # Explicit constraint grouping; hidden experience labels
+                        # are not passed to task-free learning algorithms.
+                        if cfg.gem_grouping=='class':
+                            groups=eligible_history
+                        elif cfg.gem_grouping=='stage':
+                            groups=defaultdict(list)
+                            for cls,mem in eligible_history.items():
+                                for idx in mem:
+                                    # The remote exemplar carries the *source* client's
+                                    # experience ID; default lookups must not raise for
+                                    # remotely trained classes absent locally.
+                                    source=client.received_sample_origins.get(int(idx))
+                                    if source is None:
+                                        source=(client.client_id,client.sample_first_local_experience.get(
+                                            int(idx),client.sample_first_stage.get(int(idx),
+                                                client.first_seen_stage.get(cls,-1))))
+                                    groups[source].append(idx)
+                        else:
+                            groups={0:oldmemory}
+                        for group in sorted(groups):
+                            mem=groups[group]
+                            if mem:
+                                historical_classes=(tuple(sorted(set(int(bank.train.targets[int(i)]) for i in mem)))
+                                    if cfg.gem_grouping=='stage' else None)
+                                if historical_classes is not None and len(historical_classes)<2:
+                                    historical_classes=None  # sparse class-imbalanced memory
+                                refs.append(_reference_gradient(model,params,training_data,mem,
+                                                                cfg.batch_size,device,cfg.seed+(group if isinstance(group,int) else (group[0]*100003+group[1])),seen_classes,
+                                                                historical_classes))
+                        z,last_projection,v=gem_project(g,refs)
+                        qp_calls+=int(v>0)
+                    num_violations+=v
+                    _set_grads(params,z)
                 if active_pair_classes is not None:
                     freeze_other_class_rows(model,seen_classes)
-                g=_flatten_grads(params)
-                if cfg.method=='agem':
-                    refidx=rng.choice(oldmemory,size=min(cfg.batch_size,len(oldmemory)),replace=False).tolist()
-                    ref=_reference_gradient(model,params,training_data,refidx,cfg.batch_size,device,
-                                            cfg.seed+round_id+client.client_id,seen_classes)
-                    z,last_projection,v=agem_project(g,ref)
-                else:
-                    refs=[]
-                    # Explicit constraint grouping; hidden experience labels
-                    # are not passed to task-free learning algorithms.
-                    if cfg.gem_grouping=='class':
-                        groups=eligible_history
-                    elif cfg.gem_grouping=='stage':
-                        groups=defaultdict(list)
-                        for cls,mem in eligible_history.items():
-                            for idx in mem:
-                                # The remote exemplar carries the *source* client's
-                                # experience ID; default lookups must not raise for
-                                # remotely trained classes absent locally.
-                                source=client.received_sample_origins.get(int(idx))
-                                if source is None:
-                                    source=(client.client_id,client.sample_first_local_experience.get(
-                                        int(idx),client.sample_first_stage.get(int(idx),
-                                            client.first_seen_stage.get(cls,-1))))
-                                groups[source].append(idx)
-                    else:
-                        groups={0:oldmemory}
-                    for group in sorted(groups):
-                        mem=groups[group]
-                        if mem:
-                            historical_classes=(tuple(sorted(set(int(bank.train.targets[int(i)]) for i in mem)))
-                                if cfg.gem_grouping=='stage' else None)
-                            if historical_classes is not None and len(historical_classes)<2:
-                                historical_classes=None  # sparse class-imbalanced memory
-                            refs.append(_reference_gradient(model,params,training_data,mem,
-                                                            cfg.batch_size,device,cfg.seed+(group if isinstance(group,int) else (group[0]*100003+group[1])),seen_classes,
-                                                            historical_classes))
-                    z,last_projection,v=gem_project(g,refs)
-                    qp_calls+=int(v>0)
-                num_violations+=v
-                _set_grads(params,z)
-            if active_pair_classes is not None:
-                freeze_other_class_rows(model,seen_classes)
-            frozen=None
-            if active_pair_classes is not None:
-                from .class_indexed import snapshot_frozen_rows,restore_frozen_rows
-                frozen=snapshot_frozen_rows(model,seen_classes)
-            if cfg.method=='si':
-                before={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
-                # SI uses the unregularized data-loss path integral.
-                applied_grad={n:si_task_grads[j].clone()
-                              for j,(n,p) in enumerate(model.named_parameters())}
-            optimizer.step()
-            if frozen is not None:
-                restore_frozen_rows(model,optimizer,frozen)
-            if cfg.method=='si':
-                for n,p in model.named_parameters():
-                    displacement=p.detach().cpu()-before[n]
-                    client.si_path[n]+=-applied_grad[n]*displacement
-                    client.si_displacement[n]+=displacement
-            if online_der:
-                # Online DER inserts the model's PRE-UPDATE output at the
-                # moment an input enters the episodic reservoir. The original
-                # logit target must not be overwritten by a later checkpoint.
-                batch_new_ids=list(map(int,batch_ids.tolist()))
-                client.update_memory(batch_new_ids,bank.train.targets,
-                    cfg.memory_per_class,rng,cfg.memory_policy)
-                retained={int(i) for group in client.private_memory.values() for i in group}
-                for idx in retained:
-                    if idx in captured_logits and idx not in client.memory_logits:
-                        client.memory_logits[idx]=captured_logits[idx]
-            step_count+=1
-            loss_total+=macro_loss
+                frozen=None
+                if active_pair_classes is not None:
+                    from .class_indexed import snapshot_frozen_rows,restore_frozen_rows
+                    frozen=snapshot_frozen_rows(model,seen_classes)
+                if cfg.method=='si':
+                    before={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
+                    # SI uses the unregularized data-loss path integral.
+                    applied_grad={n:si_task_grads[j].clone()
+                                  for j,(n,p) in enumerate(model.named_parameters())}
+                optimizer.step()
+                if frozen is not None:
+                    restore_frozen_rows(model,optimizer,frozen)
+                if cfg.method=='si':
+                    for n,p in model.named_parameters():
+                        displacement=p.detach().cpu()-before[n]
+                        client.si_path[n]+=-applied_grad[n]*displacement
+                        client.si_displacement[n]+=displacement
+                if online_der:
+                    # Online DER inserts the model's PRE-UPDATE output at the
+                    # moment an input enters the episodic reservoir. The original
+                    # logit target must not be overwritten by a later checkpoint.
+                    batch_new_ids=list(map(int,batch_ids.tolist()))
+                    client.update_memory(batch_new_ids,bank.train.targets,
+                        cfg.memory_per_class,rng,cfg.memory_policy)
+                    retained={int(i) for group in client.private_memory.values() for i in group}
+                    for idx in retained:
+                        if idx in captured_logits and idx not in client.memory_logits:
+                            client.memory_logits[idx]=captured_logits[idx]
+                step_count+=1
+                loss_total+=macro_loss
     # Finalize the just-completed SI experience *before* communication. In v7,
     # consolidation happened only at the next arrival; the most recent task's
     # importance consequently never reached the server in that sync.
@@ -693,7 +726,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     # Never allocate replay/GEM memory for non-memory algorithms.
     if cfg.method in {'gem','agem','replay','er_ace'}:
         client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy,
-                             total_limit=(cfg.replay_buffer_capacity if cfg.method=='replay' else 0),
+                             total_limit=0,
                              reservoir_fraction=(cfg.replay_reservoir_fraction if cfg.method=='replay' else 0.),
                              class_totals=(Counter(map(int,bank.train.targets)) if cfg.method=='replay' and cfg.replay_reservoir_fraction else None))
     old_loss_after=local_old_loss() if cfg.prepost_diagnostics else None
