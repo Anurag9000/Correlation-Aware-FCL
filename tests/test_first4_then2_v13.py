@@ -147,7 +147,7 @@ def test_one_pair_after_initial_full_sync_uses_prior_global_state(tmp_path,metho
     cfg=RunConfig(dataset='synthetic',model='test_linear',stream_protocol=True,
         class_pair_protocol='strict',num_clients=2,classes_per_local_task=2,
         local_tasks_per_round=2,stages=1,rounds_per_stage=1,
-        participation=1.,epochs=1,batch_size=1024,micro_batch_size=4,
+        participation=1.,epochs=1,batch_size=64,
         method=method,aggregator='fedavg',
         memory_per_class=2,importance_samples_per_experience=4,
         job_id='global_next_'+method,seed=17)

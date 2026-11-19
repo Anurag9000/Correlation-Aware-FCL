@@ -19,7 +19,7 @@ from cafcl.models import create_model
 def _fixture(n=5):
     cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=n,
         stream_protocol=True,local_tasks_per_round=2,classes_per_local_task=2,
-        method='replay',batch_size=1024,share_continual_state=True)
+        method='replay',batch_size=64,share_continual_state=True)
     init=create_model('test_linear',100,allow_test_model=True).state_dict()
     clients={cid:LocalState(cid) for cid in range(n)}
     for client in clients.values():

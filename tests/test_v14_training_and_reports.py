@@ -49,7 +49,7 @@ def test_every_method_can_update_known_rows_but_never_future_rows(method):
     c=LocalState(0)
     c.receive(copy_cpu_state(model),0)
     config=RunConfig(dataset='synthetic',model='test_linear',method=method,
-                     num_clients=2,batch_size=16,micro_batch_size=4,
+                     num_clients=2,batch_size=16,
                      lr=.03,epochs=1,memory_per_class=2,
                      importance_samples_per_experience=2,
                      momentum=.9,weight_decay=5e-4)
@@ -130,7 +130,7 @@ def test_per_sync_report_tracks_known_class_history_and_no_test_feedback(tmp_pat
 def test_synthetic_run_exports_all_round_tables_without_changing_communication(tmp_path):
     cfg=RunConfig(dataset='synthetic',model='test_linear',
         num_clients=2,stream_protocol=True,class_pair_protocol='strict',
-        method='replay',aggregator='fedavg',batch_size=64,micro_batch_size=4,
+        method='replay',aggregator='fedavg',batch_size=64,
         epochs=1,stages=1,rounds_per_stage=1,
         momentum=.9,weight_decay=5e-4,
         participation=1.,evaluate_final_only=True,job_id='stage_v14')
@@ -180,7 +180,7 @@ def test_agem_historical_reference_does_not_compete_with_unknown_future_classes(
 def test_final_only_diagnostics_still_update_validation_forgetting_history(tmp_path):
     cfg=RunConfig(dataset='synthetic',model='test_linear',
         num_clients=2,stream_protocol=True,class_pair_protocol='strict',
-        method='sgd',aggregator='fedavg',batch_size=64,micro_batch_size=4,
+        method='sgd',aggregator='fedavg',batch_size=64,
         epochs=1,stages=1,rounds_per_stage=1,
         momentum=.9,weight_decay=5e-4,participation=1.,
         evaluate_final_only=True,job_id='validate_forgetting_peaks_v14')
