@@ -18,3 +18,6 @@ Every active CIFAR-100 job now schedules independent client model instances conc
 
 
 v11 note: FedAvg and its canonical server-optimizer families now synchronize the entire model, including classifier rows, without any separate classwise post-aggregation. The five research-specific server methods retain their explicitly custom class-aware/conflict/retention transformations. A hidden client's unsent class-exposure counts remain hidden until upload. Old v10 status markers cannot be used with v11. The server is not yet proven GPU-accurate by these numerical/CI tests.
+
+
+**v12 local-method update:** The research protocol now audits all 11 client learners against their primary papers and corrects EWC, MAS, SI, DER and memory-sampling mathematics while preserving every scenario/task class-stream and server-update setting. Full v12 CIFAR-100 runs have not been executed as part of this source/CI audit; [full paper-method ledger](CL_METHOD_FIDELITY_V12.md).

@@ -173,3 +173,104 @@ def test_ewc_and_mas_per_experience_budget_in_config():
     with pytest.raises(AssertionError):
         replace(RunConfig(dataset='synthetic'),
                 importance_samples_per_experience=0).validate()
+
+
+def test_gem_historical_reference_gradient_uses_its_original_pair_loss():
+    from cafcl.continual import _reference_gradient
+    import torch.nn.functional as F
+    model=nn.Linear(1,4,bias=False)
+    with torch.no_grad():
+        model.weight.copy_(torch.tensor([[.2],[-.5],[.8],[1.2]]))
+    params=list(model.parameters())
+    actual=_reference_gradient(model,params,ScalarBank.train,[0,1],2,
+        torch.device('cpu'),13,active_pair_classes=None,reference_classes=(0,1))
+    model.zero_grad()
+    x=torch.tensor([[1.],[3.]])
+    y=torch.tensor([0,1])
+    F.cross_entropy(model(x)[:,[0,1]],y).backward()
+    expected=torch.cat([p.grad.reshape(-1) for p in params])
+    torch.testing.assert_close(actual,expected,atol=1e-7,rtol=1e-6)
+
+
+def test_si_integral_uses_unregularized_task_gradient_even_with_old_importance():
+    import torch.nn.functional as F
+    model=create_model('test_mlp',4,allow_test_model=True)
+    client=LocalState(0)
+    client.receive({k:v.detach().clone() for k,v in model.state_dict().items()},0)
+    conf=replace(cfg('si'),model='test_mlp',regularization_strength=20.,
+                 lr=.07,si_xi=.1)
+    client.local_experience=0
+    client.arrival([0,1,2,3],(0,1),0)
+    first=local_train(model,client,ImageBank(),conf,torch.device('cpu'),0,
+                      experience_end=True,active_pair_classes=(0,1))
+    client.shared_weights=first['weights']
+    old_prec={n:v.clone() for n,v in client.pending_importance['si']['precision'].items()}
+    client.local_experience=1
+    client.arrival([4,5,6,7],(2,3),1)
+    model.load_state_dict(client.shared_weights)
+    before={n:p.detach().clone() for n,p in model.named_parameters()}
+    x=torch.stack([ImageBank.train[i][0] for i in range(4,8)])
+    labels=torch.tensor([0,0,1,1])
+    logits=model(x)
+    old_task_loss=F.cross_entropy(logits[:,[2,3]],labels)
+    params=dict(model.named_parameters())
+    gradients=torch.autograd.grad(old_task_loss,list(params.values()),
+                                   allow_unused=True)
+    expected_task_grad={name:(g.detach().clone() if g is not None
+                              else torch.zeros_like(p))
+                        for (name,p),g in zip(params.items(),gradients)}
+    local_train(model,client,ImageBank(),conf,torch.device('cpu'),0,
+                experience_end=True,active_pair_classes=(2,3))
+    fresh_delta={n:p.detach()-before[n] for n,p in model.named_parameters()}
+    for name,delta in fresh_delta.items():
+        newly_added=(client.pending_importance['si']['precision'][name]-old_prec[name])
+        expected=(-expected_task_grad[name]*delta/
+                  (delta.square()+conf.si_xi)).clamp(min=0)
+        torch.testing.assert_close(newly_added,expected,atol=2e-5,rtol=1e-4)
+
+
+@pytest.mark.parametrize('method',('der','derpp'))
+def test_der_old_trajectory_logits_remain_immutable_after_new_task(method):
+    model,client=client_model()
+    client.local_experience=0
+    client.arrival([0,1,2,3],(0,1),0)
+    first=local_train(model,client,ImageBank(),cfg(method),
+                      torch.device('cpu'),0,experience_end=True,
+                      active_pair_classes=(0,1))
+    targets={i:v.clone() for i,v in client.memory_logits.items()}
+    client.shared_weights=first['weights']
+    client.local_experience=1
+    client.arrival([4,5,6,7],(2,3),1)
+    local_train(model,client,ImageBank(),cfg(method),
+                torch.device('cpu'),0,experience_end=True,
+                active_pair_classes=(2,3))
+    assert set(targets).issubset(client.memory_logits)
+    for i,v in targets.items():
+        torch.testing.assert_close(client.memory_logits[i],v,rtol=0,atol=0)
+    assert len(client.memory_logits)==8
+
+
+def test_inactive_rows_are_bitwise_frozen_even_with_optimizer_momentum():
+    from cafcl.class_indexed import (
+        freeze_other_class_rows,snapshot_frozen_rows,restore_frozen_rows)
+    model=nn.Linear(3,4)
+    optimizer=torch.optim.SGD(model.parameters(),lr=.1,momentum=.9)
+    x=torch.randn(3,3)
+    y=torch.tensor([0,1,2])
+    # Populate momentum buffers on ALL classifier rows.
+    nn.functional.cross_entropy(model(x),y).backward()
+    optimizer.step()
+    old_w=model.weight.detach().clone()
+    old_b=model.bias.detach().clone()
+    optimizer.zero_grad()
+    nn.functional.cross_entropy(model(x),y).backward()
+    freeze_other_class_rows(model,(0,1))
+    snapshot=snapshot_frozen_rows(model,(0,1))
+    optimizer.step()
+    restore_frozen_rows(model,optimizer,snapshot)
+    assert torch.equal(model.weight[2:],old_w[2:])
+    assert torch.equal(model.bias[2:],old_b[2:])
+    assert torch.equal(optimizer.state[model.weight]['momentum_buffer'][2:],
+                       torch.zeros_like(model.weight[2:]))
+    assert torch.equal(optimizer.state[model.bias]['momentum_buffer'][2:],
+                       torch.zeros_like(model.bias[2:]))

@@ -76,3 +76,8 @@ All active CIFAR-100 suite entrypoints use the same simulator implementation and
 ## v11 canonical FedAvg heads and provenance
 
 The full-participation pilot now uses original **sample-weighted whole-model FedAvg** for all floating-point ViT tensors, including *every one of the 100 classifier rows and biases*. No custom classwise postprocessing occurs. The rotating-offline pilot applies the same complete-model mean to delayed updates, but reconnected clients first rebase their accumulated displacement `G+(L-A)`: this is **not** original synchronous FedAvg and is marked separately in the metrics. The server tracks accepted class-example exposure without using unsynchronized client-only class counts. `--gpu 0` remains the single-device command, with two independently running five-client simulations. Job IDs use `V11_SERVER`, and the primary result root becomes `primary_cifar100_single_gpu_server_v11_<backbone>_seed<seed>`.
+
+
+## New v12 CL-method semantics
+
+The local 11-method training implementation now uses **paper-grounded per-example EWC Fisher and MAS sensitivity**, **SI task-only gradient path importance**, online DER/DER++ logit capture before the corresponding optimizer step, and true persistent per-class random reservoirs for memory-based methods. All 5-client task barriers and strict active classifier rows are unchanged. The primary output root is `primary_cifar100_single_gpu_cl_v12_<backbone>_seed<seed>`, and job IDs use `V12_CL`. Older run checkpoints are incompatible with the v12 protocol. For precise fidelity-vs-setting-adaptation distinctions see [CL method fidelity](CL_METHOD_FIDELITY_V12.md).
