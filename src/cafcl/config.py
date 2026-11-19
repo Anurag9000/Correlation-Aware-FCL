@@ -6,8 +6,8 @@ import json
 
 @dataclass(frozen=True)
 class RunConfig:
-    dataset: str = "cifar10"
-    batch_size: int = 512
+    dataset: str = "cifar100"
+    batch_size: int = 1024
     num_clients: int = 10
     rounds_per_stage: int = 20
     epochs: int = 1
@@ -17,9 +17,10 @@ class RunConfig:
     aggregator: str = "fedavg"
     scenario: str = "disjoint"
     stages: int = 2
+    micro_batch_size: int = 16  # physical batch; effective SGD step remains batch_size=1024
     memory_per_class: int = 20
     lr: float = 0.03
-    model: str = "smallcnn"
+    model: str = "vit_tiny_patch16_32"
     seed: int = 0
     full_sync: bool = False
     relation: str = "natural"
@@ -89,16 +90,54 @@ class RunConfig:
     reset_memory_on_sync: bool = False
     feedback_threshold: float = 0.25
     feedback_gain: float = 0.5
-    require_cuda: bool = False
-    validation_fraction: float = 0.1
-    train_fraction: float = 1.0
+    # Single class-indexed classifier with optional strict two-label local episodes.
+    # 'compatible' pairs same-round labels where possible and explicitly marks
+    # singleton fallbacks; 'strict' rejects unpairable class arrivals.
+    class_pair_protocol: str = 'compatible'
+    classwise_head_merge: bool = True
+
+    # New communication-interval task stream; orthogonal design knobs.
+    stream_protocol: bool = False
+    classes_per_local_task: int = 2
+    local_tasks_per_round: int = 2
+    stream_overlap_kind: str = 'none'
+    stream_overlap_fraction: float = 0.0
+    stream_recurrence_rounds: int = 0
+    offline_duration_rounds: int = 0
+    stream_terminal_flush: bool = True
+    stream_offline_policy: str = "random"  # random or rotate_once (pilot only)
+    evaluate_final_only: bool = False
 
     def validate(self):
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
-        assert self.batch_size == 512 or self.dataset == "synthetic", "CIFAR run batch size must remain 512"
-        assert 0. < self.validation_fraction < .5
-        assert 0. < self.train_fraction <= 1.
+        assert self.batch_size == 1024 or self.dataset == "synthetic", "All CIFAR production jobs require batch size 1024"
+        assert 1 <= self.micro_batch_size <= self.batch_size, "Invalid physical microbatch size"
         assert self.num_clients >= 2
+        assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
+        assert self.stream_overlap_kind in {'none','intra_same_round','intra_cross_round','inter_same_round','inter_cross_round','combined'}
+        assert 0 <= self.stream_overlap_fraction <= 1
+        assert self.stream_recurrence_rounds >= 0 and self.offline_duration_rounds >= 0
+        assert self.stream_offline_policy in {'random','rotate_once'}
+        if self.evaluate_final_only:
+            assert self.selector in {'random','fixed','round_robin'}, 'Test split cannot guide online client selection'
+            assert not self.prepost_diagnostics and not self.gradient_diagnostics
+        if self.stream_protocol:
+            assert self.dataset in {'cifar100','synthetic'}
+            assert self.learning_setting == 'class_il', 'No task ID or task-specific heads'
+            assert self.class_pair_protocol == 'strict'
+            assert not self.full_sync and not self.reset_memory_on_sync, 'Offline clients must never receive server broadcasts or lose memory'
+            assert self.classwise_head_merge, 'Canonical class-wise server fusion is required'
+            assert not self.class_subset, 'CIFAR-100 subset is insufficient for default 10-client curriculum'
+            assert not self.holders_override and not self.arrival_lag_by_client
+            assert not self.stage_participation and not self.participation_overrides
+            assert not self.fork_source_job, 'Legacy fork checkpoints cannot be used with new streams'
+            if self.offline_duration_rounds:assert self.selector == 'random'
+            if self.stream_offline_policy == 'rotate_once':
+                assert self.offline_duration_rounds == 0 and self.selector == 'random'
+                assert self.stream_overlap_kind == 'none' and self.stream_recurrence_rounds == 0
+                assert self.participation == 1 - 1/self.num_clients
+                assert self.stream_terminal_flush
+        assert self.class_pair_protocol in {'compatible','strict'}
         assert self.rounds_per_stage >= 1 and self.stages >= 1
         assert self.epochs >= 1 and self.lr > 0
         assert 0 < self.participation <= 1
@@ -106,7 +145,11 @@ class RunConfig:
         assert self.method in {"si", "sgd", "replay", "agem", "gem", "ewc", "er_ace", "der", "derpp", "mas", "lwf"}
         assert self.aggregator in {"class_balanced", "inverse_participation", "conflict_aware", "retention_aware", "conflict_projection", "fedavg", "uniform", "fedadam", "fedavgm"}
         assert self.scenario in {"stationary", "gradual_drift", "shifted_recurrence", "task_incremental", "disjoint", "iid", "overlap", "related", "recurrence", "asynchronous", "mixed", "domain", "non_iid"}
-        assert self.model in {"smallcnn", "linear", "mlp"}
+        if self.dataset == 'synthetic':
+            assert self.model in {'test_linear','test_mlp','test_smallcnn','vit_tiny_patch16_32','resnet18_cifar32'}
+        else:
+            from .models import MODEL_IDS
+            assert self.model in MODEL_IDS, 'Research requires an explicitly registered native 32x32 research backbone'
         assert self.memory_per_class >= 0
         assert self.causal_max_clients >= 1 and self.checkpoint_every >= 0
         assert self.participation_schedule in {"feedback", "stage", "constant", "increasing", "decreasing", "alternating"}
@@ -119,7 +162,7 @@ class RunConfig:
             # No privileged clean-label memory, class-balanced server weights
             # or simulator label-aware client selection in the noise baseline.
             assert self.method=='sgd' and self.selector=='random'
-            assert self.aggregator=='fedavg'
+            assert self.aggregator=='fedavg' 
         assert self.regularization_strength >= 0 and self.fedprox_mu >= 0
         assert self.server_lr > 0 and 0 <= self.server_beta1 < 1 and 0 <= self.server_beta2 < 1
         assert self.fedadam_epsilon > 0
@@ -134,11 +177,11 @@ class RunConfig:
         if self.learning_setting=='domain_il':
             assert self.scenario in {"domain","gradual_drift"}
         if self.learning_setting=='boundary_free':
-            assert self.boundary_mode=='hidden'
+            assert self.boundary_mode=='hidden' 
         if self.boundary_mode=='hidden':
             # Stage-dependent consolidation would leak hidden task boundaries.
             assert self.method in {"sgd","replay","gem","agem","er_ace","der","derpp"}
-            assert self.gem_grouping!='stage'
+            assert self.gem_grouping!='stage' 
         assert self.gem_grouping in {"class", "stage", "all"}
         assert 0 <= self.momentum < 1 and self.si_xi > 0 and self.selection_temperature > 0
         assert self.relation in {"natural", "related", "unrelated"}
@@ -193,8 +236,13 @@ class RunConfig:
         return self
 
     def to_dict(self):
-        return asdict(self)
+        data=asdict(self)
+        # Preserve old plan-file serialization for unchanged job configurations.
+        # Every nondefault protocol variant is still explicitly serialized.
+        if data['class_pair_protocol']=='compatible':data.pop('class_pair_protocol')
+        if data['classwise_head_merge'] is True:data.pop('classwise_head_merge')
+        return data
 
     def signature(self):
-        raw = json.dumps(asdict(self), sort_keys=True)
+        raw = json.dumps(self.to_dict(), sort_keys=True)
         return hashlib.sha256(raw.encode()).hexdigest()[:16]

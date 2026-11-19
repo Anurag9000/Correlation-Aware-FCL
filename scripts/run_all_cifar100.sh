@@ -3,6 +3,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
-python -m cafcl.cli suite --dataset cifar100 --suite all-supported --download \
+python -m cafcl.full_matrix --dataset cifar100 --suite full --download \
   --data-root "${DATA_ROOT:-$ROOT/data}" \
   --output-dir "${RESULTS_ROOT:-$ROOT/results}" "$@"

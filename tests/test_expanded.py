@@ -17,8 +17,8 @@ from cafcl.causal import aggregation_subset_report
 
 
 def conf(**kwargs):
-    return replace(RunConfig(dataset='synthetic',num_clients=5,stages=2,
-                             rounds_per_stage=2,model='linear'),**kwargs)
+    return replace(RunConfig(dataset='synthetic',model='test_linear',num_clients=5,stages=2,
+                             rounds_per_stage=2),**kwargs)
 
 
 def test_manual_participation_exact_budget():
@@ -92,8 +92,8 @@ def test_task_oracle_masks_other_task_logit():
         def forward(self,x):
             return torch.tensor([[3.,2.,4.,0.],[5.,0.,3.,2.]],device=x.device)[:len(x)]
     bank=DataBank(Tiny(),Tiny(),4,{})
-    ordinary,_=evaluate(Fixed(),bank,{0,2},batch_size=512,device='cpu')
-    masked,_=evaluate(Fixed(),bank,{0,2},batch_size=512,device='cpu',
+    ordinary,_=evaluate(Fixed(),bank,{0,2},batch_size=1024,device='cpu')
+    masked,_=evaluate(Fixed(),bank,{0,2},batch_size=1024,device='cpu',
                       task_class_groups=[[0,1],[2,3]])
     assert masked['accuracy']>ordinary['accuracy']
     assert masked['task_id_at_inference'] is True
@@ -130,7 +130,7 @@ def test_conflict_projection_and_retention_aggregate():
 def test_subset_counterfactual_evaluates_all_combinations():
     bank=get_data_bank('synthetic','unused')
     from cafcl.models import create_model,copy_cpu_state
-    model=create_model('linear',10)
+    model=create_model('test_linear',10,allow_test_model=True)
     base=copy_cpu_state(model)
     ups=[]
     for cid in range(3):
@@ -234,11 +234,3 @@ def test_spurious_and_noise_end_to_end(tmp_path):
         assert 0<=final['accuracy']<=1
 
 
-def test_research_plans_preserve_20class_cifar100_experiment():
-    from cafcl.planner import all_supported_suite
-    planned=all_supported_suite('cifar100')
-    specific=[x for x in planned if x.dataset=='cifar100_20']
-    assert specific
-    assert all(x.stages==2 and x.rounds_per_stage==20 and x.batch_size==512 for x in specific)
-    assert any(x.holders_override.get('12')==(3,) and x.holders_override.get('13')==(3,)
-               for x in specific)

@@ -1,138 +1,63 @@
-# Correlation-Aware Federated Continual Learning (CA-FCL)
+# Correlation-Aware Federated Continual Learning — CIFAR-100, native 32×32 (v6)
 
-A modular, research-oriented PyTorch simulator for **federated continual learning under partial client participation, class overlap, old/new class relationships, cross-client temporal recurrence, and local forgetting prevention**.
+**Primary goal: run exactly TWO initial investigation jobs**, not the ~50K-job factorial sweep. This project simulates independent continuous client learning under partial server participation. Every client sees consecutive supervised tasks, continues training even when disconnected, and eventually uploads accumulated parameter changes since its last synchronization. Every connected client receives the newly aggregated server model after the upload; the disconnected clients receive nothing. Private A-GEM/GEM/replay/EWC/SI/DER/etc. memories persist through normal sync.
 
-> **Implementation status (2026-11-18 server validation pass):** 152 experiment blocks are documented; **144 block IDs have at least one dedicated runnable configuration**, although many are *partial/approximate research controls*. There are **423 independently configured CIFAR-10 jobs and 425 CIFAR-100 jobs**, all with **batch size 512**. The CIFAR-100 suite also includes the original **20-class / 10+10 class-incremental** intervention. The latest CPU-only server test run reports **57 passed, 2 CUDA-specific tests skipped**. The full CIFAR suite and GPU pilots have not yet run. For the eight unscheduled blocks and detailed limitations, see [`docs/STATUS.md`](docs/STATUS.md).
+## Selected architectures — identical native 32×32 image data and effective batch 1024
 
-## Install
+| Choice | `--backbone` | Production model ID | Initialization |
+|---|---|---|---|
+| **Default ViT** | `vit` | `vit_tiny_patch16_32` | Native PyTorch ViT-Tiny/16, seeded random |
+| **Default CNN** | `cnn` | `resnet18_cifar32` | Native PyTorch ResNet-18 with CIFAR 3×3/stride-1 stem, seeded random |
 
-```bash
-python -m pip install -e '.[test]' -c requirements-cuda121.txt \
-  --extra-index-url https://download.pytorch.org/whl/cu121
-pytest -q
-```
+Both are fully implemented directly in `src/cafcl/models.py`; no 224×224 resize, mandatory DeiT pretrained weights, standard CNN, or silent fallback. The 100-output classifier uses canonical global label IDs. A two-class task trains the active two-label softmax while other class rows remain frozen; the shared feature extractor remains trainable. ViT-Tiny/16 has only **2×2 = four image patches** at 32×32, an important accuracy limitation. See [BACKBONES.md](docs/BACKBONES.md).
 
-Requires Python >=3.10, PyTorch, torchvision, SciPy, NumPy, and PyYAML. Registered CIFAR production jobs set `require_cuda=true` and fail before creating run output if CUDA is unavailable; synthetic unit tests may run on CPU. CIFAR jobs reserve a deterministic, stratified 10% validation split from the original training set. Round feedback and selection use validation only; the official CIFAR test split is evaluated once after the final model is saved. CIFAR datasets download through torchvision only when explicitly enabled. A separate `cifar100_20` mode remaps an official 20-class CIFAR-100 subset into a 10+10 task sequence; its jobs are included inside the CIFAR-100 suite.
+Every CIFAR production job uses effective **batch size 1024** and physical microbatch 16 by default for gradient accumulation. For ResNet-18, BatchNorm running statistics reflect microbatches, not an actual physical 1024 batch; see methodology caveats.
 
-## Run every registered executable job, one after another, batch size 512
+## First: two-job primary investigation
 
-```bash
-# Inspect jobs first (no training, no download):
-bash scripts/run_all_cifar10.sh --plan-only
-bash scripts/run_all_cifar100.sh --plan-only
+Five clients each learn **four new distinct classes per server interval**, organized as **two sequential two-class tasks**. This lasts exactly five intervals: `5 clients × 4 classes × 5 intervals = 100 unique CIFAR-100 classes`. Compare:
 
-# Sequentially train and save all registered CIFAR-10 jobs:
-export CUDA_VISIBLE_DEVICES=0
-export PYTHONUNBUFFERED=1
-bash scripts/run_all_cifar10.sh
+1. **Full baseline:** all five clients upload and synchronize each interval.
+2. **Rotating-offline intervention:** exactly one different client is offline during each of the five intervals, so each client is withheld once, with its continuing local model/memory preserved.
 
-# Sequentially train and save all registered CIFAR-100 jobs:
-bash scripts/run_all_cifar100.sh
-
-# Across datasets, without concurrent execution:
-bash scripts/run_both_sequentially.sh
-```
-
-Use `--limit 1` to smoke-test the first job, `--stop-on-error` to abort on the first failure, and `--seed N` plus a **different** `RESULTS_ROOT` for independent replication sets. Use `DATA_ROOT` for the CIFAR download location. The scripts **never start automatically** after install or push.
-
-The default plan on each dataset comprises the 60-job canonical full/partial-participation matrix; supported participation, overlap, relatedness, recurrence, memory, synchronization, aggregation, optimizer, selection, and diagnostic ablations; and expanded mechanisms including DER/DER++, ER-ACE, MAS, LwF, server FedAdam/FedAvgM, adaptive participation scheduling, heterogeneous local clients, retrospective leave-one-client-out aggregation, varying inactive-data retention, and **matched multi-round include/exclude counterfactual forks** from shared full-state checkpoints. See `configs/plans/` and `docs/EXPERIMENT_CATALOGUE.md`.
-
-## Non-negotiable scientific semantics
-
-1. **Data arrives at all clients**, irrespective of selection. This immediately expands the global evaluation population.
-2. **Every selected client receives the current global model before local training**, including rejoining clients.
-3. Clients train only on accessible local training indices and permitted private memory; no global raw training-data pooling is performed for optimization.
-4. The server aggregates accepted local updates using the configured algorithm.
-5. **Every selected active client immediately receives the new global model after aggregation.** A separate `full_sync` mode broadcasts to inactive clients too.
-6. The global **validation evaluation includes every class observed anywhere so far**, even when held only by an inactive client. The official CIFAR test set is reserved for final model evaluation. Global model exposure and never-integrated classes are separately recorded.
-7. The local memory survives global synchronization. GEM/A-GEM constrain against locally remembered historical classes, which does not guarantee globally forgetting-safe aggregation.
-8. Every accepted model update is versioned; completed jobs retain independent configurations, metrics, stage checkpoints, round-level fork checkpoints when requested, and a final model. An interruption can resume from a durable round checkpoint.
-
-## Local algorithms
-
-Implemented: SGD, local experience replay, local Synaptic Intelligence, A-GEM gradient projection, GEM quadratic-program projection with explicit residual checks, simplified diagonal-Fisher EWC, ER-ACE-like asymmetric stream masking and replay, local stage-consolidated DER and DER++, MAS-style local importance, LwF-style distillation, and optional FedProx local proximal regularization.
-
-**Methodology qualifications:** ER-ACE, DER/DER++, EWC, MAS and LwF are *research adaptations* and are **not claimed as exact original-paper reproductions**. DER logits are consolidated at local-training boundaries rather than each incoming online stream step. GEM's nonnegative dual QP uses a device-resident projected-gradient solver in production; SciPy is retained as an independent numerical test reference. Results must carry these qualifications.
-
-## Selection / aggregation
-
-Select: random, fixed, round-robin, least-recently-active, label coverage, old/new-class coverage, balanced, diversity, semantic-relatedness proxy, overlap, recurrence, fairness, stochastic-relatedness, and historical coverage. Selection based on simulator client labels is a **privileged oracle baseline**; not a privacy-preserving deployable solution.
-
-Aggregate: sample-weighted FedAvg, uniform client averaging, FedAvgM-style server momentum, FedAdam-style adaptive server optimization. The latter two maintain server optimizer state and record their hyperparameters. Proximal stabilization (`fedprox_mu`) is implemented in local training, not as an aggregation operator.
-
-## Correlation and causal analysis
-
-The simulator supports disjoint/IID/Dirichlet-skewed, overlapping, related/unrelated class-order, temporal recurrence (same versus different client, delay), mixed, and asynchronous arrival scenarios. CIFAR-100 relationships use official coarse-superclass metadata; CIFAR-10 relationships use documented heuristic class pairings. Neither is ground-truth gradient similarity.
-
-Opt-in diagnostics compute class-label Jaccard, feature-mean cosine, held-training-sample class-gradient cosine, temporal arrival correlations, and **retrospective aggregation-only leave-one-client-out effects**. These diagnostics have privileged access to simulator training statistics and cannot be advertised as deployable under strong federated privacy constraints. Retrospective aggregation counterfactuals are distinct from the implemented **limited multi-round checkpoint forks**. The latter resume two client-selection intervention arms from a shared full server/client/RNG snapshot; they do not exhaust the causal intervention search space.
-
-## Run artifacts
-
-```text
-results/cifar10/
-  job_plan.json
-  suite_status.json
-  runs/<INDEPENDENT_JOB_ID>/
-    config.json
-    data_partition.json
-    scenario.pt
-    status.json
-    metrics.json
-    checkpoint_latest.pt
-    model_stage_01.pt
-    model_stage_02.pt
-    ...
-    model_final.pt
-    final_test_metrics.json
-    summary.json
-```
-
-The CIFAR-100 tree is identical. Every run has its own model and results. Stage and latest full-state checkpoints preserve client memory, model versions, participation RNG state, server optimizer state, and global metrics. Completed jobs are skipped only if the expected artifacts and matching configuration are present. Changed configurations cannot silently overwrite completed jobs.
-
-The validation-bank size expands when new labels arrive, so the raw full-population accuracy change is *not identical* to forgetting. Per-class longitudinal retention, previously learned/integrated status and old/new accuracy are reported separately. Classes never globally trained remain in global validation accuracy. Official test metrics are written separately after training.
-
-## Validate and inspect
+Both arms use **A-GEM locally, FedAvg + class-aware row fusion at the server, the same class stream, same seed 0, no label overlap, batch 1024**, and a final communication-only flush. Official test accuracy is evaluated **only once at the end**, after verifying all 100 labels reached the server. The pilot produces paired overall and per-class accuracy comparisons. This is **two jobs total**, not one per backbone; select which model the two jobs use.
 
 ```bash
-pytest -q
-python -m cafcl.cli catalogue --output catalogue.json
-PYTHONPATH=src CUDA_VISIBLE_DEVICES= python -m cafcl.cli suite --dataset synthetic --suite core --limit 1
+python -m pip install -e '.[test]'
+python -m pytest -q
+python scripts/validate_factorial_plans.py
+bash scripts/run_primary_probe_cifar100.sh --plan-only
+
+# Two simultaneous CUDA processes on mtechdeserver, assigned one GPU each:
+bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,1
+# Or ResNet-18, still just two jobs:
+bash scripts/run_primary_probe_cifar100.sh --backbone cnn --gpus 0,1
+# If only one GPU is available, both can share it if memory permits:
+bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,0
 ```
 
-The smoke test uses an offline ten-class synthetic image dataset and is not evidence about CIFAR training performance.
+The launch tool prepares two independent processes, logs, resumable checkpoints, and a final paired report. **This repository has not been connected to `mtechdeserver` from this chat: no real-GPU training is claimed here.** See [PRIMARY_PROBE.md](docs/PRIMARY_PROBE.md).
 
-## CIFAR-10 GPU pilot
+## Revised full factorial registry (do not launch until pilot review)
 
-On the server, after the official CIFAR-10 dataset is available, prepare and run the separate sequential pilot:
+The **source-generated, mathematically audited CIFAR-100 ledger contains 38,370 feasible configurations per selected backbone** (not 53,805). The stricter audit rejected **15,435** registrations: 2,178 unrealized overlap geometries, 6,534 truncated offline-duration interventions, 6,534 inert, aliased, or signal-free selection interventions, and 189 unused LwF hyperparameter configurations. The **5,346-job balanced core remains complete** across all 11 local CL methods, all nine server methods, six overlap geometries, three participation rates, and three seeds. The user-requested two-job probe uses one seed and a single rotating 80% participation policy; it is **not** the balanced core.
 
 ```bash
-python scripts/generate_cifar10_pilot.py
-tmux new-session -d -s cafcl-cifar10-pilot 'bash scripts/run_cifar10_gpu_pilot.sh'
-# After the pilot finishes:
-CUDA_VISIBLE_DEVICES=0 python scripts/verify_cifar10_pilot.py
+python scripts/audit_stream_math.py
+bash scripts/run_all_cifar100.sh --backbone vit --plan-only
+bash scripts/run_all_cifar100.sh --backbone cnn --plan-only
+# Later, after successful pilots and method-specific training checks:
+CUDA_VISIBLE_DEVICES=0 bash scripts/run_all_cifar100.sh --backbone vit --suite balanced --seed 0 --limit 2
 ```
 
-The pilot keeps batch size 512 and uses a stratified 15% subset of eligible training images. It has distinct `PILOT_` job IDs and outputs under `results/cifar10_gpu_pilot_v1/`; it does not replace or complete the production suite.
+Supported research backbones are switchable by the model registry, with distinct job configuration hashes and separate results directories. Add further model variants through `models.BACKBONES` after scientific review.
 
-## Documentation
+## Scientific notes
 
-- [`docs/TECHNICAL_SPEC.md`](docs/TECHNICAL_SPEC.md) — architecture, round protocol, algorithms, failure handling and causal interpretation.
-- [`docs/EXPERIMENT_CATALOGUE.md`](docs/EXPERIMENT_CATALOGUE.md) — all 152 planned blocks, actual job coverage, and remaining scope.
-- [`docs/STATUS.md`](docs/STATUS.md) — verified implementation limits, testing and open work.
-- [`configs/plans/`](configs/plans/) — materialized batch-512 CIFAR experiment manifests.
+- Training is sequential **task-structured**, with known local labels, but the server inference uses **one class-incremental head** over all observed classes and **no task IDs**.
+- Offline clients keep training and later contribute all unsynchronized local learning; FedAvg operates on *rebased accumulated deltas*, so these runs are not conventional synchronous FedAvg.
+- The class-specific server merge uses optimizer-step counts, a heuristic that requires empirical validation.
+- Five communication intervals plus a final flush is mathematically valid for 5 clients and 100 distinct classes; extending this to 10 clients for five full intervals without overlap is invalid.
+- Only official CIFAR-100 GPU results can establish model performance. The tests are software/mathematical validations, not research accuracy results.
 
-## Additional 2026-11-17 implementations
-
-The expanded data stream supports exact class holders and dose, raw-sample overlap, per-client arrival delays, round-level recurrence and periodic returns, train-only domain shifts, deterministic spurious markers, bounded label noise and client selection overrides. Local mechanisms include SI, GEM class/stage/all grouping, optimizer persistence and memory-reset ablations. Aggregation alternatives include class balancing, conflict reweighting/projection and training-gradient retention heuristics. Optional causal diagnostics include exhaustive **small accepted-cohort** subset enumeration, pre/post losses, update similarities and representation drift. Task-ID-assisted inference is separately reported from class-incremental evaluation; boundary-free variants remain class-aware. Refer to [`docs/NEW_IMPLEMENTATIONS.md`](docs/NEW_IMPLEMENTATIONS.md) for precise semantics and caveats.
-
-The 20-class CIFAR-100 old-class pair 0,1 and later pair 12,13 are related via official CIFAR superclasses, with an explicit participant intervention. Batch size 512 applies to every CIFAR job, including the subset.
-
-Validate frozen plans: `python scripts/validate_plans.py`. A repository test workflow is available in `.github/workflows/tests.yml`.
-
-## Limitations
-
-This implementation **does not** complete every planned methodology. Eight blocks remain unscheduled and many of the 144 covered blocks remain partial. Broader fully controlled causal forks and all higher-order interactions, secure aggregation/differential privacy, robust federated deployment, SCAFFOLD, all-original-baseline reproduction, fine-grained controlled gradient-sign generation, full supervised task-free change-point learning, open-world label discovery, statistically significant CIFAR results, and per-client domain-shift evaluation remain future tasks. The catalogue reports missing blocks instead of turning them into fake SGD jobs. If a paper is written, report actual selected arms, realized data correlations, repetitions and confidence intervals, never the aspirational block count.
-
-## Complete job-by-job CIFAR suite documentation
-
-The actual frozen sequential job manifests have a readable, source-grounded inventory: [complete run guide](docs/JOB_SUITE_GUIDE.md), [423 CIFAR-10 jobs](docs/JOBS_CIFAR10.md), [425 CIFAR-100 jobs](docs/JOBS_CIFAR100.md), and [848-row filterable job index](docs/JOB_INDEX.csv). Each entry includes the exact execution position, experiment block and implementation status, dataset loader, training method, participation, selector, aggregation, stage/round configuration, all parameter differences from a clearly documented suite reference, causal dependencies and output naming. These are **planned jobs**, not completed CIFAR findings.
+[Factorial families](docs/FACTORIAL_SUITE.md) · [Primary probe protocol](docs/PRIMARY_PROBE.md) · [Overlap specification](docs/OVERLAP_CASES.md) · [Exact design and feasibility audit](configs/designs/stream_v6_native32.json) · [Status and caveats](docs/STATUS.md)

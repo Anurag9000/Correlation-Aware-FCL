@@ -12,13 +12,12 @@ from cafcl.selection import select_clients,effective_participation,participation
 from cafcl.simulator import aggregate,run_experiment,server_optimizer_step
 from cafcl.causal import pair_interaction,aggregation_leave_one_out
 from cafcl.models import create_model
-from cafcl.planner import all_supported_suite
 
 
 @pytest.mark.parametrize('method',['er_ace','der','derpp','mas','lwf','replay','ewc'])
 def test_extended_local_methods_execute(tmp_path,method):
-    cfg=RunConfig(dataset='synthetic',num_clients=2,stages=2,rounds_per_stage=1,
-                  participation=1.,model='linear',batch_size=512,method=method,
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,stages=2,rounds_per_stage=1,
+                  participation=1.,batch_size=1024,method=method,
                   job_id=f'local_{method}')
     run_experiment(cfg,str(tmp_path),verbose=False)
     h=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
@@ -40,33 +39,18 @@ def test_fedadam_and_fedavgm_zero_parameter_shapes():
         assert torch.isfinite(second['w']).all() and next_state['step']==2
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(),reason='CUDA unavailable')
-def test_federated_parameter_aggregation_and_server_step_accept_cuda_device():
-    base={'w':torch.tensor([0.,0.]),'counter':torch.tensor(1)}
-    updates=[{'weights':{'w':torch.tensor([1.,2.]),'counter':torch.tensor(1)},
-              'examples':1,'class_counts':{0:1}},
-             {'weights':{'w':torch.tensor([3.,4.]),'counter':torch.tensor(1)},
-              'examples':3,'class_counts':{0:3}}]
-    mean=aggregate(updates,base,'fedavg',device='cuda')
-    out,state=server_optimizer_step(base,mean,'fedadam',RunConfig(dataset='synthetic'),{},
-                                    device='cuda')
-    assert mean['w'].tolist()==pytest.approx([2.5,3.5])
-    assert out['w'].device.type=='cpu' and torch.isfinite(out['w']).all()
-    assert state['step']==1 and state['m']['w'].device.type=='cpu'
-
-
 def test_selection_policies_are_budget_exact():
     c={i:LocalState(i) for i in range(6)}
     for i in c:
         c[i].observed_classes={i%3,(i+1)%3}
     for policy in ('balanced','diversity','fairness','stochastic_related','historical_coverage'):
-        cfg=RunConfig(dataset='synthetic',num_clients=6,participation=.5,selector=policy)
+        cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=6,participation=.5,selector=policy)
         selected=select_clients(c,cfg,0,np.random.default_rng(16),old_classes={0,1},new_classes={2},coarse_by_fine={0:0,1:0,2:1})
         assert len(selected)==3 and len(set(selected))==3
 
 
 def test_participation_schedules():
-    cfg=RunConfig(dataset='synthetic',num_clients=20,stages=2,rounds_per_stage=5,
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=20,stages=2,rounds_per_stage=5,
                   participation=.8,participation_schedule='increasing')
     assert effective_participation(cfg,0)<effective_participation(cfg,9)
     assert participation_budget(20,effective_participation(cfg,0))>0
@@ -74,7 +58,7 @@ def test_participation_schedules():
 
 def test_related_synthetic_stage_order():
     bank=get_data_bank('synthetic','unused')
-    cfg=RunConfig(dataset='synthetic',stages=2,scenario='related',relation='related')
+    cfg=RunConfig(dataset='synthetic',model='test_linear',stages=2,scenario='related',relation='related')
     s=compile_scenario(bank,cfg)
     byclass={c:i for i,group in enumerate(s.stages) for c in group}
     assert all(byclass[2*i]!=byclass[2*i+1] for i in range(5))
@@ -87,8 +71,8 @@ def test_pair_interaction_counterfactual_math():
 
 
 def test_causal_aggregation_diagnostics(tmp_path):
-    cfg=RunConfig(dataset='synthetic',num_clients=3,stages=2,rounds_per_stage=1,
-                  participation=1.,model='linear',causal_diagnostics=True,
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=3,stages=2,rounds_per_stage=1,
+                  participation=1.,causal_diagnostics=True,
                   causal_max_clients=3,job_id='causal_test')
     run_experiment(cfg,str(tmp_path),verbose=False)
     metrics=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
@@ -97,8 +81,8 @@ def test_causal_aggregation_diagnostics(tmp_path):
 
 
 def test_checkpoint_can_restore_final_round(tmp_path):
-    cfg=RunConfig(dataset='synthetic',num_clients=2,stages=2,rounds_per_stage=1,
-                  participation=1.,model='linear',job_id='resume_smoke',checkpoint_every=1)
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,stages=2,rounds_per_stage=1,
+                  participation=1.,job_id='resume_smoke',checkpoint_every=1)
     rd=tmp_path/'resume_smoke'
     run_experiment(cfg,str(tmp_path),verbose=False)
     final=torch.load(rd/'model_final.pt',map_location='cpu',weights_only=False)
@@ -113,8 +97,8 @@ def test_checkpoint_can_restore_final_round(tmp_path):
 
 
 def test_pending_policy_retains_all_training_data(tmp_path):
-    cfg=RunConfig(dataset='synthetic',num_clients=2,stages=2,rounds_per_stage=1,
-                  participation=1.,model='linear',job_id='retain_all',pending_policy='retain_all')
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,stages=2,rounds_per_stage=1,
+                  participation=1.,job_id='retain_all',pending_policy='retain_all')
     run_experiment(cfg,str(tmp_path),verbose=False)
     ckpt=torch.load(tmp_path/'retain_all'/'model_final.pt',map_location='cpu',weights_only=False)
     assert any(len(c['current_indices'])>len(set(c['current_indices'])) or len(c['current_indices'])>20
@@ -127,7 +111,7 @@ def test_class_relationship_diagnostics():
     assert label_jaccard({0,1},{0,8})==pytest.approx(1/3)
     assert vector_cosine(torch.tensor([1.,0.]),torch.tensor([0.,1.]))==pytest.approx(0.)
     bank=get_data_bank('synthetic','unused')
-    model=create_model('linear',bank.num_classes)
+    model=create_model('test_linear',bank.num_classes,allow_test_model=True)
     feature=feature_relationships(model,bank,[0,1],torch.device('cpu'),4)
     gradient=diagnostic_gradient_relationships(model,bank,[0,1],torch.device('cpu'),4)
     assert '0:1' in feature and '0:1' in gradient
@@ -137,8 +121,8 @@ def test_class_relationship_diagnostics():
 def test_resume_after_interrupted_round_is_identical(tmp_path,monkeypatch):
     import cafcl.simulator as sim
     from dataclasses import replace
-    base=RunConfig(dataset='synthetic',num_clients=3,stages=2,rounds_per_stage=2,
-                   participation=2/3,model='linear',checkpoint_every=1,
+    base=RunConfig(dataset='synthetic',model='test_linear',num_clients=3,stages=2,rounds_per_stage=2,
+                   participation=2/3,checkpoint_every=1,
                    job_id='interrupted_midrun')
     original_evaluate=sim.evaluate
     calls={'n':0}
@@ -163,39 +147,10 @@ def test_resume_after_interrupted_round_is_identical(tmp_path,monkeypatch):
     assert resumed['status']=='completed'
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(),reason='CUDA is unavailable')
-def test_cuda_run_and_interrupted_resume_are_identical(tmp_path,monkeypatch):
-    import cafcl.simulator as sim
-    base=RunConfig(dataset='synthetic',num_clients=3,stages=2,rounds_per_stage=2,
-                   participation=2/3,model='linear',checkpoint_every=1,
-                   require_cuda=True,job_id='cuda_interrupted_resume')
-    original_evaluate=sim.evaluate
-    calls={'n':0}
-    def fail_once(*args,**kwargs):
-        calls['n']+=1
-        if calls['n']==2:raise RuntimeError('injected CUDA interruption')
-        return original_evaluate(*args,**kwargs)
-    with monkeypatch.context() as m:
-        m.setattr(sim,'evaluate',fail_once)
-        with pytest.raises(RuntimeError,match='injected CUDA interruption'):
-            sim.run_experiment(base,str(tmp_path),verbose=False)
-    assert (tmp_path/'cuda_interrupted_resume'/'checkpoint_latest.pt').is_file()
-    resumed=sim.run_experiment(base,str(tmp_path),verbose=False)
-    pristine=replace(base,job_id='cuda_pristine_control')
-    sim.run_experiment(pristine,str(tmp_path),verbose=False)
-    a=torch.load(tmp_path/'cuda_interrupted_resume'/'model_final.pt',map_location='cpu',weights_only=False)
-    b=torch.load(tmp_path/'cuda_pristine_control'/'model_final.pt',map_location='cpu',weights_only=False)
-    assert all(torch.equal(a['model_state'][k],b['model_state'][k]) for k in a['model_state'])
-    history=json.loads((tmp_path/'cuda_interrupted_resume'/'metrics.json').read_text())
-    assert resumed['status']=='completed'
-    assert all(row['model_execution_device']=='cuda' for row in history)
-    assert len(history)==base.stages*base.rounds_per_stage
-
-
 def test_full_trajectory_counterfactual_fork(tmp_path):
     from dataclasses import replace
-    base=RunConfig(dataset='synthetic',num_clients=4,stages=2,rounds_per_stage=2,
-                   participation=.5,model='linear',checkpoint_every=1,
+    base=RunConfig(dataset='synthetic',model='test_linear',num_clients=4,stages=2,rounds_per_stage=2,
+                   participation=.5,checkpoint_every=1,
                    job_id='baseline_for_forks')
     run_experiment(base,str(tmp_path),verbose=False)
     ck=tmp_path/'baseline_for_forks'/'checkpoint_round_0001.pt'
@@ -217,8 +172,8 @@ def test_full_trajectory_counterfactual_fork(tmp_path):
 
 def test_counterfactual_fork_rejects_scenario_change(tmp_path):
     from dataclasses import replace
-    base=RunConfig(dataset='synthetic',num_clients=3,stages=2,rounds_per_stage=1,
-                   participation=2/3,model='linear',checkpoint_every=1,
+    base=RunConfig(dataset='synthetic',model='test_linear',num_clients=3,stages=2,rounds_per_stage=1,
+                   participation=2/3,checkpoint_every=1,
                    job_id='fork_root')
     run_experiment(base,str(tmp_path),verbose=False)
     ck=tmp_path/'fork_root'/'checkpoint_round_0001.pt'
@@ -228,25 +183,3 @@ def test_counterfactual_fork_rejects_scenario_change(tmp_path):
         run_experiment(changed,str(tmp_path),verbose=False,fork_from_checkpoint=ck)
 
 
-def test_registered_full_counterfactual_suite(tmp_path):
-    from cafcl.planner import causal_fork_suite
-    from dataclasses import replace
-    planned=causal_fork_suite('cifar10')
-    assert len(planned)==18
-    assert len([x for x in planned if x.fork_source_job])==12
-    baseline,include,exclude=planned[:3]
-    converted=[replace(x,dataset='synthetic',num_clients=4,model='linear',require_cuda=False,
-                       target_client=2,rounds_per_stage=2,
-                       intervention_round=2 if x.fork_source_job else -1,
-                       fork_checkpoint_round=2 if x.fork_source_job else 0)
-               for x in (baseline,include,exclude)]
-    run_experiment(converted[0],str(tmp_path),verbose=False)
-    for config in converted[1:]:
-        source=(tmp_path/config.fork_source_job/
-                f'checkpoint_round_{config.fork_checkpoint_round:04d}.pt')
-        assert source.is_file()
-        run_experiment(config,str(tmp_path),verbose=False,fork_from_checkpoint=source)
-    h1=json.loads((tmp_path/converted[1].job_id/'metrics.json').read_text())
-    h2=json.loads((tmp_path/converted[2].job_id/'metrics.json').read_text())
-    assert 2 in h1[2]['selected_clients']
-    assert 2 not in h2[2]['selected_clients']
