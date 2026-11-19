@@ -28,7 +28,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v7_shared_cl'
+PROTOCOL_VERSION = 'cifar100_native32_v8_full_cl'
 
 
 def anchored_upload(client, global_state):
@@ -325,7 +325,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             server_class_update_counts=saved.get('server_class_update_counts',{})
             server_cl_state=saved.get('server_cl_state')
             if not isinstance(server_cl_state,FederatedCLState):
-                raise RuntimeError('Missing v7 federated continual-learning checkpoint state')
+                raise RuntimeError('Missing v8 federated continual-learning checkpoint state')
             rng.bit_generator.state=saved['selection_rng']
             random.setstate(saved['python_rng']);np.random.set_state(saved['numpy_rng'])
             torch.set_rng_state(saved['torch_rng'])
@@ -413,6 +413,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                                 client.recurrence_rounds[cls]=round_id
                         all_available.extend(event['indices'])
                         client.local_experience+=1
+                        for sample_index in event['indices']:
+                            client.sample_first_local_experience.setdefault(
+                                int(sample_index),client.local_experience)
                         for cls in classes:
                             client.first_seen_local_experience.setdefault(cls,client.local_experience)
                         client.local_training_events.append({'round':round_id,
@@ -580,7 +583,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     clients[cid].receive(candidate,version+1,
                         clear_memory=cfg.reset_memory_on_sync)
                     if cfg.share_continual_state:
-                        server_cl_state.broadcast_to(clients[cid],cfg.method)
+                        server_cl_state.broadcast_to(
+                            clients[cid],clients[cid].last_learning_method or cfg.method)
                     assert all(torch.equal(clients[cid].shared_weights[k],v) for k,v in candidate.items())
                 global_state=candidate
                 server_optimizer_state=new_server_state
@@ -591,13 +595,15 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     clients[cid].receive(global_state,version,
                         clear_memory=cfg.reset_memory_on_sync)
                     if cfg.share_continual_state:
-                        server_cl_state.broadcast_to(clients[cid],cfg.method)
+                        server_cl_state.broadcast_to(
+                            clients[cid],clients[cid].last_learning_method or cfg.method)
             if cfg.full_sync:
                 for cid in clients:
                     clients[cid].receive(global_state,version,
                         clear_memory=cfg.reset_memory_on_sync)
                     if cfg.share_continual_state:
-                        server_cl_state.broadcast_to(clients[cid],cfg.method)
+                        server_cl_state.broadcast_to(
+                            clients[cid],clients[cid].last_learning_method or cfg.method)
             for cid in selected:
                 clients[cid].last_selected=round_id
                 clients[cid].selection_count+=1

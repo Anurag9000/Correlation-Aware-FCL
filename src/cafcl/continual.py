@@ -67,6 +67,15 @@ class LocalState:
     pending_importance:dict[str,dict]=field(default_factory=dict)
     federated_cl_version:int=0
     lwf_teacher_from_server:bool=False
+    # Class/experience provenance makes GEM's historical constraint groups
+    # unambiguous even when tasks originate on different clients.
+    sample_first_local_experience:dict[int,int]=field(default_factory=dict)
+    received_sample_origins:dict[int,tuple[int,int]]=field(default_factory=dict)
+    received_importance:dict[str,dict]=field(default_factory=dict)
+    received_memory_logits:dict[int,torch.Tensor]=field(default_factory=dict)
+    received_lwf_teacher:dict|None=None
+    received_lwf_teacher_version:int=-1
+    last_learning_method:str='' 
     def receive(self,weights,version,*,clear_memory=False):
         if clear_memory:
             self.memory.clear()
@@ -229,6 +238,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     """
     if client.shared_weights is None:
         raise RuntimeError('Client must synchronize before local training')
+    client.last_learning_method=cfg.method
     model.load_state_dict(client.shared_weights)
     model.to(device)
     model.train()
@@ -260,13 +270,20 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     params=_trainable_params(model)
     if cfg.method=='si':
         if client.si_omega is None:
-            client.si_omega={n:torch.zeros_like(p.detach().cpu())
-                             for n,p in model.named_parameters()}
+            client.si_omega={}
+        for n,p in model.named_parameters():
+            client.si_omega.setdefault(n,torch.zeros_like(p.detach().cpu()))
+        if client.si_anchor is not None:
+            for n,p in model.named_parameters():
+                client.si_anchor.setdefault(n,p.detach().cpu().clone())
+        if client.si_path is None:
             client.si_path={n:torch.zeros_like(p.detach().cpu())
                             for n,p in model.named_parameters()}
+        if client.si_displacement is None:
             client.si_displacement={n:torch.zeros_like(p.detach().cpu())
                                     for n,p in model.named_parameters()}
-        if client.si_stage>=0 and client.local_experience>client.si_stage:
+        if (client.si_stage>=0 and client.local_experience>client.si_stage
+                and any(torch.count_nonzero(x).item() for x in client.si_displacement.values())):
             fresh_importance={}
             # SI consolidation uses ONLY locally applied optimization steps;
             # the global broadcast is deliberately excluded from the path.
@@ -442,14 +459,22 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                         groups=defaultdict(list)
                         for cls,mem in eligible_history.items():
                             for idx in mem:
-                                groups[client.sample_first_stage.get(idx,client.first_seen_stage[cls])].append(idx)
+                                # The remote exemplar carries the *source* client's
+                                # experience ID; default lookups must not raise for
+                                # remotely trained classes absent locally.
+                                source=client.received_sample_origins.get(int(idx))
+                                if source is None:
+                                    source=(client.client_id,client.sample_first_local_experience.get(
+                                        int(idx),client.sample_first_stage.get(int(idx),
+                                            client.first_seen_stage.get(cls,-1))))
+                                groups[source].append(idx)
                     else:
                         groups={0:oldmemory}
                     for group in sorted(groups):
                         mem=groups[group]
                         if mem:
                             refs.append(_reference_gradient(model,params,training_data,mem,
-                                                            cfg.batch_size,device,cfg.seed+group,active_pair_classes))
+                                                            cfg.batch_size,device,cfg.seed+(group if isinstance(group,int) else (group[0]*100003+group[1])),active_pair_classes))
                     z,last_projection,v=gem_project(g,refs)
                     qp_calls+=int(v>0)
                 num_violations+=v
@@ -475,6 +500,22 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     client.si_displacement[n]+=displacement
             step_count+=1
             loss_total+=macro_loss
+    # Finalize the just-completed SI experience *before* communication. In v7,
+    # consolidation happened only at the next arrival; the most recent task's
+    # importance consequently never reached the server in that sync.
+    if cfg.method=='si' and experience_end and client.si_path is not None:
+        fresh={}
+        for n,p in model.named_parameters():
+            displacement=client.si_displacement[n]
+            fresh[n]=(client.si_path[n]/(displacement.square()+cfg.si_xi)).clamp(min=0)
+            client.si_path[n].zero_()
+            client.si_displacement[n].zero_()
+        fresh_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
+        from .federated_cl import add_importance,weighted_importance
+        add_importance(client,'si',fresh,fresh_anchor)
+        client.si_omega,client.si_anchor=weighted_importance(
+            client.si_omega,client.si_anchor,fresh,fresh_anchor)
+        client.si_stage=client.local_experience
     # Diagonal Fisher approximation for EWC, consolidated at each stage transition.
     if cfg.method=='ewc' and (experience_end or (round_id+1)%cfg.rounds_per_stage==0):
         if client.ewc_anchor is None or client.local_experience > client.ewc_stage:
@@ -482,7 +523,13 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
             x,y=next(iter(_example_loader(training_data,indices,min(cfg.micro_batch_size,128),
                                           cfg.seed+round_id+client.client_id)))
             optimizer.zero_grad(set_to_none=True)
-            F.cross_entropy(model(x.to(device)),y.to(device)).backward()
+            logits=model(x.to(device))
+            if active_pair_classes is not None:
+                from .class_indexed import canonical_active_loss,freeze_other_class_rows
+                canonical_active_loss(logits,y.to(device),active_pair_classes).backward()
+                freeze_other_class_rows(model,active_pair_classes)
+            else:
+                F.cross_entropy(logits,y.to(device)).backward()
             fresh_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
             fresh_fisher={n:(p.grad.detach().cpu().square() if p.grad is not None else torch.zeros_like(p.cpu())) for n,p in model.named_parameters()}
             from .federated_cl import add_importance,weighted_importance

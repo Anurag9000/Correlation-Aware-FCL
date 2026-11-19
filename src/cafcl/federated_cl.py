@@ -49,11 +49,14 @@ def weighted_importance(old_importance,old_anchor,new_importance,new_anchor):
     if old_importance is None or old_anchor is None:
         return _cpu_dict(new_importance),_cpu_dict(new_anchor)
     merged={};anchors={}
-    for name,importance in new_importance.items():
-        a=old_importance[name].detach().cpu()
-        b=importance.detach().cpu().clamp(min=0)
-        ref=old_anchor[name].detach().cpu()
-        new=new_anchor[name].detach().cpu()
+    # Older or heterogeneous contributors may have a sparse importance table.
+    # Missing coordinates mean zero precision, never a missing-parameter crash.
+    for name in sorted(set(old_importance)|set(new_importance)):
+        template=(new_importance.get(name) if name in new_importance else old_importance[name]).detach().cpu()
+        a=old_importance[name].detach().cpu().clamp(min=0) if name in old_importance else torch.zeros_like(template)
+        b=new_importance[name].detach().cpu().clamp(min=0) if name in new_importance else torch.zeros_like(template)
+        ref=old_anchor[name].detach().cpu() if name in old_anchor else new_anchor[name].detach().cpu()
+        new=new_anchor[name].detach().cpu() if name in new_anchor else ref
         merged[name]=a+b
         anchors[name]=torch.where(merged[name]>0,
             (a*ref+b*new)/merged[name].clamp_min(1e-30),new)
@@ -73,15 +76,20 @@ class FederatedCLState:
     uploaded_clients:set[int]=field(default_factory=set)
     integrated_classes:set[int]=field(default_factory=set)
     memory_provenance:dict[int,set[int]]=field(default_factory=dict)
+    # Stable provenance of each exemplar, including which local task supplied it.
+    memory_origins:dict[int,tuple[int,int]]=field(default_factory=dict)
 
     def merge_clients(self,uploaded_clients,bank,method,teacher_model,version):
         """Merge ONLY selected/uploaded private contributions once per source."""
         for client in uploaded_clients:
             self.integrated_classes.update(int(c) for c in client.pending_upload_classes)
-        if method in MEMORY_METHODS:
+        method_by_client={int(c.client_id):(c.last_learning_method or method)
+                          for c in uploaded_clients}
+        if any(m in MEMORY_METHODS for m in method_by_client.values()):
             pool=_clone_memory(self.memory)
             ids={int(i) for group in pool.values() for i in group}
             for client in uploaded_clients:
+                if method_by_client[client.client_id] not in MEMORY_METHODS:continue
                 for cls,examples in client.private_memory.items():
                     cls=int(cls);group=pool.setdefault(cls,[])
                     for idx in examples:
@@ -91,6 +99,9 @@ class FederatedCLState:
                         if int(bank.train.targets[idx])!=cls:
                             raise ValueError(f'Exemplar label mismatch: {idx} != {cls}')
                         self.memory_provenance.setdefault(idx,set()).add(int(client.client_id))
+                        self.memory_origins.setdefault(idx,(int(client.client_id),int(
+                            client.sample_first_local_experience.get(idx,
+                                client.sample_first_stage.get(idx,client.local_experience)))))
                         if idx not in ids:
                             group.append(idx);ids.add(idx)
                             # Actually move compact RGB payload bytes, not just IDs.
@@ -100,7 +111,7 @@ class FederatedCLState:
                             std=torch.tensor(NORMALIZATION_STD).view(3,1,1)
                             pixels=((x.detach().cpu()*std+mean).clamp(0,1)*255).round().to(torch.uint8)
                             self.exemplar_payloads[idx]=(pixels,int(label))
-                if method in {'der','derpp'}:
+                if method_by_client[client.client_id] in {'der','derpp'}:
                     for idx,logits in client.memory_logits.items():
                         idx=int(idx)
                         if idx not in ids:continue
@@ -110,17 +121,19 @@ class FederatedCLState:
                             self.memory_logits[idx]=logits.detach().cpu().clone()
                             self.logits_source[idx]=(int(version),int(client.client_id))
             self.memory=pool
-        if method in REGULARIZERS:
-            table=self.importance.setdefault(method,{'precision':{},'weighted_anchor':{}})
+        for kind in REGULARIZERS:
+            if not any(m==kind for m in method_by_client.values()):continue
+            table=self.importance.setdefault(kind,{'precision':{},'weighted_anchor':{}})
             for client in uploaded_clients:
-                delta=client.pending_importance.get(method)
+                if method_by_client[client.client_id]!=kind:continue
+                delta=client.pending_importance.get(kind)
                 if not delta:continue
                 for key in ('precision','weighted_anchor'):
                     for name,x in delta[key].items():
-                        if not torch.isfinite(x).all():raise ValueError(f'Nonfinite {method} state')
+                        if not torch.isfinite(x).all():raise ValueError(f'Nonfinite {kind} state')
                         old=table[key].get(name)
                         table[key][name]=x.detach().cpu().clone() if old is None else old+x.detach().cpu()
-        if method=='lwf':
+        if any(m=='lwf' for m in method_by_client.values()):
             # Use the newly committed global model as a common teacher;
             # stale client teacher weights cannot be meaningfully averaged.
             self.teacher=_cpu_dict(teacher_model)
@@ -134,18 +147,37 @@ class FederatedCLState:
             client.first_seen_local_experience.setdefault(int(cls),client.local_experience)
             client.trained_classes.add(int(cls))
             client.observed_classes.add(int(cls))
+        # Full server archive and provenance are always delivered, irrespective
+        # of the active method. A method only *uses* the compatible entries.
+        client.received_memory=_clone_memory(self.memory)
+        client.memory=combined_memory(client.private_memory,client.received_memory)
+        client.received_sample_origins=dict(self.memory_origins)
+        client.received_gradient_supports={int(c):tuple(map(int,ids))
+            for c,ids in self.memory.items()}
+        client.received_memory_logits={int(i):v.detach().cpu().clone()
+            for i,v in self.memory_logits.items()}
+        client.received_importance={kind:{key:{str(n):x.detach().cpu().clone()
+            for n,x in stat.items()} for key,stat in table.items()}
+            for kind,table in self.importance.items()}
+        client.received_lwf_teacher=(_cpu_dict(self.teacher) if self.teacher else None)
+        client.received_lwf_teacher_version=self.teacher_version
+        # Transmit actual bytes to *every* selected client. The active local
+        # algorithm decides whether to use replay, constraints, or regularizers.
+        client.received_example_payloads={int(i):(x.clone(),int(y))
+            for i,(x,y) in self.exemplar_payloads.items()}
         if method in MEMORY_METHODS:
-            client.received_memory=_clone_memory(self.memory)
-            client.memory=combined_memory(client.private_memory,client.received_memory)
-            client.received_example_payloads={int(i):(x.clone(),int(y))
-                for i,(x,y) in self.exemplar_payloads.items()}
             if method in {'gem','agem'}:
                 client.received_gradient_supports={
                     int(c):tuple(map(int,ids)) for c,ids in self.memory.items()}
             if method in {'der','derpp'}:
-                client.memory_logits={int(i):v.detach().cpu().clone()
-                                      for i,v in self.memory_logits.items()}
+                # Server logits are authoritative for already integrated IDs;
+                # preserve local-only logits if not yet acknowledged.
+                private_only={int(i):v.detach().cpu().clone()
+                    for i,v in client.memory_logits.items() if int(i) not in self.memory_logits}
+                client.memory_logits={**private_only,**{int(i):v.detach().cpu().clone()
+                                      for i,v in self.memory_logits.items()}}
             for cls in client.received_memory:
+                client.first_seen_stage.setdefault(int(cls),int(self.version))
                 client.first_seen_local_experience.setdefault(int(cls),client.local_experience)
                 client.trained_classes.add(int(cls))
                 client.observed_classes.add(int(cls))

@@ -199,7 +199,7 @@ def test_active_client_memory_reset_ablation(tmp_path):
         state=torch.load(tmp_path/cfg.job_id/'model_final.pt',weights_only=False)
         sample_count=sum(len(v) for client in state['clients'].values()
                          for v in client['memory'].values())
-        assert (sample_count==0) if reset else (sample_count>0)
+        assert sample_count>0  # Mandatory shared history survives a legacy synthetic private reset.
 
 
 def test_adaptive_participation_from_local_constraint_feedback():

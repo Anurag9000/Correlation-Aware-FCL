@@ -154,6 +154,10 @@ class RunConfig:
             assert self.model in MODEL_IDS, 'Research requires an explicitly registered native 32x32 research backbone'
         assert self.memory_per_class >= 0
         assert self.replay_buffer_capacity>=1
+        if self.dataset=='cifar100':
+            assert self.share_continual_state, 'All CIFAR-100 jobs require synchronized CL state'
+            assert not self.reset_memory_on_sync, 'Synchronized history must remain available'
+            assert not (self.full_sync and self.participation<1), 'Hidden clients cannot receive server broadcasts'
         if self.stream_protocol:assert self.share_continual_state, 'Streaming jobs must synchronize method-specific CL state'
         assert self.causal_max_clients >= 1 and self.checkpoint_every >= 0
         assert self.participation_schedule in {"feedback", "stage", "constant", "increasing", "decreasing", "alternating"}

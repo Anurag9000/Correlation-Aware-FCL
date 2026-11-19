@@ -116,7 +116,7 @@ def main(argv=None):
     jobs=make_jobs(backbone=args.backbone,seed=args.seed,lr=args.lr,epochs=args.epochs,
                    memory_per_class=args.memory_per_class,buffer_size=args.buffer_size)
     design=audited_plan(jobs)
-    root=Path(args.output_dir)/('primary_cifar100_shared_cl_v7_'+args.backbone+f'_seed{args.seed}')
+    root=Path(args.output_dir)/('primary_cifar100_full_cl_v8_'+args.backbone+f'_seed{args.seed}')
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',design)
     if args.plan_only:
