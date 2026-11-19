@@ -17,13 +17,13 @@ from .simulator import run_experiment,atomic_json
 from .selection import participation_budget
 
 
-def make_jobs(*,backbone='vit',seed=0,lr=.03,epochs=10,memory_per_class=50,replay_fraction=1/9):
+def make_jobs(*,backbone='vit',seed=0,lr=.03,epochs=10,replay_fraction=1/9):
     pct_tag=f'{100*replay_fraction:g}'.replace('.','p')
     cfg=replace(base(seed=seed,model=backbone),num_clients=5,batch_size=64,classwise_head_merge=False,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
         aggregator='fedavg',scenario='disjoint',stream_overlap_kind='none',
         stream_overlap_fraction=0.,classes_per_local_task=2,local_tasks_per_round=2,
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
-        stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=memory_per_class,
+        stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=ceil(450*replay_fraction),
         job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V16_BATCH64_'+resolve_backbone(backbone))
     partial=replace(cfg,participation=.8,stream_offline_policy='rotate_once',
                     job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V16_BATCH64_'+resolve_backbone(backbone))
@@ -119,7 +119,6 @@ def main(argv=None):
     p.add_argument('--seed',type=int,default=0)
     p.add_argument('--lr',type=float,default=.03)
     p.add_argument('--epochs',type=int,default=10)
-    p.add_argument('--memory-per-class',type=int,default=20)
     p.add_argument('--replay-fraction',type=float,default=1/9,help='Per-class fraction of available TRAIN examples retained by Algorithm R')
     p.add_argument('--data-root',default='data')
     p.add_argument('--output-dir',default='results')
@@ -133,7 +132,7 @@ def main(argv=None):
     p.add_argument('--worker',type=int,choices=(0,1),default=None,help=argparse.SUPPRESS)
     args=p.parse_args(argv)
     jobs=make_jobs(backbone=args.backbone,seed=args.seed,lr=args.lr,epochs=args.epochs,
-                   memory_per_class=args.memory_per_class,replay_fraction=args.replay_fraction)
+                   replay_fraction=args.replay_fraction)
     design=audited_plan(jobs)
     root=Path(args.output_dir)/('primary_cifar100_batch64_v16_'+args.backbone+
         ('' if abs(args.replay_fraction-.1)<1e-12 else '_pct'+f'{100*args.replay_fraction:g}'.replace('.','p'))+
@@ -159,7 +158,7 @@ def main(argv=None):
         available=alias
     cmd=[sys.executable,'-m','cafcl.primary_probe','--backbone',args.backbone,
          '--seed',str(args.seed),'--lr',str(args.lr),'--epochs',str(args.epochs),
-         '--memory-per-class',str(args.memory_per_class),'--replay-fraction',str(args.replay_fraction),
+         '--replay-fraction',str(args.replay_fraction),
          '--data-root',args.data_root,
          '--output-dir',args.output_dir,'--no-download']
     if args.allow_cpu:cmd.append('--allow-cpu')
