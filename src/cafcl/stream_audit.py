@@ -1,4 +1,4 @@
-"""Static mathematical feasibility audit for every CIFAR-100 v5 configuration.
+"""Static mathematical feasibility audit for every CIFAR-100 v6 configuration.
 
 Computes every scheduled task, checks label budget and episode distinctness,
 validates class-specific training-image budgets and controlled outages. No
@@ -115,6 +115,12 @@ def check_job(cfg):
     experiment in which the named factor actually varies.
     """
     from .selection import participation_budget
+    # LwF uses teacher distillation, not replay memory or generic
+    # parameter-importance regularization. Prune inert parameter ablations.
+    if cfg.method=='lwf' and cfg.memory_per_class!=20:
+        return 'lwf-memory-capacity-unused'
+    if cfg.method=='lwf' and cfg.regularization_strength!=10.0:
+        return 'lwf-regularization-strength-unused'
     if cfg.selector in {'fairness','diversity','balanced'}:
         # Implementations are exact aliases: fairness==least_recent,
         # diversity==coverage, balanced==coverage because old/new form

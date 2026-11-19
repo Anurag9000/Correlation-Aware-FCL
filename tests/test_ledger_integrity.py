@@ -31,3 +31,14 @@ def test_degenerate_selection_and_truncated_outages_absent_from_plan():
     selected_outages=list(expand(seeds=(0,),families=('offline_duration',)))
     assert selected_outages
     assert all(check_job(cfg) is None for _,cfg in selected_outages)
+
+
+def test_lwf_unused_hyperparameter_arms_are_excluded():
+    c=replace(base(0),method='lwf')
+    assert check_job(c) is None
+    assert check_job(replace(c,memory_per_class=50))=='lwf-memory-capacity-unused'
+    assert check_job(replace(c,regularization_strength=1.0))=='lwf-regularization-strength-unused'
+    assert not any(cfg.method=='lwf' and cfg.memory_per_class!=20
+                   for _,cfg in expand(seeds=(0,),families=('memory',)))
+    assert not any(cfg.method=='lwf' and cfg.regularization_strength!=10.0
+                   for _,cfg in expand(seeds=(0,),families=('regularization',)))
