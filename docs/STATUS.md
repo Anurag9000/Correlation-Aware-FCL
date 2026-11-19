@@ -48,3 +48,10 @@ Every CIFAR-100 job now synchronizes full server continual-learning history with
 The two-arm primary probe now uses **classwise 10% Algorithm R reservoir replay**, not the earlier flat 1,000-example client cap or A-GEM method. Each class has 450 allowed TRAIN images (50 reserved for validation), so a client's fixed quota is 45 per class. Every client learns its own assigned two-label tasks and retains a persistent private reservoir; the server collects a deduplicated union from connected clients and broadcasts its entire exemplar archive. Hidden clients do not exchange either weights or memory. With 100 classes appearing once in this pilot, the expected final server archive is 4,500 samples after the communication-only flush.
 
 Native 32×32 ViT-Tiny/16 and CIFAR-stem ResNet-18 remain selectable. The default ViT pilot runs only two concurrent GPU processes with effective batch size 1024, seed 0 and 10 epochs per binary episode. The full 38,370-job-per-backbone geometric ledger still applies; other methods keep their existing per-method budgets. The v9 simulator protocol, job IDs and primary output root isolate results from v8 and all preceding versions.
+
+
+## v10 single-GPU concurrent training (not yet GPU-benchmarked)
+
+All active CIFAR-100 simulator modes now maintain one live independent model and CUDA stream per client, submit the first task concurrently across clients, wait for a full task barrier, and repeat for the second task. Server aggregation and the shared CL-state broadcast happen only after every local task completes. Two independent 5-client pilot runs are launched as simultaneous processes on GPU 0. The primary run now uses a physical microbatch of four with effective batch 1024, while the active full-factorial suite retains its configured physical microbatch. This was verified in a standalone CPU scheduling test; actual GPU physical kernel overlap, memory pressure, and completed CUDA experiment accuracy remain unverified until an mtechdeserver run.
+
+The previous v9 checkpoint protocol is incompatible with v10. No silent serialized fallback is provided; adjust microbatch size if GPU VRAM is insufficient.

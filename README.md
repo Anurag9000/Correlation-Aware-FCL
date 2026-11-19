@@ -28,12 +28,12 @@ python -m pytest -q
 python scripts/validate_factorial_plans.py
 bash scripts/run_primary_probe_cifar100.sh --plan-only
 
-# Two simultaneous CUDA processes on mtechdeserver, assigned one GPU each:
-bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,1
+# Two independent federated simulations share the SAME physical GPU 0:
+bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0
 # Or ResNet-18, still just two jobs:
-bash scripts/run_primary_probe_cifar100.sh --backbone cnn --gpus 0,1
-# If only one GPU is available, both can share it if memory permits:
-bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,0
+bash scripts/run_primary_probe_cifar100.sh --backbone cnn --gpu 0
+# Within EACH run: five distinct client models train Task 1 concurrently,
+# wait for all five, then train Task 2 concurrently, then perform FedAvg.
 ```
 
 The launch tool prepares two independent processes, logs, resumable checkpoints, and a final paired report. **This repository has not been connected to `mtechdeserver` from this chat: no real-GPU training is claimed here.** See [PRIMARY_PROBE.md](docs/PRIMARY_PROBE.md).
@@ -66,3 +66,12 @@ Supported research backbones are switchable by the model registry, with distinct
 ## V7 server-synchronized continual learning
 
 The two-job primary probe now uses **Replay + FedAvg** with an independently reservoir-sampled **10% per class** private buffer (45 of 450 TRAIN examples per class on CIFAR-100). The server stores every uploaded reservoir exemplar, deduplicates by original TRAIN example ID, and broadcasts its full union to connected clients. Disconnected clients do not receive updates until rejoining. GEM/A-GEM share class-indexed constraint examples and recompute gradients at the receiving model; DER shares stored logits; EWC/SI/MAS combine fresh diagonal importance information; LwF uses a global teacher. See [the replay-reservoir v9 protocol](docs/REPLAY_RESERVOIR_V9.md) and [shared CL-state specification](docs/FEDERATED_CL_STATE_V8.md). All execution artifacts use isolated v9 result directories and cannot reuse older checkpoints. **This is a raw-data-sharing research simulation, not privacy-preserving FL.**
+
+
+## Required single-GPU client concurrency (v10)
+
+All active simulator pathways (primary pilot, single configured run, balanced and full factorial) use one persistent PyTorch model and, on CUDA, one independent CUDA stream **per client**. Every communication interval executes Task 1 across all clients concurrently, waits for each client to finish, executes Task 2 concurrently, waits again, and only then performs FedAvg and CL-state synchronization. This includes clients that are offline for federation. A terminal communication-only flush launches no local tasks. The implementation records per-task concurrent execution windows and client IDs in `metrics.json`.
+
+The **two** pilot arms are separate operating-system processes simultaneously sharing one physical GPU by default (`--gpu 0`, legacy alias `--gpus 0,0`; distinct GPU IDs are rejected). Each pilot arm has **five independently live client ViTs plus a server ViT** (twelve live ViT objects across both runs, with independent CL state and model weights). The physical microbatch defaults to 4 for this single-device campaign, while the effective optimizer batch remains **1024**. The GPU may serialize some kernels due to hardware/resource limits; this is genuine concurrent scheduling, not a guarantee of simultaneous kernel execution. No fallback to sequential per-client training is provided. GPU OOM requires explicit memory/physical-microbatch adjustment.
+
+Use `bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0 --replay-fraction 0.10 --epochs 10 --micro-batch-size 4`. The v10 protocol and `results/primary_cifar100_single_gpu_parallel_v10_vit_seed0` output root invalidate previous sequential checkpoint reuse. See [Single-GPU parallel training](docs/PARALLEL_SINGLE_GPU_V10.md).

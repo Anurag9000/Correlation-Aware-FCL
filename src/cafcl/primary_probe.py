@@ -17,16 +17,16 @@ from .simulator import run_experiment,atomic_json
 from .selection import participation_budget
 
 
-def make_jobs(*,backbone='vit',seed=0,lr=.003,epochs=10,memory_per_class=20,replay_fraction=.10):
+def make_jobs(*,backbone='vit',seed=0,lr=.003,epochs=10,memory_per_class=20,replay_fraction=.10,micro_batch_size=4):
     pct_tag=f'{100*replay_fraction:g}'.replace('.','p')
-    cfg=replace(base(seed=seed,model=backbone),num_clients=5,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
+    cfg=replace(base(seed=seed,model=backbone),num_clients=5,micro_batch_size=micro_batch_size,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
         aggregator='fedavg',scenario='disjoint',stream_overlap_kind='none',
         stream_overlap_fraction=0.,classes_per_local_task=2,local_tasks_per_round=2,
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
         stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=memory_per_class,
-        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V9_'+resolve_backbone(backbone))
+        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V10_PARALLEL_'+resolve_backbone(backbone))
     partial=replace(cfg,participation=.8,stream_offline_policy='rotate_once',
-                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V9_'+resolve_backbone(backbone))
+                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V10_PARALLEL_'+resolve_backbone(backbone))
     for job in (cfg,partial):job.validate()
     return cfg,partial
 
@@ -104,25 +104,31 @@ def build_report(root,jobs):
 
 
 def main(argv=None):
-    p=argparse.ArgumentParser(description='Matched 2-job CIFAR-100 primary probe, with optional parallel GPU processes')
+    p=argparse.ArgumentParser(description='Two simultaneous 5-client task-barrier simulations sharing ONE GPU')
     p.add_argument('--backbone',choices=('vit','cnn'),default='vit')
     p.add_argument('--seed',type=int,default=0)
     p.add_argument('--lr',type=float,default=.003)
     p.add_argument('--epochs',type=int,default=10)
     p.add_argument('--memory-per-class',type=int,default=20)
+    p.add_argument('--micro-batch-size',type=int,default=4,
+                   help='Physical GPU microbatch; logical optimizer batch remains 1024')
     p.add_argument('--replay-fraction',type=float,default=.10,help='Per-class fraction of available TRAIN examples retained by Algorithm R')
     p.add_argument('--data-root',default='data')
     p.add_argument('--output-dir',default='results')
-    p.add_argument('--gpus',default='0,0',help='Two visible GPU IDs for two simultaneous jobs; e.g. 0,1 or 0,0')
+    p.add_argument('--gpu',type=int,default=0,
+                   help='One physical GPU shared by BOTH concurrent runs (default: 0)')
+    p.add_argument('--gpus',default=None,
+                   help='Legacy spelling, must specify the SAME GPU twice, e.g. 0,0')
     p.add_argument('--plan-only',action='store_true')
     p.add_argument('--no-download',action='store_true')
     p.add_argument('--allow-cpu',action='store_true',help='Synthetic/debug only; does not make a GPU production run')
     p.add_argument('--worker',type=int,choices=(0,1),default=None,help=argparse.SUPPRESS)
     args=p.parse_args(argv)
     jobs=make_jobs(backbone=args.backbone,seed=args.seed,lr=args.lr,epochs=args.epochs,
-                   memory_per_class=args.memory_per_class,replay_fraction=args.replay_fraction)
+                   memory_per_class=args.memory_per_class,replay_fraction=args.replay_fraction,
+                   micro_batch_size=args.micro_batch_size)
     design=audited_plan(jobs)
-    root=Path(args.output_dir)/('primary_cifar100_shared_reservoir_v9_'+args.backbone+
+    root=Path(args.output_dir)/('primary_cifar100_single_gpu_parallel_v10_'+args.backbone+
         ('' if abs(args.replay_fraction-.1)<1e-12 else '_pct'+f'{100*args.replay_fraction:g}'.replace('.','p'))+f'_seed{args.seed}')
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',design)
@@ -137,17 +143,24 @@ def main(argv=None):
     # Download/cache ONCE, before both processes access the immutable dataset.
     from .data import get_data_bank
     get_data_bank('cifar100',args.data_root,download=not args.no_download,seed=args.seed)
-    available=[x.strip() for x in args.gpus.split(',')]
-    if len(available)!=2 or not all(x.isdigit() for x in available):p.error('Expected --gpus 0,1 or --gpus 0,0')
+    available=[str(args.gpu),str(args.gpu)]
+    if args.gpus is not None:
+        alias=[x.strip() for x in args.gpus.split(',')]
+        if len(alias)!=2 or not all(x.isdigit() for x in alias) or alias[0]!=alias[1]:
+            p.error('Only one GPU is supported: use --gpu 0 or --gpus 0,0; do not use 0,1')
+        available=alias
     cmd=[sys.executable,'-m','cafcl.primary_probe','--backbone',args.backbone,
          '--seed',str(args.seed),'--lr',str(args.lr),'--epochs',str(args.epochs),
-         '--memory-per-class',str(args.memory_per_class),'--replay-fraction',str(args.replay_fraction),'--data-root',args.data_root,
+         '--memory-per-class',str(args.memory_per_class),'--replay-fraction',str(args.replay_fraction),
+         '--micro-batch-size',str(args.micro_batch_size),'--data-root',args.data_root,
          '--output-dir',args.output_dir,'--no-download']
     if args.allow_cpu:cmd.append('--allow-cpu')
     processes=[]
     try:
         for idx,gpu in enumerate(available):
             env=os.environ.copy();env['CUDA_VISIBLE_DEVICES']=gpu
+            env.setdefault('OMP_NUM_THREADS','1')
+            env.setdefault('MKL_NUM_THREADS','1')
             log=root/(f'job_{idx}.log')
             handle=log.open('a')
             proc=subprocess.Popen(cmd+['--worker',str(idx)],env=env,stdout=handle,stderr=subprocess.STDOUT)

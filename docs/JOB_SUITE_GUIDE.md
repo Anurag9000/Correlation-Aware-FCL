@@ -10,3 +10,8 @@
 **Old CIFAR-10 plans and 20-class jobs remain retired.** CIFAR-100 streams end when the 100 distinct labels have been allocated; the default 10-client disjoint curriculum naturally lasts 3 communication intervals (40+40+20), not five full 40-class intervals. The pilot uses five clients to produce exactly five full intervals.
 
 See [`PRIMARY_PROBE.md`](PRIMARY_PROBE.md), [`BACKBONES.md`](BACKBONES.md), [`FACTORIAL_SUITE.md`](FACTORIAL_SUITE.md), and [`STATUS.md`](STATUS.md).
+
+
+## v10 execution invariant
+
+Every active CIFAR-100 job now schedules independent client model instances concurrently **at each task ordinal**, with a full barrier between tasks, before any server update. The two-arm primary pilot launches both whole federated simulations concurrently on the same GPU (`--gpu 0`). There is no client-sequential training path in the active simulator. Results use v10-specific paths; see `PARALLEL_SINGLE_GPU_V10.md`.

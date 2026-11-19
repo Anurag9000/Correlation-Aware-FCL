@@ -18,6 +18,8 @@ from .models import create_model,copy_cpu_state,check_finite
 from .continual import LocalState,local_train
 from .class_indexed import classwise_merge,classifier_parameter_names
 from .federated_cl import FederatedCLState
+from concurrent.futures import ThreadPoolExecutor
+from .parallel_clients import create_client_runtimes,train_round_task_barriers
 from .selection import select_clients
 from .evaluation import evaluate
 from .causal import aggregation_leave_one_out,aggregation_subset_report
@@ -28,7 +30,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v9_reservoir'
+PROTOCOL_VERSION = 'cifar100_native32_v10_parallel_task_barriers'
 
 
 def anchored_upload(client, global_state):
@@ -273,8 +275,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         model=create_model(cfg.model,bank.num_classes,allow_test_model=(cfg.dataset=='synthetic')).to(device)
         backbone_description=getattr(model,'backbone_description',{'test_only':True})
         if cfg.dataset=='cifar100':
-            # Every job in a sequential research campaign must start from
-            # the identical published pretrained feature extractor.
+            # All clients and the server start from the identical configured
+            # seeded-random 32x32 backbone; no pretrained-weight assertion.
             reference=Path(output_root)/(cfg.model+'_architecture_reference.json')
             normalized_description=json.loads(json.dumps(backbone_description))
             if reference.exists():
@@ -331,6 +333,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             torch.set_rng_state(saved['torch_rng'])
             if torch.cuda.is_available() and saved['cuda_rng']:
                 torch.cuda.set_rng_state_all(saved['cuda_rng'])
+        # Keep one *live independent* model and CUDA stream per client.
+        # The global server remains a sixth, separately held model object.
+        # A single-GPU pilot launches two independent simulations as two
+        # simultaneous processes; each process has five client workers.
+        client_runtimes=create_client_runtimes(cfg,bank,clients,device)
+        client_executor=ThreadPoolExecutor(
+            max_workers=cfg.num_clients,thread_name_prefix='fcl-client')
         for round_id in range(first_round,total_rounds):
             round_start=time.monotonic()
             # Queue all client arrivals but do NOT expose later class labels to
@@ -361,106 +370,16 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            min(cfg.stages-1,round_id//cfg.rounds_per_stage))
             old={c for c in observed if class_first_stage[c]<current_stage}
             new=set(observed)-old
-            # Local training is unconditional on federation. Every client has
-            # an independent persistent model, private CL state and unsent
-            # update accumulator. Train arrivals sequentially, then retain the
-            # final current experience for the next round when no new data arrive.
-            local_details=[]
-            local_trained_clients=[]
-            for cid,client in clients.items():
-                local_cfg=cfg
-                if cfg.client_heterogeneity:
-                    algorithms=('sgd','gem','agem','replay')
-                    local_cfg=replace(cfg,method=algorithms[cid%len(algorithms)])
-                raw_events=new_events[cid]
-                events=[]
-                if cfg.stream_protocol:
-                    events=list(raw_events)
-                    if len(events)>cfg.local_tasks_per_round:
-                        raise AssertionError('Exceeded local task budget per server interval')
-                    if any(len(set(e['class_ids']))<2 for e in events):
-                        raise AssertionError('Singleton local task in strict stream')
-                else:
-                  for start in range(0,len(raw_events),2):
-                      group=raw_events[start:start+2]
-                      if len(group)==2 and group[0]['class_id']!=group[1]['class_id']:
-                          events.append({'indices':group[0]['indices']+group[1]['indices'],
-                              'class_ids':(group[0]['class_id'],group[1]['class_id']),
-                              'global_stage':max(g['global_stage'] for g in group),
-                              'is_recurrence':any(g['is_recurrence'] for g in group)})
-                      else:
-                          if cfg.class_pair_protocol=='strict':
-                              raise ValueError(f'Client {cid} has insufficient distinct class '
-                                  f'labels for a two-class episode at round {round_id}: {group}')
-                          events.extend({**g,'class_ids':(g['class_id'],)} for g in group)
-                if cfg.stream_protocol and not events:
-                    continue   # No fabricated training events after stream exhaustion.
-                if not events and not client.current_indices:
-                    continue
-                # With retain-all, the union is the active data outside of new
-                # local arrivals. In all cases, individual new class events are
-                # learned separately and in arrival order.
-                jobs_to_train=events if events else [{'indices':list(client.current_indices),
-                    'class_id':None,'class_ids':(),
-                    'global_stage':current_stage,'is_recurrence':False}]
-                all_available=list(client.current_indices)
-                for event_index,event in enumerate(jobs_to_train):
-                    if events:
-                        classes=tuple(int(c) for c in event['class_ids'])
-                        client.arrival(event['indices'],classes,event['global_stage'])
-                        for cls in classes:
-                            if event['is_recurrence']:
-                                client.recurrence_rounds[cls]=round_id
-                        all_available.extend(event['indices'])
-                        client.local_experience+=1
-                        for sample_index in event['indices']:
-                            client.sample_first_local_experience.setdefault(
-                                int(sample_index),client.local_experience)
-                        for cls in classes:
-                            client.first_seen_local_experience.setdefault(cls,client.local_experience)
-                        client.local_training_events.append({'round':round_id,
-                            'local_experience':client.local_experience,
-                            'class':classes[0] if len(classes)==1 else None,
-                            'classes':list(classes),
-                            'global_stage':event['global_stage'],
-                            'recurrence':event['is_recurrence'],
-                            'selected_for_upload':False})
-                        client.current_indices=list(event['indices'])
-                        if cfg.pending_policy=='bounded' and cfg.max_pending_samples>0:
-                            client.current_indices=client.current_indices[-cfg.max_pending_samples:]
-                    if cfg.learning_setting=='task_il':
-                        current_event_stage=event['global_stage']
-                        task_labels=scenario.stages[min(current_event_stage,len(scenario.stages)-1)]
-                    else:
-                        task_labels=None
-                    result=local_train(model,client,bank,local_cfg,device,round_id,
-                        task_classes=task_labels,experience_end=bool(events),
-                        active_pair_classes=(tuple(event['class_ids']) if events and
-                                             len(event['class_ids'])>=2 and not cfg.label_noise_rate else None))
-                    if result is None:
-                        continue
-                    # Advance the private weights *without* downloading the
-                    # current global model or exposing raw private memory.
-                    client.shared_weights=result['weights']
-                    client.pending_upload_examples+=result['examples']
-                    client.pending_upload_steps+=result['steps']
-                    for cls,count in result['class_update_steps'].items():
-                        client.pending_class_update_steps[int(cls)]=(
-                            client.pending_class_update_steps.get(int(cls),0)+int(count))
-                    client.pending_upload_classes.update(result['class_counts'])
-                    for cls,count in result['class_counts'].items():
-                        client.pending_upload_class_counts[int(cls)]=(
-                            client.pending_upload_class_counts.get(int(cls),0)+count)
-                    local_trained_clients.append(cid)
-                    local_details.append({'client':cid,'local_experience':client.local_experience,
-                        'is_selected':False,
-                        **{k:v for k,v in result.items() if k!='weights'}})
-                # The next round's current training distribution must respect
-                # configured data-retention semantics, not the event queue.
-                if events and cfg.pending_policy=='retain_all':
-                    client.current_indices=list(dict.fromkeys(all_available))
-                if events and cfg.pending_policy=='bounded' and cfg.max_pending_samples>0:
-                    client.current_indices=client.current_indices[-cfg.max_pending_samples:]
+            # All local clients, including those selected offline later, own
+            # separate GPU models. Every client's first task is submitted
+            # concurrently; only after all complete does any Task 2 begin.
+            # Federation is forbidden until the final task barrier finishes.
+            local_details,local_trained_clients,task_barriers=(
+                train_round_task_barriers(
+                    runtimes=client_runtimes,executor=client_executor,
+                    clients=clients,bank=bank,cfg=cfg,device=device,
+                    round_id=round_id,current_stage=current_stage,
+                    scenario=scenario,new_events=new_events))
             class_relationships=None
             if cfg.selector in {'feature_max','feature_min','gradient_align','gradient_conflict'}:
                 # Simulation-privileged: historical data that have *arrived*,
@@ -704,6 +623,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'client_private_replay_by_class':{str(cid):{str(cls):len(indices) for cls,indices in client.private_memory.items()} for cid,client in clients.items()},
                            'client_federated_cl_versions':{str(cid):c.federated_cl_version for cid,c in clients.items()},
                            'local_details':local_details,
+                           'client_execution_mode':'parallel_task_barriers',
+                           'task_barriers':task_barriers,
+                           'independent_live_client_models':len(client_runtimes),
                            'seconds':time.monotonic()-round_start,
                            'global_test_includes_inactive':True,
                            'global_evaluation_includes_inactive':True,
@@ -740,6 +662,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 forgetting=('deferred' if result['forgetting'] is None else f'{result["forgetting"]:.4f}')
                 print(f'[{job}] round {round_id+1}/{total_rounds} acc={acc} '
                       f'forgetting={forgetting} clients={len(selected)}',flush=True)
+        client_executor.shutdown(wait=True)
         save_checkpoint(run_dir/'model_final.pt',global_state,cfg,version,clients,full_state=True,server_cl_state=server_cl_state)
         atomic_json(run_dir/'summary.json',{'job_id':job,'dataset':cfg.dataset,
                     'fork_source':str(fork_from_checkpoint) if fork_from_checkpoint else None,
@@ -751,6 +674,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                                 'rounds':total_rounds})
         return {'status':'completed','run_dir':str(run_dir),'final_accuracy':history[-1]['accuracy']}
     except Exception as exc:
+        if 'client_executor' in locals():
+            client_executor.shutdown(wait=True,cancel_futures=True)
         atomic_json(status_file,{'status':'failed','protocol_version':PROTOCOL_VERSION,
                                   'error':repr(exc),'traceback':traceback.format_exc()})
         raise

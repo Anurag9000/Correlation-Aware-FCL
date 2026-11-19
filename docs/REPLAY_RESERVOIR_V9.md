@@ -27,7 +27,10 @@ python -m pip install -e '.[test]'
 python -m pytest -q
 bash scripts/run_primary_probe_cifar100.sh --backbone vit --plan-only
 mkdir -p logs
-nohup bash scripts/run_primary_probe_cifar100.sh --backbone vit --seed 0 --gpus 0,1 --replay-fraction 0.10 --epochs 10 --lr 0.003 > logs/pilot_reservoir_v9.log 2>&1 < /dev/null &
+nohup bash scripts/run_primary_probe_cifar100.sh --backbone vit --seed 0 --gpu 0 --replay-fraction 0.10 --epochs 10 --lr 0.003 > logs/pilot_reservoir_v9.log 2>&1 < /dev/null &
 ```
 
-This v9 experiment version cannot reuse prior checkpoint status markers. Results are isolated under `results/primary_cifar100_shared_reservoir_v9_vit_seed0/`. Nothing is claimed to have been remotely launched from this chat. Training samples move to the server; this is an explicit data-sharing experimental variant, **not privacy-preserving federated learning**.
+This v9 experiment version cannot reuse prior checkpoint status markers. Results are isolated under `results/primary_cifar100_single_gpu_parallel_v10_vit_seed0/`. Nothing is claimed to have been remotely launched from this chat. Training samples move to the server; this is an explicit data-sharing experimental variant, **not privacy-preserving federated learning**.
+
+
+**v10 scheduling update:** Both arms use one GPU (GPU 0) and five concurrently scheduled client models per arm, separated by task-ordinal barriers, preserving the same 10%-per-class reservoir and server union. The physical microbatch defaults to 4 with effective optimizer batch 1024; see `PARALLEL_SINGLE_GPU_V10.md`.
