@@ -46,7 +46,7 @@ bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,0
 bash scripts/run_primary_probe_cifar100.sh --backbone cnn --gpus 0,1
 ```
 
-`--gpus` selects GPUs for the **two runs**, not the two backbone types. Running both backbone types would produce four experiments, not the requested two. `--seed 0`, `--lr .003`, `--epochs 1`, `--memory-per-class 20`, `--data-root`, `--output-dir`, `--no-download`, `--plan-only` are configurable. The parent ensures CIFAR-100 is cached before spawning the two worker processes to avoid concurrent download races. Production requires CUDA by default. Independent logs, checkpoints, and status files are saved for both jobs.
+`--gpus` selects GPUs for the **two runs**, not the two backbone types. Running both backbone types would produce four experiments, not the requested two. `--seed 0`, `--lr .003`, `--epochs 10`, `--replay-fraction 0.10`, `--data-root`, `--output-dir`, `--no-download`, `--plan-only` are configurable. The parent ensures CIFAR-100 is cached before spawning the two worker processes to avoid concurrent download races. Production requires CUDA by default. Independent logs, checkpoints, and status files are saved for both jobs.
 
 Final outputs: `results/primary_cifar100_shared_cl_v7_<vit|cnn>_seed0/comparison/summary.json`, `per_class.csv`, `per_class.json`, and `comparison.md`; all computed only after **both** runs succeed and after verifying all 100 classes have been integrated.
 
@@ -55,7 +55,7 @@ Final outputs: `results/primary_cifar100_shared_cl_v7_<vit|cnn>_seed0/comparison
 **Caveat:** Training a 32×32 ViT-Tiny/16 from random initialization provides only four image tokens and may yield low absolute accuracy. ViT-specific optimizer learning rate and training duration have **not** been tuned. Negative outcomes may be architecture/training issues rather than falsification of the federated-continual-learning hypothesis.
 
 ## V7 shared archive
-Each participating client uploads up to 1,000 privately retained training exemplars, which the server merges by class and sample provenance. It stores compact uint8 RGB sample payloads and broadcasts the entire archive to online clients with the aggregated model. Offline clients continue from their last downloaded model and archive. The combined archive is **not** capped at 1,000; 1,000 is the private client budget. The protocol explicitly shares raw images, and therefore is NOT privacy-preserving FL.
+In the current v9 primary probe, each client retains an **independent 10% per-class Algorithm R reservoir**: 45 examples from each of 20 encountered CIFAR-100 classes (up to 900 private exemplars). The old flat 1,000-sample limit is not active in this fractional mode. The server merges all uploaded private reservoir samples by class and training-ID provenance, stores compact uint8 RGB payloads, and broadcasts the entire unbounded archive to online clients. Offline clients retain their own model and reservoir until reconnection. This explicitly shares raw training images; it is NOT privacy-preserving FL.
 
 
 ## v9 two-arm pilot: independently sampled 10% per-class reservoirs

@@ -41,3 +41,10 @@ The model-only communications protocol is superseded by a v7 model + method-nati
 ## Mandatory shared CL history — v8
 
 Every CIFAR-100 job now synchronizes full server continual-learning history with the model; the first next local task uses received compatible state. Includes mixed-method artifact routing, provenance-safe GEM, SI last-task consolidation and offline rejoin tests. See [v8 protocol](FEDERATED_CL_STATE_V8.md). v7 checkpoints are incompatible.
+
+
+## Current two-run CIFAR-100 Replay probe (v9)
+
+The two-arm primary probe now uses **classwise 10% Algorithm R reservoir replay**, not the earlier flat 1,000-example client cap or A-GEM method. Each class has 450 allowed TRAIN images (50 reserved for validation), so a client's fixed quota is 45 per class. Every client learns its own assigned two-label tasks and retains a persistent private reservoir; the server collects a deduplicated union from connected clients and broadcasts its entire exemplar archive. Hidden clients do not exchange either weights or memory. With 100 classes appearing once in this pilot, the expected final server archive is 4,500 samples after the communication-only flush.
+
+Native 32×32 ViT-Tiny/16 and CIFAR-stem ResNet-18 remain selectable. The default ViT pilot runs only two concurrent GPU processes with effective batch size 1024, seed 0 and 10 epochs per binary episode. The full 38,370-job-per-backbone geometric ledger still applies; other methods keep their existing per-method budgets. The v9 simulator protocol, job IDs and primary output root isolate results from v8 and all preceding versions.

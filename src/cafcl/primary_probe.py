@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse,csv,json,os,subprocess,sys,time
 from dataclasses import replace
 from pathlib import Path
+from math import ceil
 from .full_matrix import base
 from .models import resolve_backbone
 from .streaming import make_task_schedule,select_offline_cohort
@@ -17,14 +18,15 @@ from .selection import participation_budget
 
 
 def make_jobs(*,backbone='vit',seed=0,lr=.003,epochs=10,memory_per_class=20,replay_fraction=.10):
+    pct_tag=f'{100*replay_fraction:g}'.replace('.','p')
     cfg=replace(base(seed=seed,model=backbone),num_clients=5,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
         aggregator='fedavg',scenario='disjoint',stream_overlap_kind='none',
         stream_overlap_fraction=0.,classes_per_local_task=2,local_tasks_per_round=2,
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
         stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=memory_per_class,
-        job_id='PRIMARY_FULL_REPLAY_RESERVOIR10_V9_'+resolve_backbone(backbone))
+        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V9_'+resolve_backbone(backbone))
     partial=replace(cfg,participation=.8,stream_offline_policy='rotate_once',
-                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR10_V9_'+resolve_backbone(backbone))
+                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V9_'+resolve_backbone(backbone))
     for job in (cfg,partial):job.validate()
     return cfg,partial
 
@@ -54,8 +56,8 @@ def audited_plan(jobs):
     return dict(dataset='cifar100',seed=baseline.seed,backbone=baseline.model,batch_size=1024,
         replay_reservoir_fraction=baseline.replay_reservoir_fraction,
         replay_sampling='independent_classwise_algorithm_r',
-        training_images_per_class=450,private_reservoir_per_class=45,
-        expected_server_exemplars_after_flush=4500,
+        training_images_per_class=450,private_reservoir_per_class=ceil(450*baseline.replay_reservoir_fraction),
+        expected_server_exemplars_after_flush=100*ceil(450*baseline.replay_reservoir_fraction),
         clients=5,classes_per_local_task=2,local_tasks_per_round=2,training_intervals=rounds,
         terminal_communication_only_flush=True,all_classes_once=True,offline_unique_once=True,
         total_jobs=2,job_ids=[c.job_id for c in jobs],offline_schedule=by_round)
@@ -120,7 +122,8 @@ def main(argv=None):
     jobs=make_jobs(backbone=args.backbone,seed=args.seed,lr=args.lr,epochs=args.epochs,
                    memory_per_class=args.memory_per_class,replay_fraction=args.replay_fraction)
     design=audited_plan(jobs)
-    root=Path(args.output_dir)/('primary_cifar100_shared_reservoir_v9_'+args.backbone+f'_seed{args.seed}')
+    root=Path(args.output_dir)/('primary_cifar100_shared_reservoir_v9_'+args.backbone+
+        ('' if abs(args.replay_fraction-.1)<1e-12 else '_pct'+f'{100*args.replay_fraction:g}'.replace('.','p'))+f'_seed{args.seed}')
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',design)
     if args.plan_only:

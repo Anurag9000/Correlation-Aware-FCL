@@ -84,3 +84,10 @@ def test_reservoir_guardrails():
         RunConfig(method='agem',replay_reservoir_fraction=.10).validate()
     with pytest.raises(AssertionError):
         RunConfig(method='replay',replay_reservoir_fraction=1.10).validate()
+
+def test_rate_change_separates_job_ids_and_budget():
+    full,partial=make_jobs(replay_fraction=.20)
+    plan=audited_plan((full,partial))
+    assert 'RESERVOIR20_V9' in full.job_id
+    assert plan['private_reservoir_per_class']==90
+    assert plan['expected_server_exemplars_after_flush']==9000
