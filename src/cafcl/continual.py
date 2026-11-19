@@ -105,7 +105,7 @@ class LocalState:
         self.observed_classes.update(labels)
         for cls in labels:
             self.first_seen_stage.setdefault(int(cls),int(stage))
-    def update_memory(self,indices,targets,budget,rng,policy='random_per_class',*,total_limit=0,
+    def update_memory(self,indices,targets,budget,rng,policy='random_per_class',*,
                       reservoir_fraction=0.0,class_totals=None):
         """Update the private buffer; never prune the synchronized server archive.
 
@@ -145,17 +145,7 @@ class LocalState:
             by_class=defaultdict(list)
             for idx in indices:
                 by_class[int(targets[idx])].append(int(idx))
-            if total_limit>0:
-                merged=combined_memory(self.private_memory,by_class)
-                flattened=[(c,i) for c,ids in sorted(merged.items()) for i in ids]
-                if len(flattened)>total_limit:
-                    keep=sorted(int(i) for i in rng.choice(len(flattened),size=total_limit,replace=False))
-                    flattened=[flattened[i] for i in keep]
-                private=defaultdict(list)
-                for c,i in flattened:
-                    private[c].append(i)
-                self.private_memory=dict(private)
-            elif budget>0:
+            if budget>0:
                 if policy=='random_per_class':
                     # Exact per-class Algorithm R across multiple experiences,
                     # rather than repeatedly re-sampling a previously reduced
@@ -726,7 +716,6 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     # Never allocate replay/GEM memory for non-memory algorithms.
     if cfg.method in {'gem','agem','replay','er_ace'}:
         client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy,
-                             total_limit=0,
                              reservoir_fraction=(cfg.replay_reservoir_fraction if cfg.method=='replay' else 0.),
                              class_totals=(Counter(map(int,bank.train.targets)) if cfg.method=='replay' and cfg.replay_reservoir_fraction else None))
     old_loss_after=local_old_loss() if cfg.prepost_diagnostics else None

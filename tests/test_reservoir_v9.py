@@ -10,7 +10,7 @@ from cafcl.primary_probe import make_jobs,audited_plan
 from cafcl.federated_cl import FederatedCLState
 
 def apply(client,indices,labels,rng):
-    client.update_memory(indices,labels,0,rng,total_limit=1,
+    client.update_memory(indices,labels,0,rng,
         reservoir_fraction=.10,class_totals=dict(Counter(map(int,labels))))
 
 def test_batch_invariance_and_exact_class_quota():
