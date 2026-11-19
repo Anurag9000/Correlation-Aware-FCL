@@ -9,7 +9,7 @@ from cafcl.full_matrix import expand
 
 def main():
     root=Path(__file__).resolve().parents[1]
-    frozen=json.loads((root/'configs/designs/stream_v14_calibrated.json').read_text())
+    frozen=json.loads((root/'configs/designs/stream_v16_batch64.json').read_text())
     snapshots={}
     pilots={}
     for backbone in ('vit','cnn'):
@@ -29,15 +29,15 @@ def main():
         assert probe['sgd_momentum']==.9
         assert probe['sgd_weight_decay']==.0005
         assert probe['private_reservoir_per_class']==50
-        assert actual['job_count']==frozen['models'][backbone]['job_count'] and actual['families']==frozen['models'][backbone]['families'], 'v16 factorial geometry changed'
-        assert probe['private_reservoir_per_class']==50 and probe['training_intervals']==9
+        assert actual==frozen['models'][backbone], 'v16 source-generated factorial registry changed'
+        assert probe==frozen['pilots'][backbone], 'v16 paired pilot plan unexpectedly changed'
         snapshots[backbone]=actual
         pilots[backbone]=probe
-        print(f'{backbone}: {actual["job_count"]} feasible v14 jobs; sha256={actual["sha256"]}',flush=True)
+        print(f'{backbone}: {actual["job_count"]} feasible v16 jobs; sha256={actual["sha256"]}',flush=True)
     audit_result=audit(expand(include_invalid=True,model='vit'))
-    assert audit_result['accepted_jobs']==snapshots['vit']['job_count'], 'Feasibility count mismatch'
+    assert audit_result==frozen['feasibility_audit'], 'v16 feasibility audit changed'
     assert audit_result['accepted_jobs']==snapshots['vit']['job_count']
-    print('V14_DESIGN_SNAPSHOT='+json.dumps(dict(models=snapshots,pilots=pilots,
+    print('V16_DESIGN_SNAPSHOT='+json.dumps(dict(models=snapshots,pilots=pilots,
           feasibility_audit=audit_result),sort_keys=True),flush=True)
     print('Per-sync held-out audit: 10 reports for each job, CSV+MD+PNG+JSON',flush=True)
     print('Dual pilot: single physical batch 64, Replay uses mixed current/historical data',flush=True)
