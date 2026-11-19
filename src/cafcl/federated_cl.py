@@ -178,3 +178,24 @@ class FederatedCLState:
             'teacher_version':self.teacher_version,
             'contributing_clients':sorted(self.uploaded_clients),
             'integrated_classes':len(self.integrated_classes)}
+
+
+class ClientArchiveDataset:
+    """Replay remote examples from the bytes received in the synchronization.
+
+    The underlying dataset provides *new local* examples, while the server
+    archive supplies samples contributed by other online clients.
+    """
+    def __init__(self,underlying,payloads):
+        self.underlying=underlying
+        self.payloads=payloads
+        self.targets=underlying.targets
+    def __len__(self):return len(self.underlying)
+    def __getitem__(self,index):
+        example=self.payloads.get(int(index))
+        if example is None:return self.underlying[index]
+        pixels,label=example
+        from .models import NORMALIZATION_MEAN,NORMALIZATION_STD
+        mean=torch.tensor(NORMALIZATION_MEAN,dtype=torch.float32).view(3,1,1)
+        std=torch.tensor(NORMALIZATION_STD,dtype=torch.float32).view(3,1,1)
+        return ((pixels.float()/255.)-mean)/std,int(label)

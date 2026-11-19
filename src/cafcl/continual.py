@@ -249,6 +249,11 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     spurious_strength=cfg.spurious_strength,
                     label_noise_rate=cfg.label_noise_rate,seed=cfg.seed,
                     num_classes=bank.num_classes)
+    if cfg.share_continual_state and client.received_example_payloads:
+        # Historical samples from other clients are actually read from the
+        # synchronized image archive, not the simulator's privileged data bank.
+        from .federated_cl import ClientArchiveDataset
+        training_data=ClientArchiveDataset(training_data,client.received_example_payloads)
     optimizer=torch.optim.SGD(model.parameters(),lr=cfg.lr,momentum=cfg.momentum)
     if cfg.optimizer_state_policy=='persist' and client.optimizer_state is not None:
         optimizer.load_state_dict(client.optimizer_state)

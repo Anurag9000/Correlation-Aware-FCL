@@ -67,3 +67,13 @@ def test_der_and_lwf_share_history():
     t.merge_clients([a],Bank(),'lwf',{'weight':torch.tensor([9.,8.])},1)
     t.broadcast_to(b,'lwf')
     assert torch.equal(b.lwf_teacher['weight'],torch.tensor([9.,8.]))
+
+
+def test_remote_replay_reads_image_bytes_not_global_training_pool():
+    from cafcl.federated_cl import ClientArchiveDataset
+    base=Bank.Train()
+    archive=ClientArchiveDataset(base,{2:(torch.full((3,32,32),255,dtype=torch.uint8),0)})
+    image,label=archive[2]
+    assert label==0 and image.shape==(3,32,32)
+    assert image.mean().item()>1.
+    assert torch.equal(archive[1][0],base[1][0])
