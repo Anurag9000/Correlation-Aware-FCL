@@ -75,6 +75,8 @@ class FederatedCLState:
     teacher_version:int=-1
     uploaded_clients:set[int]=field(default_factory=set)
     integrated_classes:set[int]=field(default_factory=set)
+    # Cumulative TRAIN example counts of server-accepted client uploads only.
+    class_sample_exposure:dict[int,int]=field(default_factory=dict)
     memory_provenance:dict[int,set[int]]=field(default_factory=dict)
     # Stable provenance of each exemplar, including which local task supplied it.
     memory_origins:dict[int,tuple[int,int]]=field(default_factory=dict)

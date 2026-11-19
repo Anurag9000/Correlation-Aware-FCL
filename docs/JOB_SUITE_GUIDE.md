@@ -15,3 +15,6 @@ See [`PRIMARY_PROBE.md`](PRIMARY_PROBE.md), [`BACKBONES.md`](BACKBONES.md), [`FA
 ## v10 execution invariant
 
 Every active CIFAR-100 job now schedules independent client model instances concurrently **at each task ordinal**, with a full barrier between tasks, before any server update. The two-arm primary pilot launches both whole federated simulations concurrently on the same GPU (`--gpu 0`). There is no client-sequential training path in the active simulator. Results use v10-specific paths; see `PARALLEL_SINGLE_GPU_V10.md`.
+
+
+v11 note: FedAvg and its canonical server-optimizer families now synchronize the entire model, including classifier rows, without any separate classwise post-aggregation. The five research-specific server methods retain their explicitly custom class-aware/conflict/retention transformations. A hidden client's unsent class-exposure counts remain hidden until upload. Old v10 status markers cannot be used with v11. The server is not yet proven GPU-accurate by these numerical/CI tests.

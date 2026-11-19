@@ -30,10 +30,10 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v10_parallel_task_barriers'
+PROTOCOL_VERSION = 'cifar100_native32_v11_server_fidelity'
 
 
-def anchored_upload(client, global_state):
+def anchored_upload(client, global_state, *, current_version=None):
     """Rebase *all* locally accumulated learning since the last download.
 
     For a client last synchronized at anchor A with current private model L,
@@ -46,17 +46,29 @@ def anchored_upload(client, global_state):
         return None
     if client.pending_upload_steps <= 0:
         return None
+    stale=((current_version is not None and client.model_version<current_version) or
+           (current_version is None and any(not torch.equal(client.sync_anchor[key],gv)
+                                           for key,gv in global_state.items())))
+    if current_version is not None and client.model_version>current_version:
+        raise RuntimeError('Client model version ahead of server')
+    if not stale and not all(torch.equal(client.sync_anchor[key],gv)
+                             for key,gv in global_state.items()):
+        raise RuntimeError('Fresh FedAvg client anchor differs from current global model')
     candidate={}
     for key,gv in global_state.items():
         lv=client.shared_weights[key]
         anchor=client.sync_anchor[key]
         if lv.shape != gv.shape or anchor.shape != gv.shape:
             raise RuntimeError('Client/server state shape mismatch')
-        if gv.is_floating_point():
+        if not stale:
+            candidate[key]=lv.detach().cpu().clone()   # exact canonical FedAvg model
+        elif gv.is_floating_point():
+            # NONCANONICAL delayed/stale update adapter, preserves offline
+            # learning but is not synchronous FedAvg.
             candidate[key]=(gv.to(torch.float64)+lv.to(torch.float64)
-                           -anchor.to(torch.float64)).to(gv.dtype)
+                            -anchor.to(torch.float64)).to(gv.dtype)
         else:
-            candidate[key]=lv.clone()
+            candidate[key]=lv.detach().cpu().clone()
     if not check_finite(candidate):
         raise RuntimeError('Nonfinite accumulated client update')
     return {'weights':candidate,'examples':client.pending_upload_examples,
@@ -64,10 +76,12 @@ def anchored_upload(client, global_state):
             'class_update_steps':dict(client.pending_class_update_steps),
             'accumulated_steps':client.pending_upload_steps,
             'accumulated_classes':sorted(client.pending_upload_classes),
-            'anchor_version':client.model_version}
+            'anchor_version':client.model_version,
+             'stale_rebased':bool(stale),
+             'aggregation_input_semantics':('stale_delta_rebase_noncanonical' if stale else 'fresh_local_model')}
 
 
-def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None):
+def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None,class_history_counts=None):
     if not updates:raise RuntimeError('No client updates to aggregate')
     if method=='uniform':
         weights=[1./len(updates)]*len(updates)
@@ -77,12 +91,19 @@ def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None):
         if total<=0:raise RuntimeError('FedAvg has no contributing examples')
         weights=[n/total for n in counts]
     if method=='class_balanced':
+        # Repository-specific history-aware algorithm, NOT canonical FedAvg.
+        # Historical counts only include actually accepted uploads; a hidden
+        # client's unsynchronized classes are excluded from the server ledger.
         from collections import Counter
-        total_by_class=Counter()
-        for u in updates:total_by_class.update(u['class_counts'])
-        scores=[sum(v/total_by_class[c] for c,v in u['class_counts'].items())
+        round_counts=Counter()
+        for u in updates:round_counts.update(u['class_counts'])
+        prior=class_history_counts or {}
+        scores=[sum(v/(round_counts[c]+int(prior.get(c,0)))
+                    for c,v in u['class_counts'].items() if v>0)
                 for u in updates]
-        weights=[x/sum(scores) for x in scores]
+        norm=sum(scores)
+        if norm<=0:raise RuntimeError('Class-balanced aggregation lacks class evidence')
+        weights=[x/norm for x in scores]
     if method=='inverse_participation':
         if clients is None:raise ValueError('Client histories are required')
         scores=[u['examples']/max(1,clients[u['client_id']].selection_count)
@@ -159,39 +180,42 @@ def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None):
 
 
 def server_optimizer_step(base,mean,method,cfg,state):
-    """FedAvgM and FedAdam using the FedAvg mean model delta.
+    """FedAvgM/FedAdam server optimization applied to ALL model float tensors.
 
-    For FedAvg and uniform weighting, the returned mean model is unchanged.
-    Non-floating buffers follow the chosen aggregate and are not optimized.
+    FedAvgM: Hsu et al. Nesterov server momentum over aggregated model deltas.
+    FedAdam: Reddi et al. FedOpt uncorrected moments, v_0>=tau² and
+    update eta * m / (sqrt(v)+tau); not standard PyTorch Adam bias correction.
+    Other aggregation methods have no adaptive server optimizer.
     """
     if method not in {'fedadam','fedavgm'}:
         return mean,state
-    state={'step':state.get('step',0)+1,
-           'm':dict(state.get('m',{})),
+    step=int(state.get('step',0))+1
+    state={'step':step,'m':dict(state.get('m',{})),
            'v':dict(state.get('v',{}))}
     out={}
-    for name, old in base.items():
+    beta1,beta2=cfg.server_beta1,cfg.server_beta2
+    for name,old in base.items():
         if not old.is_floating_point():
-            out[name]=mean[name].clone();continue
-        delta=(mean[name].to(torch.float64)-old.to(torch.float64))
-        prev_m=state['m'].get(name,torch.zeros_like(delta))
-        momentum=(cfg.server_beta1*prev_m+delta if method=='fedavgm'
-                  else cfg.server_beta1*prev_m+(1-cfg.server_beta1)*delta)
-        state['m'][name]=momentum
+            out[name]=mean[name].clone()
+            continue
+        delta=mean[name].to(torch.float64)-old.to(torch.float64)
+        old_m=state['m'].get(name,torch.zeros_like(delta))
         if method=='fedavgm':
-            update=cfg.server_lr*momentum
+            velocity=beta1*old_m+delta
+            state['m'][name]=velocity
+            # Original FedAvgM's Nesterov acceleration.
+            update=cfg.server_lr*(delta+beta1*velocity)
         else:
-            prev_v=state['v'].get(name,torch.zeros_like(delta))
-            variance=cfg.server_beta2*prev_v+(1-cfg.server_beta2)*delta.square()
+            moment=beta1*old_m+(1-beta1)*delta
+            old_v=state['v'].get(name,torch.full_like(delta,float(cfg.fedadam_epsilon)**2))
+            variance=beta2*old_v+(1-beta2)*delta.square()
+            state['m'][name]=moment
             state['v'][name]=variance
-            # Bias correction makes the first server step well-conditioned.
-            m_hat=momentum/(1-cfg.server_beta1**state['step'])
-            v_hat=variance/(1-cfg.server_beta2**state['step'])
-            update=cfg.server_lr*m_hat/(v_hat.sqrt()+cfg.fedadam_epsilon)
+            # FedOpt paper uses uncorrected moment estimates.
+            update=cfg.server_lr*moment/(variance.sqrt()+cfg.fedadam_epsilon)
         out[name]=(old.to(torch.float64)+update).to(old.dtype)
-    if not check_finite(out):raise RuntimeError('Nonfinite adaptive server update')
+    if not check_finite(out):raise RuntimeError('Nonfinite server update')
     return out,state
-
 
 def save_round_state(path,cfg,round_id,global_state,version,clients,observed,peak,
                      integrated,history,rng,server_optimizer_state,server_class_update_counts=None,server_cl_state=None):
@@ -421,7 +445,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             base_global_state=global_state
             for cid in selected:
                 client=clients[cid]
-                uploaded=anchored_upload(client,global_state)
+                uploaded=anchored_upload(client,global_state,current_version=version)
                 if uploaded is None:
                     continue
                 uploaded['client_id']=cid
@@ -471,6 +495,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 arrived=set().union(*(c.seen_indices for c in clients.values()))
                 pre_representation=arrived_feature_means(model,bank,old,device,
                                                           allowed_indices=arrived)
+            custom_head_fusion=False
             if accepted:
                 old_gradient=None
                 if cfg.aggregator in {'retention_aware'} and old:
@@ -480,10 +505,16 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                                                            allowed_indices=arrived)
                     if vectors:old_gradient=torch.stack(list(vectors.values())).mean(0)
                 mean=aggregate(accepted,global_state,cfg.aggregator,
-                               clients=clients,round_id=round_id,old_gradient=old_gradient)
+                               clients=clients,round_id=round_id,old_gradient=old_gradient,
+                               class_history_counts=server_cl_state.class_sample_exposure)
                 candidate,new_server_state=server_optimizer_step(
                     global_state,mean,cfg.aggregator,cfg,server_optimizer_state)
-                if cfg.classwise_head_merge:
+                # Canonical methods MUST aggregate every classifier row with
+                # the same rule as every other model parameter.
+                custom_head_fusion=bool(cfg.classwise_head_merge and cfg.aggregator in
+                    {'class_balanced','inverse_participation','conflict_aware',
+                     'conflict_projection','retention_aware'})
+                if custom_head_fusion:
                     candidate=classwise_merge(global_state,candidate,accepted,
                         server_class_update_counts,classifier_parameter_names(model),
                         method=cfg.aggregator)
@@ -497,6 +528,11 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 if cfg.share_continual_state:
                     server_cl_state.merge_clients([clients[u['client_id']] for u in accepted],
                         bank,cfg.method,candidate,version+1)
+                    for upload in accepted:
+                        for cls,n in upload['class_counts'].items():
+                            cls=int(cls)
+                            server_cl_state.class_sample_exposure[cls]=(
+                                server_cl_state.class_sample_exposure.get(cls,0)+int(n))
                 # Candidate is built without mutating the committed server state.
                 for cid in selected:
                     clients[cid].receive(candidate,version+1,
@@ -617,6 +653,16 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'uploaded_accumulated_steps':{str(u['client_id']):u['accumulated_steps'] for u in accepted},
                            'client_unsent_steps':{str(cid):c.pending_upload_steps for cid,c in clients.items()},
                            'protocol_version':PROTOCOL_VERSION,
+                           'aggregation_algorithm':cfg.aggregator,
+                           'aggregation_family':('stale_delta_adapter_noncanonical' if any(u['stale_rebased'] for u in accepted)
+                                else ('uniform_mean_ablation' if cfg.aggregator=='uniform'
+                                else ('canonical_full_model' if cfg.aggregator in
+                                      {'fedavg','fedavgm','fedadam'} else 'repository_specific_custom'))),
+                           'classwise_head_merge_applied':custom_head_fusion,
+                           'stale_rebased_client_ids':[u['client_id'] for u in accepted if u['stale_rebased']],
+                           'upload_model_origins':{str(u['client_id']):u['aggregation_input_semantics'] for u in accepted},
+                           'server_class_sample_exposure':{str(k):int(v) for k,v in sorted(server_cl_state.class_sample_exposure.items())},
+                           'server_integrated_class_count':len(server_cl_state.integrated_classes),
                            'server_cl_state':server_cl_state.statistics(),
                            'client_shared_memory_sizes':{str(cid):sum(map(len,c.received_memory.values())) for cid,c in clients.items()},
                            'client_private_memory_sizes':{str(cid):sum(map(len,c.private_memory.values())) for cid,c in clients.items()},

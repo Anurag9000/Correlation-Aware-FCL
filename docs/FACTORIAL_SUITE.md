@@ -63,3 +63,6 @@ bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0
 ```
 
 **Scope:** This is exhaustive only over the *specified compatible finite axes*, not a full Cartesian product of all continuous hyperparameters or a claim that every source-coded variant is an exact paper implementation. Several advanced client-selection policies require privileged simulator metadata. The official test split must not drive adaptive client selection or hyperparameter tuning; the two-job probe evaluates official test only at the end.
+
+
+**v11 execution semantics:** All nine server algorithms are audited and classified in `SERVER_ALGORITHM_FIDELITY_V11.md`. The original 38,370-per-backbone factorial *geometry* is preserved, but earlier trained data/checkpoints do not constitute results of this new aggregation protocol. The v11 path prefix is `cifar100_native32_v11_server_fidelity_`. Canonical methods never apply the custom classwise row overwrite, even when a historical config record includes its legacy default flag.

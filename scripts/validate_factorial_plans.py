@@ -10,7 +10,7 @@ from cafcl.full_matrix import expand
 def main():
     root=Path(__file__).resolve().parents[1]
     frozen=json.loads((root/'configs/designs/stream_v6_native32.json').read_text())
-    frozen_probe=json.loads((root/'configs/designs/primary_probe_v10_parallel.json').read_text())
+    frozen_probe=json.loads((root/'configs/designs/primary_probe_v11_server.json').read_text())
     for backbone in ('vit','cnn'):
         actual=manifest(model=backbone)
         expected=frozen['models'][backbone]

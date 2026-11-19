@@ -19,14 +19,14 @@ from .selection import participation_budget
 
 def make_jobs(*,backbone='vit',seed=0,lr=.003,epochs=10,memory_per_class=20,replay_fraction=.10,batch_size=1024,micro_batch_size=4):
     pct_tag=f'{100*replay_fraction:g}'.replace('.','p')
-    cfg=replace(base(seed=seed,model=backbone),num_clients=5,batch_size=batch_size,micro_batch_size=micro_batch_size,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
+    cfg=replace(base(seed=seed,model=backbone),num_clients=5,batch_size=batch_size,micro_batch_size=micro_batch_size,classwise_head_merge=False,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
         aggregator='fedavg',scenario='disjoint',stream_overlap_kind='none',
         stream_overlap_fraction=0.,classes_per_local_task=2,local_tasks_per_round=2,
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
         stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=memory_per_class,
-        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V10_PARALLEL_'+resolve_backbone(backbone))
+        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V11_SERVER_'+resolve_backbone(backbone))
     partial=replace(cfg,participation=.8,stream_offline_policy='rotate_once',
-                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V10_PARALLEL_'+resolve_backbone(backbone))
+                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V11_SERVER_'+resolve_backbone(backbone))
     for job in (cfg,partial):job.validate()
     return cfg,partial
 
@@ -57,6 +57,7 @@ def audited_plan(jobs):
         micro_batch_size=baseline.micro_batch_size,
         client_execution_mode='parallel_task_barriers',
         client_models_per_run=baseline.num_clients,
+        canonical_whole_model_aggregation=not baseline.classwise_head_merge,
         process_topology='two_independent_runs_on_one_gpu',
         replay_reservoir_fraction=baseline.replay_reservoir_fraction,
         replay_sampling='independent_classwise_algorithm_r',
@@ -134,7 +135,7 @@ def main(argv=None):
                    memory_per_class=args.memory_per_class,replay_fraction=args.replay_fraction,
                    micro_batch_size=args.micro_batch_size)
     design=audited_plan(jobs)
-    root=Path(args.output_dir)/('primary_cifar100_single_gpu_parallel_v10_'+args.backbone+
+    root=Path(args.output_dir)/('primary_cifar100_single_gpu_server_v11_'+args.backbone+
         ('' if abs(args.replay_fraction-.1)<1e-12 else '_pct'+f'{100*args.replay_fraction:g}'.replace('.','p'))+
         f'_bs{args.batch_size}_seed{args.seed}')
     root.mkdir(parents=True,exist_ok=True)

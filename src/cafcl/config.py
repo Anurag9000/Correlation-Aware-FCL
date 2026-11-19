@@ -129,7 +129,8 @@ class RunConfig:
             assert self.learning_setting == 'class_il', 'No task ID or task-specific heads'
             assert self.class_pair_protocol == 'strict'
             assert not self.full_sync and not self.reset_memory_on_sync, 'Offline clients must never receive server broadcasts or lose memory'
-            assert self.classwise_head_merge, 'Canonical class-wise server fusion is required'
+            # Canonical methods update all classifier rows with the same
+            # aggregation rule. Classwise fusion is only for custom methods.
             assert not self.class_subset, 'CIFAR-100 subset is insufficient for default 10-client curriculum'
             assert not self.holders_override and not self.arrival_lag_by_client
             assert not self.stage_participation and not self.participation_overrides
