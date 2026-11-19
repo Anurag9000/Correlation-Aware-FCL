@@ -42,34 +42,41 @@ def estimate_diagonal_importance(
     model.eval()
     categorical_rng=torch.Generator(device='cpu').manual_seed(int(seed)+9173)
     try:
-        for index in selected:
-            x,_=dataset[index]
-            logits=model(x.unsqueeze(0).to(device))
+        # One model forward always contains 64 training examples. Padding repeats
+        # eligible TRAIN inputs, but only the *original* selected examples enter
+        # the diagonal-importance estimate; duplicate padding is never counted.
+        for start in range(0,len(selected),64):
+            batch_ids=selected[start:start+64]
+            valid=len(batch_ids)
+            padded=batch_ids+[batch_ids[i%valid] for i in range(64-valid)]
+            input_x=torch.stack([dataset[int(i)][0] for i in padded]).to(device)
+            logits=model(input_x)
+            if len(logits)!=64:
+                raise RuntimeError('EWC/MAS must forward a physical batch of 64')
             if active_classes is not None:
-                ids=torch.as_tensor(sorted(set(map(int,active_classes))),
+                active_ids=torch.as_tensor(sorted(set(map(int,active_classes))),
                     dtype=torch.long,device=logits.device)
-                logits=logits.index_select(1,ids)
-            if kind=='ewc':
-                if logits.shape[1]<2:
-                    raise ValueError('Fisher calculation requires >=2 classifier outputs')
-                prob=F.softmax(logits.detach().to(torch.float64),dim=1)
-                # Sampling a label from the model predictive distribution
-                # distinguishes true Fisher from empirical-label Fisher.
-                label=torch.multinomial(prob.cpu(),1,generator=categorical_rng).to(logits.device)
-                scalar=F.cross_entropy(logits,label.reshape(-1))
-            else:
-                # MAS is label-independent. Take the sensitivity for each
-                # *individual* example, then the absolute value, then average.
-                scalar=logits.square().sum(dim=1).sum()
-            grads=torch.autograd.grad(scalar,params,allow_unused=True)
-            for (name,_),g in zip(named.items(),grads):
-                if g is not None:
-                    contribution=g.detach().cpu().to(torch.float64)
-                    if kind=='ewc':
-                        contribution=contribution.square()
-                    else:
-                        contribution=contribution.abs()
-                    result[name]+=contribution
+                logits=logits.index_select(1,active_ids)
+            if kind=='ewc' and logits.shape[1]<2:
+                raise ValueError('Fisher requires >=2 logits')
+            for local_index in range(valid):
+                one=logits[local_index:local_index+1]
+                if kind=='ewc':
+                    probs=F.softmax(one.detach().to(torch.float64),dim=1)
+                    label=torch.multinomial(probs.cpu(),1,generator=categorical_rng).to(one.device)
+                    scalar=F.cross_entropy(one,label.reshape(-1))
+                else:
+                    scalar=one.square().sum()
+                grads=torch.autograd.grad(scalar,params,allow_unused=True,
+                                           retain_graph=(local_index+1<valid))
+                for (name,_),g in zip(named.items(),grads):
+                    if g is not None:
+                        contribution=g.detach().cpu().to(torch.float64)
+                        if kind=='ewc':
+                            contribution=contribution.square()
+                        else:
+                            contribution=contribution.abs()
+                        result[name]+=contribution
         for name in result:
             result[name]=(result[name]/len(selected)).to(named[name].dtype)
             if not torch.isfinite(result[name]).all():

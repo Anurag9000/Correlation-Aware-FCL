@@ -32,7 +32,14 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
     confusion=torch.zeros((bank.num_classes,bank.num_classes),dtype=torch.int64)
     allowed_class_ids=torch.as_tensor(sorted(observed),dtype=torch.long,device=device)
     for x,y in loader:
-        logits=model(x.to(device))
+        # Evaluation runs the identical physical batch of 64, too. The last
+        # group is padded ONLY for forward computation; duplicated predictions
+        # are discarded before loss, confusion-matrix and accuracy accounting.
+        valid=len(y)
+        if valid<batch_size:
+            indices=torch.arange(batch_size-valid)%valid
+            x=torch.cat((x,x[indices]),dim=0)
+        logits=model(x.to(device))[:valid]
         # The global classifier has shape-stable allocated rows, but classes
         # that have not arrived anywhere must not compete at inference.
         # Arrived-yet-offline classes DO compete: they are part of evaluation.
