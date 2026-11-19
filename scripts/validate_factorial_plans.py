@@ -10,6 +10,7 @@ from cafcl.full_matrix import expand
 def main():
     root=Path(__file__).resolve().parents[1]
     frozen=json.loads((root/'configs/designs/stream_v6_native32.json').read_text())
+    frozen_probe=json.loads((root/'configs/designs/primary_probe_v10_parallel.json').read_text())
     for backbone in ('vit','cnn'):
         actual=manifest(model=backbone)
         expected=frozen['models'][backbone]
@@ -18,7 +19,11 @@ def main():
         assert actual['method_aggregator_pairs']==99
         assert actual['job_count']==38370
         probe=audited_plan(make_jobs(backbone=backbone))
-        assert probe==frozen['primary_probe_'+backbone]
+        assert probe==frozen_probe[backbone], 'v10 pilot schedule or concurrent training contract drifted'
+        assert probe['client_execution_mode']=='parallel_task_barriers'
+        assert probe['client_models_per_run']==5
+        assert probe['process_topology']=='two_independent_runs_on_one_gpu'
+        assert probe['micro_batch_size']==4
         assert probe['total_jobs']==2 and probe['training_intervals']==5
         assert all(len(x['offline_classes'])==4 for x in probe['offline_schedule'])
         print(f'{backbone}: {actual["job_count"]} feasible jobs, batch 1024, 99/99 method pairs, '

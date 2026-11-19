@@ -54,6 +54,10 @@ def audited_plan(jobs):
             online_clients=[c for c in range(5) if c!=offline[r]]))
         assert len(by_round[-1]['offline_classes'])==4
     return dict(dataset='cifar100',seed=baseline.seed,backbone=baseline.model,batch_size=1024,
+        micro_batch_size=baseline.micro_batch_size,
+        client_execution_mode='parallel_task_barriers',
+        client_models_per_run=baseline.num_clients,
+        process_topology='two_independent_runs_on_one_gpu',
         replay_reservoir_fraction=baseline.replay_reservoir_fraction,
         replay_sampling='independent_classwise_algorithm_r',
         training_images_per_class=450,private_reservoir_per_class=ceil(450*baseline.replay_reservoir_fraction),
