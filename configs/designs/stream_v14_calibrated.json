@@ -1,0 +1,456 @@
+{
+  "feasibility_audit": {
+    "accepted_by_family": {
+      "balanced": 5346,
+      "class_imbalance": 891,
+      "client_count": 594,
+      "client_quantity": 594,
+      "distillation": 243,
+      "fedprox": 891,
+      "gem_grouping": 54,
+      "local_optimization": 3267,
+      "memory": 648,
+      "offline_duration": 8118,
+      "overlap_strength": 2475,
+      "raw_sample_overlap": 1188,
+      "recurrent_rounds": 1782,
+      "regularization": 243,
+      "replay_beta": 162,
+      "replay_ratio": 324,
+      "selection": 4158,
+      "semantic_order": 594,
+      "server_optimization": 264,
+      "terminal_flush": 297
+    },
+    "accepted_jobs": 32133,
+    "cached_stream_structures": 276,
+    "examples": {
+      "memory:lwf-memory-capacity-unused": "ST_memory_a7d3e15d6c0ce833d00f",
+      "offline_duration:truncated-or-extended-offline-duration": "ST_offline_duration_f5ab4a16ce6d7e209abb",
+      "overlap_strength:Stream scheduler made no progress": "ST_overlap_strength_f28f04379374341924fb",
+      "overlap_strength:combined-does-not-realize-all-four-overlap-geometries": "ST_overlap_strength_cbab6ad79a6d299d2439",
+      "regularization:lwf-regularization-strength-unused": "ST_regularization_282153ca2705b5ce59dd",
+      "selection:overlap-selector-has-no-overlap-signal": "ST_selection_a5a3698828d63b1d53a9",
+      "selection:recurrence-selector-has-no-recurrence-signal": "ST_selection_65b4fe911a1064500741",
+      "selection:selection-policy-exact-alias": "ST_selection_fde5db275bc8cbd5a48d",
+      "selection:selection-policy-inert-at-full-participation": "ST_selection_4a355481d812a32acf6a",
+      "task_length:retired-variable-task-length-protocol": "ST_task_length_86afa98e46db81d5cbcc"
+    },
+    "input_jobs": 53805,
+    "rejected_by_family_reason": {
+      "memory:lwf-memory-capacity-unused": 108,
+      "offline_duration:truncated-or-extended-offline-duration": 5544,
+      "overlap_strength:Stream scheduler made no progress": 297,
+      "overlap_strength:combined-does-not-realize-all-four-overlap-geometries": 198,
+      "regularization:lwf-regularization-strength-unused": 81,
+      "selection:overlap-selector-has-no-overlap-signal": 594,
+      "selection:recurrence-selector-has-no-recurrence-signal": 594,
+      "selection:selection-policy-exact-alias": 2673,
+      "selection:selection-policy-inert-at-full-participation": 2673,
+      "task_length:retired-variable-task-length-protocol": 8910
+    },
+    "rejected_jobs": 21672
+  },
+  "models": {
+    "cnn": {
+      "backbone": "resnet18_cifar32",
+      "batch_size": 64,
+      "dataset": "cifar100",
+      "families": {
+        "balanced": 5346,
+        "class_imbalance": 891,
+        "client_count": 594,
+        "client_quantity": 594,
+        "distillation": 243,
+        "fedprox": 891,
+        "gem_grouping": 54,
+        "local_optimization": 3267,
+        "memory": 648,
+        "offline_duration": 8118,
+        "overlap_strength": 2475,
+        "raw_sample_overlap": 1188,
+        "recurrent_rounds": 1782,
+        "regularization": 243,
+        "replay_beta": 162,
+        "replay_ratio": 324,
+        "selection": 4158,
+        "semantic_order": 594,
+        "server_optimization": 264,
+        "terminal_flush": 297
+      },
+      "job_count": 32133,
+      "method_aggregator_pairs": 99,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "sha256": "14dae24129c347cb77de0bef782d4fa05ce075b54c52add7fe671dce6d713a83",
+      "warning": "These are planned runs, not trained CIFAR-100 results."
+    },
+    "vit": {
+      "backbone": "vit_base_patch16_32",
+      "batch_size": 64,
+      "dataset": "cifar100",
+      "families": {
+        "balanced": 5346,
+        "class_imbalance": 891,
+        "client_count": 594,
+        "client_quantity": 594,
+        "distillation": 243,
+        "fedprox": 891,
+        "gem_grouping": 54,
+        "local_optimization": 3267,
+        "memory": 648,
+        "offline_duration": 8118,
+        "overlap_strength": 2475,
+        "raw_sample_overlap": 1188,
+        "recurrent_rounds": 1782,
+        "regularization": 243,
+        "replay_beta": 162,
+        "replay_ratio": 324,
+        "selection": 4158,
+        "semantic_order": 594,
+        "server_optimization": 264,
+        "terminal_flush": 297
+      },
+      "job_count": 32133,
+      "method_aggregator_pairs": 99,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "sha256": "52211ee2a118e7e4132d7f0b30cf55b76db9d62e1bb76f58189b51946bf7168a",
+      "warning": "These are planned runs, not trained CIFAR-100 results."
+    }
+  },
+  "pilots": {
+    "cnn": {
+      "all_classes_once": true,
+      "backbone": "resnet18_cifar32",
+      "batch_size": 64,
+      "canonical_whole_model_aggregation": true,
+      "classes_per_local_task": 2,
+      "client_execution_mode": "parallel_task_barriers",
+      "client_models_per_run": 5,
+      "clients": 5,
+      "dataset": "cifar100",
+      "expected_server_exemplars_after_flush": 5000,
+      "initial_local_tasks": 2,
+      "initial_new_classes_per_client": 4,
+      "job_ids": [
+        "PRIMARY_FULL_REPLAY_RESERVOIR11p1111_V14_CALIBRATED_resnet18_cifar32",
+        "PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR11p1111_V14_CALIBRATED_resnet18_cifar32"
+      ],
+      "micro_batch_size": 8,
+      "offline_rotation_covers_all": true,
+      "offline_schedule": [
+        {
+          "offline_classes": [
+            4,
+            5,
+            6,
+            7
+          ],
+          "offline_client": 1,
+          "online_clients": [
+            0,
+            2,
+            3,
+            4
+          ],
+          "round": 1
+        },
+        {
+          "offline_classes": [
+            28,
+            29
+          ],
+          "offline_client": 4,
+          "online_clients": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "round": 2
+        },
+        {
+          "offline_classes": [
+            34,
+            35
+          ],
+          "offline_client": 2,
+          "online_clients": [
+            0,
+            1,
+            3,
+            4
+          ],
+          "round": 3
+        },
+        {
+          "offline_classes": [
+            46,
+            47
+          ],
+          "offline_client": 3,
+          "online_clients": [
+            0,
+            1,
+            2,
+            4
+          ],
+          "round": 4
+        },
+        {
+          "offline_classes": [
+            50,
+            51
+          ],
+          "offline_client": 0,
+          "online_clients": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "round": 5
+        },
+        {
+          "offline_classes": [
+            62,
+            63
+          ],
+          "offline_client": 1,
+          "online_clients": [
+            0,
+            2,
+            3,
+            4
+          ],
+          "round": 6
+        },
+        {
+          "offline_classes": [
+            78,
+            79
+          ],
+          "offline_client": 4,
+          "online_clients": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "round": 7
+        },
+        {
+          "offline_classes": [
+            84,
+            85
+          ],
+          "offline_client": 2,
+          "online_clients": [
+            0,
+            1,
+            3,
+            4
+          ],
+          "round": 8
+        },
+        {
+          "offline_classes": [
+            96,
+            97
+          ],
+          "offline_client": 3,
+          "online_clients": [
+            0,
+            1,
+            2,
+            4
+          ],
+          "round": 9
+        }
+      ],
+      "private_reservoir_per_class": 50,
+      "process_topology": "two_independent_runs_on_one_gpu",
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_sampling": "independent_classwise_algorithm_r",
+      "seed": 0,
+      "sgd_momentum": 0.9,
+      "sgd_weight_decay": 0.0005,
+      "subsequent_local_tasks": 1,
+      "subsequent_new_classes_per_client": 2,
+      "terminal_communication_only_flush": true,
+      "total_jobs": 2,
+      "training_images_per_class": 450,
+      "training_intervals": 9
+    },
+    "vit": {
+      "all_classes_once": true,
+      "backbone": "vit_base_patch16_32",
+      "batch_size": 64,
+      "canonical_whole_model_aggregation": true,
+      "classes_per_local_task": 2,
+      "client_execution_mode": "parallel_task_barriers",
+      "client_models_per_run": 5,
+      "clients": 5,
+      "dataset": "cifar100",
+      "expected_server_exemplars_after_flush": 5000,
+      "initial_local_tasks": 2,
+      "initial_new_classes_per_client": 4,
+      "job_ids": [
+        "PRIMARY_FULL_REPLAY_RESERVOIR11p1111_V14_CALIBRATED_vit_base_patch16_32",
+        "PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR11p1111_V14_CALIBRATED_vit_base_patch16_32"
+      ],
+      "micro_batch_size": 8,
+      "offline_rotation_covers_all": true,
+      "offline_schedule": [
+        {
+          "offline_classes": [
+            4,
+            5,
+            6,
+            7
+          ],
+          "offline_client": 1,
+          "online_clients": [
+            0,
+            2,
+            3,
+            4
+          ],
+          "round": 1
+        },
+        {
+          "offline_classes": [
+            28,
+            29
+          ],
+          "offline_client": 4,
+          "online_clients": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "round": 2
+        },
+        {
+          "offline_classes": [
+            34,
+            35
+          ],
+          "offline_client": 2,
+          "online_clients": [
+            0,
+            1,
+            3,
+            4
+          ],
+          "round": 3
+        },
+        {
+          "offline_classes": [
+            46,
+            47
+          ],
+          "offline_client": 3,
+          "online_clients": [
+            0,
+            1,
+            2,
+            4
+          ],
+          "round": 4
+        },
+        {
+          "offline_classes": [
+            50,
+            51
+          ],
+          "offline_client": 0,
+          "online_clients": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "round": 5
+        },
+        {
+          "offline_classes": [
+            62,
+            63
+          ],
+          "offline_client": 1,
+          "online_clients": [
+            0,
+            2,
+            3,
+            4
+          ],
+          "round": 6
+        },
+        {
+          "offline_classes": [
+            78,
+            79
+          ],
+          "offline_client": 4,
+          "online_clients": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "round": 7
+        },
+        {
+          "offline_classes": [
+            84,
+            85
+          ],
+          "offline_client": 2,
+          "online_clients": [
+            0,
+            1,
+            3,
+            4
+          ],
+          "round": 8
+        },
+        {
+          "offline_classes": [
+            96,
+            97
+          ],
+          "offline_client": 3,
+          "online_clients": [
+            0,
+            1,
+            2,
+            4
+          ],
+          "round": 9
+        }
+      ],
+      "private_reservoir_per_class": 50,
+      "process_topology": "two_independent_runs_on_one_gpu",
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_sampling": "independent_classwise_algorithm_r",
+      "seed": 0,
+      "sgd_momentum": 0.9,
+      "sgd_weight_decay": 0.0005,
+      "subsequent_local_tasks": 1,
+      "subsequent_new_classes_per_client": 2,
+      "terminal_communication_only_flush": true,
+      "total_jobs": 2,
+      "training_images_per_class": 450,
+      "training_intervals": 9
+    }
+  }
+}

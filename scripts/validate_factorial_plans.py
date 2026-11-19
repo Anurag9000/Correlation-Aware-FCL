@@ -9,6 +9,7 @@ from cafcl.full_matrix import expand
 
 def main():
     root=Path(__file__).resolve().parents[1]
+    frozen=json.loads((root/'configs/designs/stream_v14_calibrated.json').read_text())
     snapshots={}
     pilots={}
     for backbone in ('vit','cnn'):
@@ -27,10 +28,13 @@ def main():
         assert probe['sgd_momentum']==.9
         assert probe['sgd_weight_decay']==.0005
         assert probe['private_reservoir_per_class']==50
+        assert actual==frozen['models'][backbone], 'v14 factorial registry changed'
+        assert probe==frozen['pilots'][backbone], 'v14 paired-suite plan changed'
         snapshots[backbone]=actual
         pilots[backbone]=probe
         print(f'{backbone}: {actual["job_count"]} feasible v14 jobs; sha256={actual["sha256"]}',flush=True)
     audit_result=audit(expand(include_invalid=True,model='vit'))
+    assert audit_result==frozen['feasibility_audit'], 'v14 audit feasibility changed'
     assert audit_result['accepted_jobs']==snapshots['vit']['job_count']
     print('V14_DESIGN_SNAPSHOT='+json.dumps(dict(models=snapshots,pilots=pilots,
           feasibility_audit=audit_result),sort_keys=True),flush=True)
