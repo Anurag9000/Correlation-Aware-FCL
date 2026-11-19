@@ -210,7 +210,10 @@ def save_round_state(path,cfg,round_id,global_state,version,clients,observed,pea
 
 def atomic_json(path,obj):
     path=Path(path)
-    tmp=path.with_suffix(path.suffix+'.tmp')
+    # Multiple independent CIFAR jobs may publish the same architecture
+    # reference concurrently. A shared fixed temporary path lets one writer
+    # replace or truncate another writer's in-progress JSON.
+    tmp=path.with_suffix(path.suffix+f'.{os.getpid()}.tmp')
     with tmp.open('w') as fh:json.dump(obj,fh,indent=2,sort_keys=True,default=str)
     os.replace(tmp,path)
 
