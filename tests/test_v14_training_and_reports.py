@@ -150,3 +150,52 @@ def test_synthetic_run_exports_all_round_tables_without_changing_communication(t
     assert metrics[0]['evaluation_deferred'] is True
     assert metrics[1]['evaluation_deferred'] is True
     assert metrics[-1]['evaluation_split']=='test'
+
+
+def test_agem_historical_reference_does_not_compete_with_unknown_future_classes():
+    from cafcl.continual import _reference_gradient
+    from torch import nn
+
+    class ReferenceDataset:
+        targets=[0,1]
+        def __len__(self):return 2
+        def __getitem__(self,i):
+            return torch.tensor([1.+i]),self.targets[i]
+
+    model=nn.Linear(1,4,bias=False)
+    with torch.no_grad():
+        model.weight.copy_(torch.tensor([[.2],[-.6],[.5],[9.]]))
+    actual=_reference_gradient(
+        model,list(model.parameters()),ReferenceDataset(),[0,1],2,
+        torch.device('cpu'),seed=12,
+        active_pair_classes=(0,1,2),reference_classes=None)
+    model.zero_grad(set_to_none=True)
+    y=torch.tensor([0,1])
+    F.cross_entropy(model(torch.tensor([[1.],[2.]]))[:,[0,1,2]],y).backward()
+    expected=model.weight.grad.flatten()
+    torch.testing.assert_close(actual,expected,rtol=1e-6,atol=1e-6)
+    assert actual[3]==0  # genuinely unknown future classifier output
+
+
+def test_final_only_diagnostics_still_update_validation_forgetting_history(tmp_path):
+    cfg=RunConfig(dataset='synthetic',model='test_linear',
+        num_clients=2,stream_protocol=True,class_pair_protocol='strict',
+        method='sgd',aggregator='fedavg',batch_size=64,micro_batch_size=4,
+        epochs=1,stages=1,rounds_per_stage=1,
+        momentum=.9,weight_decay=5e-4,participation=1.,
+        evaluate_final_only=True,job_id='validate_forgetting_peaks_v14')
+    run_experiment(cfg,str(tmp_path),verbose=False)
+    run=tmp_path/cfg.job_id
+    metrics=json.loads((run/'metrics.json').read_text())
+    ck=torch.load(run/'checkpoint_latest.pt',map_location='cpu',weights_only=False)
+    peaks={int(k):float(v) for k,v in ck['peak'].items()}
+    assert peaks, 'Validation history must not remain empty when test is deferred'
+    first={int(k):float(v) for k,v in metrics[0]['selection_validation_per_class'].items()}
+    assert first
+    for cls,score in first.items():
+        assert peaks[cls] >= score
+    assert metrics[0]['evaluation_deferred'] is True
+    assert metrics[0]['selection_validation_per_class']
+    # Audit TEST and selection VALIDATION predictions remain segregated.
+    assert 'per_sync_test_per_class' in metrics[0]
+    assert metrics[0]['per_class']=={}

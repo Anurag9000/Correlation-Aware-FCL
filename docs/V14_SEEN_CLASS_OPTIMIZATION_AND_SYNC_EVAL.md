@@ -201,3 +201,34 @@ instances, numerical convergence under the revised hyperparameters,
 final accuracy improvements, or comparisons over multiple seeds.
 CPU CI passing cannot establish those. New results require fresh v14
 experiments.
+
+
+## v14 additional fidelity/selection corrections (2026-11-20)
+
+* GEM/A-GEM reference gradients now use exactly the class set already
+  known at the local client: the same seen-class competitor universe
+  as incoming supervised CE. Under \`gem_grouping='stage'\`, the original
+  historical-experience pair loss takes precedence and is preserved.
+  Unknown future class logits do not participate in generic
+  gradient-reference constraints.
+* The terminal-only evaluation mode previously left the **validation
+  performance peak table** empty between updates, so any selector
+  relying on past forgetting received ineffective zero history.
+  Validation peaks are now updated at every server sync, separately
+  from the immutable test audit. The test peak table remains used
+  exclusively to calculate reported per-sync forgetting. Test metrics
+  MUST NOT change selection, model, training or method hyperparameters.
+* The v14 factorial set is frozen in
+  \`configs/designs/stream_v14_calibrated.json\`. For each backbone,
+  exactly 32,133 feasible jobs, all 99 method/server combinations,
+  53,805 candidate geometries inspected, 21,672 rejected. The
+  validator asserts exact source-generated checksums and the
+  fully specified two-run pilot plan; an accidental drift fails CI.
+* Faithfulness note: in the rotating-offline arm, the server accepts
+  stale client increments through a rebased delta adapter, not
+  literal synchronized FedAvg over same-ancestor models. The
+  full-participation arm uses true canonical example-weighted FedAvg.
+  BatchNorm counters use a monotone maximum (also not a plain
+  weighted mean); float BatchNorm parameters/buffers are averaged.
+  Neither distinction should be hidden when attributing accuracy.
+

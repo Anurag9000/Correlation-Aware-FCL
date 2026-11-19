@@ -676,10 +676,15 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         'globally_integrated_classes':sorted(integrated),
                         'evaluation_split':None,'evaluation_samples':0}
             else:
-                result,peak=evaluate(model,evaluation_bank,observed,cfg.batch_size,device,peak,
+                # If terminal-only, do not mix held-out TEST peaks into
+                # the validation peak history used by client selectors.
+                evaluation_peaks=(peak.copy() if cfg.evaluate_final_only else peak)
+                result,new_eval_peaks=evaluate(model,evaluation_bank,observed,cfg.batch_size,device,evaluation_peaks,
                                      integrated=integrated,old=old,new=new,
                                      task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
                                      split=('test' if cfg.evaluate_final_only else 'validation'))
+                if not cfg.evaluate_final_only:
+                    peak=new_eval_peaks
                 result['evaluation_deferred']=False
             # Every communication interval, including the all-client closing
             # flush, gets a fresh server-global evaluation over every currently
@@ -688,8 +693,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             from .stage_report import render_sync_report
             validation_report=None
             if evaluation_bank.validation is not None:
-                validation_report,_=evaluate(model,evaluation_bank,observed,
-                    cfg.batch_size,device,peak={},integrated=integrated,
+                # Selection/forgetting peaks are always VALIDATION-only.
+                # This must happen even when the official test is deferred
+                # until the last round, otherwise forgetting-based selectors
+                # silently see zero history at every intermediate sync.
+                validation_report,peak=evaluate(model,evaluation_bank,observed,
+                    cfg.batch_size,device,peak=peak,integrated=integrated,
                     old=old,new=new,
                     task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
                     split='validation')

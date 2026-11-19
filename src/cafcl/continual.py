@@ -285,10 +285,16 @@ def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,acti
             x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
             reference_logits=model(x)
             if reference_classes is not None:
-                # A past task must be constrained by its OWN task objective,
-                # never the two classes currently arriving at this client.
+                # GEM explicit original-experience constraints retain their
+                # own historical label universe (stage grouping).
                 from .class_indexed import canonical_active_loss
                 ref_loss=canonical_active_loss(reference_logits,y,reference_classes)
+            elif active_pair_classes is not None:
+                # All/class grouping and A-GEM must use the SAME known-class
+                # competitor set as the current class-IL objective, rather
+                # than penalizing outputs for unknown future classes.
+                from .class_indexed import canonical_active_loss
+                ref_loss=canonical_active_loss(reference_logits,y,active_pair_classes)
             else:
                 ref_loss=F.cross_entropy(reference_logits,y)
             (ref_loss*(len(y)/total)).backward()
