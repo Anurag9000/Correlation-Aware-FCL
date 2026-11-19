@@ -19,7 +19,8 @@ class RunConfig:
     stages: int = 2
     micro_batch_size: int = 16  # physical batch; effective SGD step remains batch_size=1024
     memory_per_class: int = 20
-    replay_buffer_capacity: int = 1000
+    replay_buffer_capacity: int = 1000  # legacy private total-budget mode
+    replay_reservoir_fraction: float = 0.0  # positive => fixed per-class Algorithm R reservoir
     share_continual_state: bool = True
     lr: float = 0.03
     model: str = "vit_tiny_patch16_32"
@@ -154,6 +155,9 @@ class RunConfig:
             assert self.model in MODEL_IDS, 'Research requires an explicitly registered native 32x32 research backbone'
         assert self.memory_per_class >= 0
         assert self.replay_buffer_capacity>=1
+        assert 0 <= self.replay_reservoir_fraction <= 1, 'Reservoir fraction must be within [0,1]'
+        if self.replay_reservoir_fraction:
+            assert self.method == 'replay', 'Per-class reservoir fraction applies to Replay only'
         if self.dataset=='cifar100':
             assert self.share_continual_state, 'All CIFAR-100 jobs require synchronized CL state'
             assert not self.reset_memory_on_sync, 'Synchronized history must remain available'
@@ -251,6 +255,7 @@ class RunConfig:
         if data['classwise_head_merge'] is True:data.pop('classwise_head_merge')
         # Preserve the frozen v6 geometry ledger. Execution semantics and roots are v7.
         if data['replay_buffer_capacity']==1000:data.pop('replay_buffer_capacity')
+        if data['replay_reservoir_fraction']==0.0:data.pop('replay_reservoir_fraction')
         if data['share_continual_state'] is True:data.pop('share_continual_state')
         return data
 

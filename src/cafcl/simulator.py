@@ -28,7 +28,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v8_full_cl'
+PROTOCOL_VERSION = 'cifar100_native32_v9_reservoir'
 
 
 def anchored_upload(client, global_state):
@@ -701,6 +701,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'server_cl_state':server_cl_state.statistics(),
                            'client_shared_memory_sizes':{str(cid):sum(map(len,c.received_memory.values())) for cid,c in clients.items()},
                            'client_private_memory_sizes':{str(cid):sum(map(len,c.private_memory.values())) for cid,c in clients.items()},
+                           'client_private_replay_by_class':{str(cid):{str(cls):len(indices) for cls,indices in client.private_memory.items()} for cid,client in clients.items()},
                            'client_federated_cl_versions':{str(cid):c.federated_cl_version for cid,c in clients.items()},
                            'local_details':local_details,
                            'seconds':time.monotonic()-round_start,

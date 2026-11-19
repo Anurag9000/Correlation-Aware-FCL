@@ -5,7 +5,7 @@ GEM uses its actual dual QP and verifies primal constraints. Inaccurate
 projections cause the job to fail instead of silently defaulting to SGD.
 """
 from __future__ import annotations
-from collections import defaultdict
+from collections import Counter,defaultdict
 from dataclasses import dataclass,field
 from typing import Any
 import numpy as np
@@ -61,6 +61,8 @@ class LocalState:
     first_seen_local_experience:dict[int,int]=field(default_factory=dict)
     local_training_events:list[dict]=field(default_factory=list)
     private_memory:dict[int,list[int]]=field(default_factory=dict)
+    private_reservoir_seen_counts:dict[int,int]=field(default_factory=dict)
+    private_reservoir_seen_indices:set[int]=field(default_factory=set)
     received_memory:dict[int,list[int]]=field(default_factory=dict)
     received_example_payloads:dict[int,tuple]=field(default_factory=dict)
     received_gradient_supports:dict[int,tuple[int,...]]=field(default_factory=dict)
@@ -100,34 +102,72 @@ class LocalState:
         self.observed_classes.update(labels)
         for cls in labels:
             self.first_seen_stage.setdefault(int(cls),int(stage))
-    def update_memory(self,indices,targets,budget,rng,policy='random_per_class',*,total_limit=0):
-        """Private 1000-example replay budget; federated archive is not capped."""
+    def update_memory(self,indices,targets,budget,rng,policy='random_per_class',*,total_limit=0,
+                      reservoir_fraction=0.0,class_totals=None):
+        """Update the private buffer; never prune the synchronized server archive.
+
+        With a positive fraction, Algorithm R samples independently per class
+        using a fixed k=ceil(fraction * number of available TRAIN examples of
+        that class). For the official CIFAR-100 pilot, 450 TRAIN/class => k=45.
+        A fixed k makes the reservoir uniform over distinct examples seen so far;
+        the local seen-ID ledger prevents repeated observations being double counted.
+        """
         from .federated_cl import combined_memory
-        by_class=defaultdict(list)
-        for idx in indices:by_class[int(targets[idx])].append(int(idx))
-        if total_limit>0:
-            merged=combined_memory(self.private_memory,by_class)
-            samples=[(c,i) for c,ids in sorted(merged.items()) for i in ids]
-            if len(samples)>total_limit:
-                chosen=sorted(int(i) for i in rng.choice(len(samples),size=total_limit,replace=False))
-                samples=[samples[i] for i in chosen]
-            private=defaultdict(list)
-            for c,i in samples:private[c].append(i)
-            self.private_memory=dict(private)
-        elif budget>0:
-            for cls,samples in by_class.items():
-                old=self.private_memory.get(cls,[])
-                pool=list(dict.fromkeys(old+samples))
-                if len(pool)>budget:
-                    if policy=='recent_per_class':pool=pool[-budget:]
-                    else:
-                        chosen=rng.choice(len(pool),size=budget,replace=False)
-                        pool=[pool[int(i)] for i in sorted(chosen)]
-                self.private_memory[cls]=pool
+        if reservoir_fraction:
+            if not 0 < reservoir_fraction <= 1:
+                raise ValueError('Reservoir fraction must lie in (0,1]')
+            if class_totals is None:
+                raise ValueError('Classwise reservoir requires TRAIN class counts')
+            from math import ceil
+            for idx in indices:
+                idx=int(idx)
+                if idx in self.private_reservoir_seen_indices:
+                    continue
+                cls=int(targets[idx])
+                size=int(class_totals.get(cls,0))
+                if size<=0:
+                    raise ValueError('No available TRAIN examples for class {}'.format(cls))
+                self.private_reservoir_seen_indices.add(idx)
+                count=self.private_reservoir_seen_counts.get(cls,0)+1
+                self.private_reservoir_seen_counts[cls]=count
+                k=ceil(reservoir_fraction*size)
+                group=self.private_memory.setdefault(cls,[])
+                if len(group)<k:
+                    group.append(idx)
+                else:
+                    slot=int(rng.integers(0,count))
+                    if slot<k:
+                        group[slot]=idx
+        else:
+            by_class=defaultdict(list)
+            for idx in indices:
+                by_class[int(targets[idx])].append(int(idx))
+            if total_limit>0:
+                merged=combined_memory(self.private_memory,by_class)
+                flattened=[(c,i) for c,ids in sorted(merged.items()) for i in ids]
+                if len(flattened)>total_limit:
+                    keep=sorted(int(i) for i in rng.choice(len(flattened),size=total_limit,replace=False))
+                    flattened=[flattened[i] for i in keep]
+                private=defaultdict(list)
+                for c,i in flattened:
+                    private[c].append(i)
+                self.private_memory=dict(private)
+            elif budget>0:
+                for cls,samples in by_class.items():
+                    old=self.private_memory.get(cls,[])
+                    pool=list(dict.fromkeys(old+samples))
+                    if len(pool)>budget:
+                        if policy=='recent_per_class':
+                            pool=pool[-budget:]
+                        else:
+                            chosen=rng.choice(len(pool),size=budget,replace=False)
+                            pool=[pool[int(i)] for i in sorted(chosen)]
+                    self.private_memory[cls]=pool
         self.memory=combined_memory(self.private_memory,self.received_memory)
         retained={int(i) for group in self.memory.values() for i in group}
         for i in tuple(self.memory_logits):
-            if i not in retained:del self.memory_logits[i]
+            if i not in retained:
+                del self.memory_logits[i]
 
 
 
@@ -556,7 +596,9 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     # Never allocate replay/GEM memory for non-memory algorithms.
     if cfg.method in {'gem','agem','replay','er_ace','der','derpp'}:
         client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy,
-                             total_limit=(cfg.replay_buffer_capacity if cfg.method=='replay' else 0))
+                             total_limit=(cfg.replay_buffer_capacity if cfg.method=='replay' else 0),
+                             reservoir_fraction=(cfg.replay_reservoir_fraction if cfg.method=='replay' else 0.),
+                             class_totals=(Counter(map(int,bank.train.targets)) if cfg.method=='replay' and cfg.replay_reservoir_fraction else None))
     if cfg.method in {'der','derpp'} and client.memory:
         # Logits recorded at memory insertion/consolidation, never from test data.
         # This is a stage-consolidated local DER adaptation rather than the
