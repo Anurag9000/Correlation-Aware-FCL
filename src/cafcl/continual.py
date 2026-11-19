@@ -448,9 +448,15 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         model.eval()
         with torch.no_grad():
             subset=oldmemory[:min(cfg.batch_size,len(oldmemory))]
+            valid=len(subset)
             batch=torch.stack([training_data[i][0] for i in subset]).to(device)
+            if valid<cfg.batch_size:
+                duplicates=torch.arange(cfg.batch_size-valid,device=device)%valid
+                batch=torch.cat((batch,batch[duplicates]),dim=0)
             labels=torch.tensor([bank.train.targets[i] for i in subset],device=device)
-            value=float(F.cross_entropy(model(batch),labels).item())
+            # Do not let added computational padding bias loss diagnostics.
+            logits=model(batch)[:valid]
+            value=float(F.cross_entropy(logits,labels).item())
         model.train(was_train)
         return value
     old_loss_before=local_old_loss() if cfg.prepost_diagnostics else None
