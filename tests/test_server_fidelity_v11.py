@@ -195,3 +195,52 @@ def test_offline_client_unsent_class_exposure_does_not_enter_server_history(tmp_
     assert sum(counts.values())==sum(
         count for count in counts.values())
     assert set(counts)==set(metrics['globally_integrated_classes'])
+
+
+def test_inverse_participation_excludes_past_nonsynchronizing_client_counts():
+    base,updates=_values()
+    updates[0]['examples']=2
+    updates[1]['examples']=2
+    clients={i:LocalState(i) for i in range(2)}
+    clients[0].selection_count=0  # first ever upload
+    clients[1].selection_count=3  # three previous accepted uploads
+    got=aggregate(updates,base,'inverse_participation',clients=clients)
+    # Scores 2/(1+0)=2, 2/(1+3)=.5 -> weights .8 and .2.
+    assert got['features.weight'][0].item()==pytest.approx(2*.8+6*.2)
+
+
+def test_server_acknowledges_only_online_client_dataset_ids(tmp_path):
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,
+        stages=1,rounds_per_stage=1,participation=.5,
+        participation_overrides={'0':(1,)},method='sgd',
+        aggregator='fedavg',job_id='accepted_only_ids')
+    assert run_experiment(cfg,str(tmp_path),verbose=False)['status']=='completed'
+    ck=torch.load(tmp_path/cfg.job_id/'model_final.pt',map_location='cpu',
+                  weights_only=False)
+    server=ck['server_cl_state']
+    selected=set(ck['clients'][1]['seen_indices'])
+    hidden=set(ck['clients'][0]['seen_indices'])
+    assert server.acknowledged_train_indices==selected
+    assert not server.acknowledged_train_indices.intersection(hidden)
+    h=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
+    assert h[0]['server_acknowledged_train_examples']==len(selected)
+
+
+def test_retention_server_gradient_never_consults_hidden_client_indices(monkeypatch,tmp_path):
+    from cafcl import simulator as sim
+    original=sim.class_gradient_representations
+    observed_inputs=[]
+    def captured(model,bank,classes,device,*,allowed_indices=None,**kwargs):
+        observed_inputs.append(set(allowed_indices or ()))
+        return original(model,bank,classes,device,allowed_indices=allowed_indices,**kwargs)
+    monkeypatch.setattr(sim,'class_gradient_representations',captured)
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,
+        stages=2,rounds_per_stage=1,participation=.5,
+        participation_overrides={'0':(1,),'1':(1,)},
+        method='sgd',aggregator='retention_aware',job_id='retention_only_ack')
+    assert run_experiment(cfg,str(tmp_path),verbose=False)['status']=='completed'
+    ck=torch.load(tmp_path/cfg.job_id/'model_final.pt',map_location='cpu',weights_only=False)
+    hidden=set(ck['clients'][0]['seen_indices'])
+    online=set(ck['clients'][1]['seen_indices'])
+    assert observed_inputs
+    assert all(s.issubset(online) and s.isdisjoint(hidden) for s in observed_inputs)

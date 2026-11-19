@@ -77,6 +77,8 @@ class FederatedCLState:
     integrated_classes:set[int]=field(default_factory=set)
     # Cumulative TRAIN example counts of server-accepted client uploads only.
     class_sample_exposure:dict[int,int]=field(default_factory=dict)
+    # The server knows only samples that came from accepted client uploads.
+    acknowledged_train_indices:set[int]=field(default_factory=set)
     memory_provenance:dict[int,set[int]]=field(default_factory=dict)
     # Stable provenance of each exemplar, including which local task supplied it.
     memory_origins:dict[int,tuple[int,int]]=field(default_factory=dict)
@@ -85,6 +87,7 @@ class FederatedCLState:
         """Merge ONLY selected/uploaded private contributions once per source."""
         for client in uploaded_clients:
             self.integrated_classes.update(int(c) for c in client.pending_upload_classes)
+            self.acknowledged_train_indices.update(int(i) for i in client.seen_indices)
         method_by_client={int(c.client_id):(c.last_learning_method or method)
                           for c in uploaded_clients}
         if any(m in MEMORY_METHODS for m in method_by_client.values()):

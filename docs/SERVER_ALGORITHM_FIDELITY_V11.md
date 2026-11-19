@@ -11,7 +11,7 @@ Scope: **all nine server aggregation names** available in the Correlation-Aware-
 | \`fedavgm\` | Hsu et al. 2019 Nesterov server momentum variant | \`delta=weighted_mean(W_k)-G\`; \`velocity=beta*velocity+delta\`; \`G'=G+eta*(delta+beta*velocity)\` for all floats | No class-specific weighting beyond original sample-weighted base delta |
 | \`fedadam\` | Reddi et al. 2021 FedOpt Adam server rule | \`delta=weighted_mean(W_k)-G\`; \`m=beta1*m+(1-beta1)*delta\`; \`v=beta2*v+(1-beta2)*delta^2\`; \`G'=G+eta*m/(sqrt(v)+tau)\`, \`v0=tau^2\`, **without bias correction** | No class-specific weighting beyond original sample-weighted base delta |
 | \`class_balanced\` | **Repository-specific research algorithm** | \`score_k=sum_c n_{kc}/(H_c+sum_j n_{jc})\`, normalized across uploaders | \`H_c\` is only the server's prior accepted **TRAIN example** exposure count, not clients' unknown/unsent history |
-| \`inverse_participation\` | Repository-specific research algorithm | Weigh uploader examples inversely by previous selection frequency | No direct class-count term; biases toward less frequently selected clients |
+| \`inverse_participation\` | Repository-specific research algorithm | Scores proportional to new uploaded examples divided by `1 +` prior accepted selection count | No direct class-count term; biases toward less frequently selected clients |
 | \`conflict_aware\` | Repository-specific cosine-conflict reweighting | Downweight model deltas that oppose other uploaders | No explicit class-count term |
 | \`conflict_projection\` | Repository-specific PCGrad-style client-delta projection | Project conflicting flattened model deltas, then weighted-average the corrected updates | No explicit class-count term |
 | \`retention_aware\` | Repository-specific history-gradient weighting | Rescale client update weights based on alignment with historical surrogate gradient | Uses privileged historical TRAIN-gradient evidence and is not privacy-preserving |
@@ -60,3 +60,8 @@ After accepting uploads, the server (1) aggregates accepted complete model repre
 ### Scope limitations
 
 Source-code and CPU numerical tests **do not demonstrate** high CIFAR-100 accuracy, exact floating-point bit parity against every external library, or actual CUDA operation. Class-aware/conflict/retention server algorithms are original experiments rather than canonical paper reproductions. Stale online reconnection necessarily remains outside original synchronous FedAvg; paper-faithful asynchronous optimization would require selecting a separately specified asynchronous algorithm and implementing its own staleness dynamics and baselines.
+
+
+### Privacy boundary of server gradients and class statistics
+
+Server-side historical-gradient diagnostics and retention-aware weighting now restrict training-data references to `acknowledged_train_indices`—the union of indices belonging to clients **whose model upload was accepted**. Hidden clients' unsent sample IDs are not included until an accepted upload. Representation-drift measurements reuse the *same acknowledged historical cohort* before and after aggregation, avoiding a changing-denominator artifact. This is still a privileged common-dataset simulation: merely knowing acknowledged IDs is not the same as having uploaded every raw image. Production FL would require transmitting the authorized reference samples or sufficient gradient summaries explicitly.

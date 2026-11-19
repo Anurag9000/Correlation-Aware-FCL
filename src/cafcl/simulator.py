@@ -106,7 +106,8 @@ def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None,cl
         weights=[x/norm for x in scores]
     if method=='inverse_participation':
         if clients is None:raise ValueError('Client histories are required')
-        scores=[u['examples']/max(1,clients[u['client_id']].selection_count)
+        # Divide by the total selection count *including this communication*.
+        scores=[u['examples']/(1+clients[u['client_id']].selection_count)
                 for u in updates]
         weights=[score/sum(scores) for score in scores]
     if method in {'conflict_aware','retention_aware','conflict_projection'}:
@@ -411,7 +412,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 # are oracle diagnostics, not privacy-preserving methods.
                 model.load_state_dict(global_state)
                 model.to(device)
-                arrived=set().union(*(c.seen_indices for c in clients.values()))
+                arrived=set(server_cl_state.acknowledged_train_indices)
                 if cfg.selector.startswith('feature'):
                     vectors=arrived_feature_means(model,bank,observed,device,
                                                   allowed_indices=arrived)
@@ -480,6 +481,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                      if evaluation_bank.validation is not None else None))
             pre_aggregation_metrics=None
             pre_representation=None
+            # A fixed historical cohort is required for meaningful before/after
+            # representation-drift comparisons; don't add new accepted IDs mid-measure.
+            pre_representation_ids=set(server_cl_state.acknowledged_train_indices)
             if accepted and cfg.prepost_diagnostics:
                 model.load_state_dict(global_state)
                 model.to(device)
@@ -492,7 +496,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             if accepted and cfg.representation_diagnostics and old:
                 model.load_state_dict(global_state)
                 model.to(device)
-                arrived=set().union(*(c.seen_indices for c in clients.values()))
+                arrived=set(server_cl_state.acknowledged_train_indices)
                 pre_representation=arrived_feature_means(model,bank,old,device,
                                                           allowed_indices=arrived)
             custom_head_fusion=False
@@ -500,7 +504,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 old_gradient=None
                 if cfg.aggregator in {'retention_aware'} and old:
                     model.load_state_dict(global_state)
-                    arrived=set().union(*(c.seen_indices for c in clients.values()))
+                    arrived=set(server_cl_state.acknowledged_train_indices)
                     vectors=class_gradient_representations(model,bank,old,device,
                                                            allowed_indices=arrived)
                     if vectors:old_gradient=torch.stack(list(vectors.values())).mean(0)
@@ -579,7 +583,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     limit=cfg.causal_max_clients)
             representation_drift=None
             if pre_representation is not None:
-                arrived=set().union(*(c.seen_indices for c in clients.values()))
+                arrived=set(pre_representation_ids)
                 after=arrived_feature_means(model,bank,old,device,allowed_indices=arrived)
                 representation_drift={str(c):float(torch.linalg.vector_norm(
                     after[c].float()-v.float())) for c,v in pre_representation.items()
@@ -600,7 +604,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 client_update_cosines={f'{a}:{b}':vector_cosine(deltas[a],deltas[b])
                     for a,b in combinations(sorted(deltas),2)}
                 if old:
-                    arrived=set().union(*(c.seen_indices for c in clients.values()))
+                    arrived=set(server_cl_state.acknowledged_train_indices)
                     model.load_state_dict(base_global_state)
                     vectors=class_gradient_representations(model,bank,old,device,
                         allowed_indices=arrived)
@@ -663,6 +667,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'upload_model_origins':{str(u['client_id']):u['aggregation_input_semantics'] for u in accepted},
                            'server_class_sample_exposure':{str(k):int(v) for k,v in sorted(server_cl_state.class_sample_exposure.items())},
                            'server_integrated_class_count':len(server_cl_state.integrated_classes),
+                           'server_acknowledged_train_examples':len(server_cl_state.acknowledged_train_indices),
                            'server_cl_state':server_cl_state.statistics(),
                            'client_shared_memory_sizes':{str(cid):sum(map(len,c.received_memory.values())) for cid,c in clients.items()},
                            'client_private_memory_sizes':{str(cid):sum(map(len,c.private_memory.values())) for cid,c in clients.items()},
