@@ -551,7 +551,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     rx,ry=rx.to(device,non_blocking=True),ry.to(device,non_blocking=True)
                     replay_logits=model(rx)
                     if cfg.method=='er_ace':
-                        loss=loss+cfg.replay_ratio*cfg.der_beta*
+                        loss=loss+cfg.replay_ratio*cfg.der_beta*(
                             canonical_active_loss(replay_logits,ry,seen_classes)
                             if active_pair_classes is not None else F.cross_entropy(replay_logits,ry))
                     else:
@@ -569,7 +569,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                             # couples their gradient estimators unnecessarily.
                             bx,by,cls_idx=draw_history(ref_count,1913)
                             supervised_logits=model(bx.to(device))
-                            loss=loss+cfg.replay_ratio*cfg.der_beta*
+                            loss=loss+cfg.replay_ratio*cfg.der_beta*(
                                 canonical_active_loss(supervised_logits,by.to(device),seen_classes)
                                 if active_pair_classes is not None else F.cross_entropy(supervised_logits,by.to(device)))
                 if cfg.method=='lwf' and teacher is not None:
