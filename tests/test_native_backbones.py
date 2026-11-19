@@ -54,12 +54,12 @@ def test_backward_uses_only_active_classifier_rows_both_backbones():
         assert torch.count_nonzero(next(m.features.parameters()).grad)>0
 
 
-def test_production_batch1024_and_swappable_backbone_guard():
+def test_production_batch64_and_swappable_backbone_guard():
     from cafcl.full_matrix import base
     for model_id in (VIT_ID,CNN_ID):
         cfg=replace(base(0),model=model_id,batch_size=64)
         cfg.validate()
-    with pytest.raises(AssertionError,match='1024'):
+    with pytest.raises(AssertionError,match='64'):
         replace(RunConfig(),batch_size=512).validate()
     with pytest.raises(AssertionError,match='Research requires'):
         replace(RunConfig(),model='test_smallcnn').validate()

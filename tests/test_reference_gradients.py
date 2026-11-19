@@ -17,7 +17,7 @@ def test_agem_reference_gradient_preserves_running_statistics():
     bn=model[1]
     initial=(bn.running_mean.clone(),bn.running_var.clone(),bn.num_batches_tracked.clone())
     grad=_reference_gradient(model,list(model.parameters()),TinySynthetic(True,0),
-                             list(range(8)),8,torch.device('cpu'),23)
+                             list(range(8)),64,torch.device('cpu'),23)
     assert torch.count_nonzero(grad)>0
     assert torch.equal(bn.running_mean,initial[0])
     assert torch.equal(bn.running_var,initial[1])

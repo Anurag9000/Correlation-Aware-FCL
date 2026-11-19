@@ -33,7 +33,7 @@ def synced_client(cid=1):
 
 def cfg(method,**kwargs):
     return RunConfig(dataset='synthetic',model='test_mlp',num_clients=2,
-        method=method,aggregator='fedavg',batch_size=1024,micro_batch_size=4,
+        method=method,aggregator='fedavg',batch_size=64,
         epochs=1,lr=.01,memory_per_class=2,share_continual_state=True,
         class_pair_protocol='strict',**kwargs)
 
@@ -76,7 +76,7 @@ def test_all_memory_methods_start_post_sync_with_global_history(monkeypatch):
         if method in {'der','derpp'}:
             assert len(client.memory_logits)==4
         result=train_first_after_sync(model,client,method,**({'gem_grouping':'stage'} if method=='gem' else {}))
-        assert result['steps']==1
+        assert result['steps']==(2 if method=='replay' else 1)
         assert result['memory_samples']>=4
         if method in {'gem','agem'}:
             assert gradient_calls, f'{method} did not consult remotely synced constraints'

@@ -118,7 +118,7 @@ def client_model():
 def cfg(method,**kwargs):
     return replace(RunConfig(dataset='synthetic',model='test_linear',num_clients=2,
         method=method,aggregator='fedavg',epochs=1,lr=.03,
-        batch_size=16,micro_batch_size=4,memory_per_class=2,
+        batch_size=16,memory_per_class=2,
         regularization_strength=0.1,importance_samples_per_experience=4),
         **kwargs)
 
