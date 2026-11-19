@@ -70,6 +70,7 @@ def _physical64_inputs(images,device):
 def feature_class_means(model, bank, class_ids, device, samples_per_class=32):
     """Compute means from training samples with deterministic sample selection."""
     if samples_per_class<=0:raise ValueError('samples_per_class must be positive')
+    previous_training=model.training
     model.eval()
     means={}
     with torch.no_grad():
@@ -82,6 +83,7 @@ def feature_class_means(model, bank, class_ids, device, samples_per_class=32):
             else:
                 features=model(x)[:valid]
             means[cls]=features.float().mean(0).detach().cpu()
+    model.train(previous_training)
     return means
 
 
@@ -102,6 +104,7 @@ def diagnostic_gradient_relationships(model,bank,class_ids,device,samples_per_cl
     """
     if samples_per_class<=0 or max_pairs<0:
         raise ValueError('Invalid diagnostic limit')
+    previous_training=model.training
     model.eval()
     params=[p for p in model.parameters() if p.requires_grad]
     vectors={}
@@ -116,6 +119,7 @@ def diagnostic_gradient_relationships(model,bank,class_ids,device,samples_per_cl
                                 else torch.zeros_like(p)).reshape(-1).cpu()
                                for p in params])
     model.zero_grad(set_to_none=True)
+    model.train(previous_training)
     return {f'{a}:{b}':vector_cosine(vectors[a],vectors[b])
             for a,b in itertools.islice(itertools.combinations(sorted(vectors),2),max_pairs)}
 
