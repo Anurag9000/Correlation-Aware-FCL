@@ -66,3 +66,6 @@ bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0
 
 
 **v11 execution semantics:** All nine server algorithms are audited and classified in `SERVER_ALGORITHM_FIDELITY_V11.md`. The original 38,370-per-backbone factorial *geometry* is preserved, but earlier trained data/checkpoints do not constitute results of this new aggregation protocol. The v11 path prefix is `cifar100_native32_v11_server_fidelity_`. Canonical methods never apply the custom classwise row overwrite, even when a historical config record includes its legacy default flag.
+
+
+**v13 factorial geometry change:** Only 2 classes per local task and 2 local tasks at round 0 are supported; later rounds always run 1 local task. Prior task-length ablation candidates requesting other dimensions are pruned. The active stream manifest, feasible-count and checksum live in a separately frozen v13 design (the v6 ledger remains historical). All 11 client modes × all nine server algorithms share this single schedule. See `FIRST4_THEN2_FULL_CL_V13.md`.

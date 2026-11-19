@@ -21,3 +21,6 @@ v11 note: FedAvg and its canonical server-optimizer families now synchronize the
 
 
 **v12 local-method update:** The research protocol now audits all 11 client learners against their primary papers and corrects EWC, MAS, SI, DER and memory-sampling mathematics while preserving every scenario/task class-stream and server-update setting. Full v12 CIFAR-100 runs have not been executed as part of this source/CI audit; [full paper-method ledger](CL_METHOD_FIDELITY_V12.md).
+
+
+**v13 execution invariant:** Every executable CIFAR-100 suite member uses **two 2-class local tasks before the very first server sync**, then **one 2-class task before each following server sync**. Task-length ablations requesting a different number of local tasks/classes are now rejected from runnable plans; earlier task-length experiments remain historical references. Global CL evidence is downloaded to every online client after every sync. See `FIRST4_THEN2_FULL_CL_V13.md`.

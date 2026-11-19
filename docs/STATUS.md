@@ -65,3 +65,8 @@ Nine server aggregation method names audited. FedAvg/FedAvgM/FedAdam use complet
 ## v12 method fidelity (paper-mechanism audit)
 
 Current source contains 11 CL/local-learning modes. EWC Fisher (model-predictive per-example mean squared gradients), MAS output sensitivity (per-example mean absolute derivatives), SI task-gradient path integral, DER/DER++ pre-optimizer trajectory logits, per-class reservoir sampling, and GEM stage-group historical-task reference losses have been corrected and independently tested. Client streams, class heads, no-replay constraints, 5-client concurrency and server v11 aggregation remain intact. **Original paper exact experiment equivalence is not claimed for strict local active-class masking, federated unbounded replay sharing, or source-class GEM grouping.** See [CL_METHOD_FIDELITY_V12.md](CL_METHOD_FIDELITY_V12.md) for a method-by-method mathematical ledger and primary-paper references. No full v12 CIFAR-100 CUDA outcomes have yet been validated.
+
+
+## v13 CL-state-every-sync change
+
+The unique current stream is first 4 new classes/client in two tasks, then only 2 new classes/client in **each subsequent single task**, one server sync between. All accepted cumulative replay examples, historical DER raw logits, GEM/A-GEM reference evidence, EWC/SI/MAS precision tables, accepted class exposure, and the latest versioned LwF global teacher are broadcast to every online client irrespective of its present method. Runtime validation of every received archive happens after every model update. The primary 5-client pilot now has 9 train intervals + final flush, not 5+flush. The rotating offline client is cyclic so all clients eventually reconnect. New v13 checkpoints are required. See `FIRST4_THEN2_FULL_CL_V13.md`.

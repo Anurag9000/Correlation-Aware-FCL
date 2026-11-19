@@ -39,7 +39,12 @@ def test_exact_user_10_client_first4_then2_schedule():
 
 @pytest.mark.parametrize('kind',OVERLAP_KINDS)
 def test_every_overlap_geometry_is_valid_distinct_and_covers_all_classes(kind):
-    c=cfg(stream_overlap_kind=kind,stream_overlap_fraction=(0 if kind=='none' else 1.))
+    # With one task/round later, 100 labels and 10 clients cannot finish
+    # a 100%-inter-same-round overlap with the final singleton budget.
+    # Five clients supplies a geometrically feasible counterpart.
+    n_clients=5 if kind=='inter_same_round' else 10
+    c=cfg(num_clients=n_clients,stream_overlap_kind=kind,
+          stream_overlap_fraction=(0 if kind=='none' else 1.))
     a=make_task_schedule(100,c);x=grouped(a)
     assert all(len(set(labels))>=2 for _,_,_,labels,_ in a)
     assert {cls for _,_,_,labels,_ in a for cls in labels}==set(range(100))
@@ -94,7 +99,9 @@ class FakeBank:
 def test_training_indices_partitioned_with_label_overlap_no_raw_duplication():
     bank=FakeBank()
     for kind in OVERLAP_KINDS:
-        sc=compile_stream_scenario(bank,cfg(stream_overlap_kind=kind,
+        num_clients=5 if kind=='inter_same_round' else 10
+        sc=compile_stream_scenario(bank,cfg(num_clients=num_clients,
+                                stream_overlap_kind=kind,
                                 stream_overlap_fraction=0 if kind=='none' else 1.))
         seen=[idx for a in sc.arrivals for idx in a.indices]
         assert len(seen)==len(set(seen))==10000
@@ -106,7 +113,8 @@ def test_training_indices_partitioned_with_label_overlap_no_raw_duplication():
 
 def test_intentional_raw_overlap_recorded_and_causal_control():
     bank=FakeBank()
-    sc=compile_stream_scenario(bank,cfg(stream_overlap_kind='inter_same_round',
+    sc=compile_stream_scenario(bank,cfg(num_clients=5,
+              stream_overlap_kind='inter_same_round',
               stream_overlap_fraction=1.,sample_overlap_fraction=.5))
     x=[i for a in sc.arrivals for i in a.indices]
     assert len(x)>len(set(x))

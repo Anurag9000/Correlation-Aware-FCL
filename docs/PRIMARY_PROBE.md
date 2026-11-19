@@ -81,3 +81,8 @@ The full-participation pilot now uses original **sample-weighted whole-model Fed
 ## New v12 CL-method semantics
 
 The local 11-method training implementation now uses **paper-grounded per-example EWC Fisher and MAS sensitivity**, **SI task-only gradient path importance**, online DER/DER++ logit capture before the corresponding optimizer step, and true persistent per-class random reservoirs for memory-based methods. All 5-client task barriers and strict active classifier rows are unchanged. The primary output root is `primary_cifar100_single_gpu_cl_v12_<backbone>_seed<seed>`, and job IDs use `V12_CL`. Older run checkpoints are incompatible with the v12 protocol. For precise fidelity-vs-setting-adaptation distinctions see [CL method fidelity](CL_METHOD_FIDELITY_V12.md).
+
+
+## Current v13 pilot overrides the historical five-round plans above
+
+The 2026-11-19 protocol is now **nine training communication rounds**: first round 4 classes/client (two sequential tasks) then **eight rounds 2 classes/client** (one continual task immediately after each global model+CL-history download). One client is excluded per round in the rotating-offline arm, using cyclic repetition; the tenth communication-only round synchronizes all pending state. The current v13 pilot produces `results/primary_cifar100_first4_then2_v13_vit_seed0/`. All other CL methods in all active jobs use this exact cadence. [Current authoritative protocol](FIRST4_THEN2_FULL_CL_V13.md).

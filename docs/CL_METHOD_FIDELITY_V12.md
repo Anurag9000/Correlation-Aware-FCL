@@ -143,3 +143,8 @@ The server history and accepted class-exposure counts are **not** allowed to use
 **What is NOT claimed:** exact paper parity for different original settings, unlimited-budget Fisher/MAS expectations, old-version checkpoint reproducibility, all-GPU/VRAM success, final accuracy gains, calibration of a globally evaluated 100-way classifier, or original authors' exact architectural hyperparameters and datasets. Federated history fusion itself is an additional, separately defined experimental protocol.
 
 **Research validity rule:** All original method names should be accompanied by "adapted to fixed shared-head, frozen-inactive-row federated 2-class episode stream" in results and comparisons. In particular, **GEM-class**, **GEM-all**, **per-class DER reservoir**, and **globally synchronized LwF teacher** are variants and should not be silently labeled identical to original author experiments.
+
+
+## v13 timing and history update
+
+This v12 source-paper audit remains the governing method-fidelity record. The live v13 simulator now schedules two 2-class tasks **only before the first** server synchronization, then one 2-class continual-learning task per client between every later server synchronization. Every synchronized client receives every available accumulated CL artifact regardless of its own method; its method-specific algorithm decides which subset to use. The LwF teacher is refreshed at each committed global update; EWC/SI/MAS importance tables and replay/DER/GEM history remain cumulative. The explicit original-paper-vs-user-setting qualifications above remain unchanged. See `FIRST4_THEN2_FULL_CL_V13.md`.
