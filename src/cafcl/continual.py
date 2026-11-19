@@ -700,8 +700,12 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     client.trained_classes.update(int(bank.train.targets[i]) for i in indices)
     class_counts=dict(Counter(int(bank.train.targets[i]) for i in indices))
     if active_pair_classes is not None:
-        client.activated_labels.update(active_pair_classes)
-        class_update_steps={int(c):step_count for c in active_pair_classes}
+        # All seen classifier rows are trainable under v14 class-IL CE.
+        # Custom row-wise server fusion must therefore account for every
+        # row the client may have updated, not only today's two class IDs.
+        # This ledger is UPDATE exposure, not fresh training-example count.
+        client.activated_labels.update(seen_classes)
+        class_update_steps={int(c):step_count for c in seen_classes}
     else:
         client.activated_labels.update(class_counts)
         class_update_steps={int(c):step_count for c in class_counts}

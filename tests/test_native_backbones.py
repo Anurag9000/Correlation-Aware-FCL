@@ -1,9 +1,9 @@
-"""Production native 32x32 ViT-Tiny/16 and CIFAR-stem ResNet-18 contracts."""
+"""Production native 32x32 standard ViT-Base/16 and CIFAR-stem ResNet-18 contracts."""
 from dataclasses import replace
 import pytest
 import torch
 from torch import nn
-from cafcl.models import VIT_ID,CNN_ID,create_model,ViTTinyFeature,CIFARResNet18Feature,resolve_backbone
+from cafcl.models import VIT_ID,CNN_ID,create_model,ViTBaseFeature,CIFARResNet18Feature,resolve_backbone
 from cafcl.config import RunConfig
 from cafcl.class_indexed import classifier_parameter_names,canonical_active_loss
 from cafcl.full_matrix import expand
@@ -11,7 +11,7 @@ from cafcl.simulator import aggregate
 
 
 def test_both_architectures_are_native_32_and_canonical():
-    for model_id,dim in ((VIT_ID,192),(CNN_ID,512)):
+    for model_id,dim in ((VIT_ID,768),(CNN_ID,512)):
         model=create_model(model_id,100)
         assert model.features.num_features==dim
         assert model.classifier.out_features==100
@@ -25,13 +25,13 @@ def test_both_architectures_are_native_32_and_canonical():
 
 
 def test_native_vit_architecture_exact_patch_grid():
-    m=create_model('vit_tiny_patch16_32',100)
+    m=create_model('vit_base_patch16_32',100)
     assert isinstance(m.features,ViTTinyFeature)
     assert m.features.patch_embed.kernel_size==(16,16)
     assert m.features.patch_embed.stride==(16,16)
-    assert m.features.pos_embed.shape==(1,5,192) # 1 CLS + four 16x16 patches
+    assert m.features.pos_embed.shape==(1,5,768) # 1 CLS + four 16x16 patches
     assert len(m.features.blocks)==12
-    assert m.features.blocks[0].attn.num_heads==3
+    assert m.features.blocks[0].attn.num_heads==12
 
 
 def test_native_resnet18_cifar_stem_and_four_stages():

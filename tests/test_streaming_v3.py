@@ -172,7 +172,7 @@ def test_full_suite_retired_cifar10_and_20_class_and_cover_all_methods():
                c.class_pair_protocol=='strict' for _,c in configs)
     assert len({(c.method,c.aggregator) for _,c in configs})==99
     assert {c.stream_overlap_kind for _,c in configs}==set(OVERLAP_KINDS)
-    assert all(c.batch_size==1024 for _,c in configs)
+    assert all(c.batch_size==64 for _,c in configs)
 
 @pytest.mark.parametrize('method',('sgd','gem','agem','replay','ewc','si',
                                     'er_ace','der','derpp','mas','lwf'))

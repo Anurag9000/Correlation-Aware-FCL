@@ -80,7 +80,8 @@ class RunConfig:
     # Local continual-learning and optimizer ablations.
     gem_grouping: str = "class"
     optimizer_state_policy: str = "reset"
-    momentum: float = 0.0
+    momentum: float = 0.9
+    weight_decay: float = 5e-4
     si_xi: float = 0.1
     importance_samples_per_experience: int = 32
     # Additional supervised selection and aggregation variants are privileged
@@ -200,7 +201,8 @@ class RunConfig:
             assert self.method in {"sgd","replay","gem","agem","er_ace","der","derpp"}
             assert self.gem_grouping!='stage' 
         assert self.gem_grouping in {"class", "stage", "all"}
-        assert 0 <= self.momentum < 1 and self.si_xi > 0 and self.selection_temperature > 0
+        assert 0 <= self.momentum < 1 and self.weight_decay >= 0
+        assert self.si_xi > 0 and self.selection_temperature > 0
         assert self.relation in {"natural", "related", "unrelated"}
         assert self.recurrence_client_policy in {"same", "different"}
         assert self.recurrence_round_delay >= 0 and self.recurrence_period >= 0 and self.recurrence_repeats >= 1

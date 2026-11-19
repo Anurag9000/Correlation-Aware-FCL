@@ -155,7 +155,11 @@ The per-sync reporter writes under
 
 Canonical FedAvg continues full-model **number-of-new-training-examples
 weighted averaging** over all floating-point model parameters (backbone,
-classifier weights, and bias). The older v10 class-row overwrite is
+classifier weights, and bias).
+For the five custom row-wise fusion methods, `class_update_steps` now tracks
+ALL known classifier rows that received trainable v14 gradients, not only
+the newest two class IDs. Fresh training-example exposure remains a separate
+ledger; mixing these two quantities would corrupt class-history weighting. The older v10 class-row overwrite is
 NOT reinstated. FedAvgM and FedAdam continue their independently
 tested server updates. The server still acknowledges and redistributes
 all applicable cumulative CL artifacts; offline clients remain out
