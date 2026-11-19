@@ -14,7 +14,7 @@ For each declared class task, the scheduler/auditor checks exactly the configure
 
 For D-round offline interventions, every client outage must last **exactly D consecutive training communication intervals**, followed by a reconnection. A terminal synchronization is not itself an additional offline training interval. For instance, 3 training intervals with D=2 yield a truncated last cohort and are excluded.
 
-The audit also prunes analytically inert selection interventions: different selection policies when all clients already participate; aliases `fairness`=`least_recent`, `diversity`=`coverage`, and `balanced`=`coverage` when old/new labels partition observed classes; plus `recurrence` and `overlap` selectors without recurrence or shared labels in the stream.
+The audit also excludes LwF memory-capacity and generic regularization-coefficient changes that its implementation does not consume. Separately, it prunes analytically inert selection interventions: different selection policies when all clients already participate; aliases `fairness`=`least_recent`, `diversity`=`coverage`, and `balanced`=`coverage` when old/new labels partition observed classes; plus `recurrence` and `overlap` selectors without recurrence or shared labels in the stream.
 
 | Result | Jobs per selected backbone |
 |---|---:|
@@ -22,7 +22,9 @@ The audit also prunes analytically inert selection interventions: different sele
 | Unrealized overlap geometry removed | 2,178 |
 | Invalid exact offline durations removed | 6,534 |
 | Inert/aliased selectors removed | 6,534 |
-| **Retained valid registrations** | **38,559** |
+| Unused LwF memory-capacity settings | 108 |
+| Unused LwF generic regularization settings | 81 |
+| **Retained valid registrations** | **38,370** |
 | Balanced factorial core preserved | 5,346 |
 | Local × server pairs covered | 11 × 9 = 99 |
 

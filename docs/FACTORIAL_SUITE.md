@@ -11,12 +11,12 @@ All CIFAR-100 production configurations now use either `vit_tiny_patch16_32` (`-
 | Result | Jobs per backbone |
 |---|---:|
 | Old raw distinct generator registrations | 53,805 |
-| Rejected (unrealized overlap, truncated outage, redundant/ineffective selector) | **15,246** |
-| **Feasible registered jobs retained** | **38,559** |
+| Rejected (unrealized overlap, truncated outage, ineffective selector, unused LwF controls) | **15,435** |
+| **Feasible registered jobs retained** | **38,370** |
 | Local methods × server methods | **11 × 9 = 99/99** |
 | Balanced methodology core retained | **5,346** |
 
-Rejections comprise **2,178** unrealized overlap geometries, **6,534** truncated exact-duration offline schedules, and **6,534** no-op/alias selection variants. For example, `intra_same_round` is impossible with one task per client per interval, and a D=2 offline cohort started in the last of three training rounds cannot complete two hidden intervals. Selector policies with 100% participation select everyone, while some source implementations are exact aliases or have no signal on a nonrecurrent disjoint stream. The scheduler never fills an incomplete terminal task with unrelated labels. See [the v6 audit ledger](LEDGER_AUDIT_V6.md).
+Rejections comprise **2,178** unrealized overlap geometries, **6,534** truncated exact-duration offline schedules, **6,534** no-op/alias selection variants, and **189** unused LwF hyperparameter variations. For example, `intra_same_round` is impossible with one task per client per interval, and a D=2 offline cohort started in the last of three training rounds cannot complete two hidden intervals. Selector policies with 100% participation select everyone, while some source implementations are exact aliases or have no signal on a nonrecurrent disjoint stream. The scheduler never fills an incomplete terminal task with unrelated labels. See [the v6 audit ledger](LEDGER_AUDIT_V6.md).
 
 ## Retained family counts (per backbone, after deduplication and feasibility audit)
 
@@ -29,8 +29,8 @@ Rejections comprise **2,178** unrealized overlap geometries, **6,534** truncated
 | Raw sample overlap | 1,188 | Different-client shared-image fraction |
 | Client selection | 4,158 | Selection policies and participation |
 | Local SGD optimization | 3,267 | Learning rates × epochs |
-| CL memory capacity | 756 | Examples per class |
-| Importance regularization | 324 | EWC/SI/MAS/LwF strength |
+| CL memory capacity | 648 | Examples per class; LwF no-op arms removed |
+| Importance regularization | 243 | EWC/SI/MAS strength; LwF uses distillation strength instead |
 | FedProx | 891 | Local proximal coefficient |
 | Server optimization | 264 | FedAvgM/FedAdam server LR |
 | Replay ratio | 324 | Replay-like local methods |
@@ -43,7 +43,7 @@ Rejections comprise **2,178** unrealized overlap geometries, **6,534** truncated
 | Class imbalance | 891 | 0, .5, 1, 2 |
 | Client quantity skew | 594 | 0, 1, 3 |
 | Terminal flush | 297 | Enabled/disabled |
-| **Total** | **38,559** | Finite-grid jobs, not GPU executions |
+| **Total** | **38,370** | Finite-grid jobs, not GPU executions |
 
 The balanced core's six overlap geometries are: no overlap; same-client same-interval; same-client cross-interval; different-client same-interval; different-client cross-interval; combined. Its rates are 100%, 80%, 50%, with three seeds. The primary two-job probe intentionally does **not** use three seeds and does **not** have overlap.
 

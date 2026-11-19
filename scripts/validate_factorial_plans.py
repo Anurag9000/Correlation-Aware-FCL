@@ -16,7 +16,7 @@ def main():
         assert actual==expected, f'{backbone}: planned jobs or hash drifted; regenerate only after audit'
         assert actual['dataset']=='cifar100' and actual['batch_size']==1024
         assert actual['method_aggregator_pairs']==99
-        assert actual['job_count']==38559
+        assert actual['job_count']==38370
         probe=audited_plan(make_jobs(backbone=backbone))
         assert probe==frozen['primary_probe_'+backbone]
         assert probe['total_jobs']==2 and probe['training_intervals']==5
@@ -26,9 +26,9 @@ def main():
     audit_result=audit(expand(include_invalid=True,model='vit'))
     assert audit_result==frozen['feasibility_audit']
     assert audit_result['input_jobs']==53805
-    assert audit_result['rejected_jobs']==15246
-    assert audit_result['accepted_jobs']==38559
-    print('Mathematical audit: 53,805 old jobs -> 38,559 feasible; 15,246 explicitly pruned')
+    assert audit_result['rejected_jobs']==15435
+    assert audit_result['accepted_jobs']==38370
+    print('Mathematical audit: 53,805 old jobs -> 38,370 feasible; 15,435 explicitly pruned')
     print('Primary pilot: exactly two jobs, single seed, one complete 100-class curriculum')
 
 if __name__=='__main__':main()

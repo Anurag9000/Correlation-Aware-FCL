@@ -1,8 +1,8 @@
 {
   "feasibility_audit": {
     "input_jobs": 53805,
-    "accepted_jobs": 38559,
-    "rejected_jobs": 15246,
+    "accepted_jobs": 38370,
+    "rejected_jobs": 15435,
     "accepted_by_family": {
       "balanced": 5346,
       "class_imbalance": 891,
@@ -12,12 +12,12 @@
       "fedprox": 891,
       "gem_grouping": 54,
       "local_optimization": 3267,
-      "memory": 756,
+      "memory": 648,
       "offline_duration": 7128,
       "overlap_strength": 2970,
       "raw_sample_overlap": 1188,
       "recurrent_rounds": 1782,
-      "regularization": 324,
+      "regularization": 243,
       "replay_beta": 162,
       "replay_ratio": 324,
       "selection": 4158,
@@ -33,7 +33,9 @@
       "selection:selection-policy-exact-alias": 2673,
       "selection:selection-policy-inert-at-full-participation": 2673,
       "task_length:combined-does-not-realize-all-four-overlap-geometries": 990,
-      "task_length:overlap-geometry-never-occurs": 1188
+      "task_length:overlap-geometry-never-occurs": 1188,
+      "memory:lwf-memory-capacity-unused": 108,
+      "regularization:lwf-regularization-strength-unused": 81
     },
     "examples": {
       "task_length:overlap-geometry-never-occurs": "ST_task_length_23b30d434d8e593c1869",
@@ -42,7 +44,9 @@
       "selection:selection-policy-inert-at-full-participation": "ST_selection_270c54445644985d7f06",
       "selection:recurrence-selector-has-no-recurrence-signal": "ST_selection_d223da48ad24cd6f8411",
       "selection:overlap-selector-has-no-overlap-signal": "ST_selection_2d16f4071e2dcc4bba20",
-      "selection:selection-policy-exact-alias": "ST_selection_ae96f593a55794e3ae75"
+      "selection:selection-policy-exact-alias": "ST_selection_ae96f593a55794e3ae75",
+      "memory:lwf-memory-capacity-unused": "ST_memory_15dba449b7422f8dbeb0",
+      "regularization:lwf-regularization-strength-unused": "ST_regularization_503c3ac1e301a4200ce5"
     },
     "cached_stream_structures": 366
   },
@@ -60,12 +64,12 @@
         "fedprox": 891,
         "gem_grouping": 54,
         "local_optimization": 3267,
-        "memory": 756,
+        "memory": 648,
         "offline_duration": 7128,
         "overlap_strength": 2970,
         "raw_sample_overlap": 1188,
         "recurrent_rounds": 1782,
-        "regularization": 324,
+        "regularization": 243,
         "replay_beta": 162,
         "replay_ratio": 324,
         "selection": 4158,
@@ -74,14 +78,14 @@
         "task_length": 6732,
         "terminal_flush": 297
       },
-      "job_count": 38559,
+      "job_count": 38370,
       "method_aggregator_pairs": 99,
       "seeds": [
         0,
         1,
         2
       ],
-      "sha256": "f33b98eb0901a5c05e34cf58641680a01b3a87d0ad38bbafe1ac68c8dc88756e",
+      "sha256": "ea3d2079dd8326833045d716a94abc269fdd905e60ee4ed50ea6f6230c5082f5",
       "warning": "These are planned runs, not trained CIFAR-100 results."
     },
     "vit": {
@@ -97,12 +101,12 @@
         "fedprox": 891,
         "gem_grouping": 54,
         "local_optimization": 3267,
-        "memory": 756,
+        "memory": 648,
         "offline_duration": 7128,
         "overlap_strength": 2970,
         "raw_sample_overlap": 1188,
         "recurrent_rounds": 1782,
-        "regularization": 324,
+        "regularization": 243,
         "replay_beta": 162,
         "replay_ratio": 324,
         "selection": 4158,
@@ -111,14 +115,14 @@
         "task_length": 6732,
         "terminal_flush": 297
       },
-      "job_count": 38559,
+      "job_count": 38370,
       "method_aggregator_pairs": 99,
       "seeds": [
         0,
         1,
         2
       ],
-      "sha256": "4ce581386c6f9eeb61306e980ea888e2a87141b852e9f9e49e9d01f9ca95f2ac",
+      "sha256": "df2e2e6b9281dd70bf677ac58a692163e57f0a13bce8aaf212284b2b62be6266",
       "warning": "These are planned runs, not trained CIFAR-100 results."
     }
   },

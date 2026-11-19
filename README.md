@@ -40,7 +40,7 @@ The launch tool prepares two independent processes, logs, resumable checkpoints,
 
 ## Revised full factorial registry (do not launch until pilot review)
 
-The **source-generated, mathematically audited CIFAR-100 ledger contains 38,559 feasible configurations per selected backbone** (not 53,805). The stricter audit rejected **15,246** registrations: 2,178 unrealized overlap geometries, 6,534 truncated offline-duration interventions, and 6,534 inert, aliased, or signal-free selection interventions. The **5,346-job balanced core remains complete** across all 11 local CL methods, all nine server methods, six overlap geometries, three participation rates, and three seeds. The user-requested two-job probe uses one seed and a single rotating 80% participation policy; it is **not** the balanced core.
+The **source-generated, mathematically audited CIFAR-100 ledger contains 38,370 feasible configurations per selected backbone** (not 53,805). The stricter audit rejected **15,435** registrations: 2,178 unrealized overlap geometries, 6,534 truncated offline-duration interventions, 6,534 inert, aliased, or signal-free selection interventions, and 189 unused LwF hyperparameter configurations. The **5,346-job balanced core remains complete** across all 11 local CL methods, all nine server methods, six overlap geometries, three participation rates, and three seeds. The user-requested two-job probe uses one seed and a single rotating 80% participation policy; it is **not** the balanced core.
 
 ```bash
 python scripts/audit_stream_math.py
