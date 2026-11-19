@@ -97,7 +97,7 @@ def _prepare_events(cfg, client, cid, raw_events, current_stage):
                     'is_recurrence': any(g['is_recurrence'] for g in group)})
             else:
                 if cfg.class_pair_protocol == 'strict':
-                    raise ValueError(f'Client {cid} lacks two contrasting labels: {group}')
+                    raise ValueError(f'Client {cid} has insufficient distinct class labels for a two-class episode: {group}')
                 events.extend({**g, 'class_ids': (g['class_id'],)}
                               for g in group)
     if cfg.stream_protocol and not events:

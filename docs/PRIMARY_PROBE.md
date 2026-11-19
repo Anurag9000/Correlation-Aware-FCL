@@ -38,7 +38,7 @@ Clone/pull `main` on that machine, install dependencies, check CUDA, then:
 python -m pip install -e '.[test]'
 python scripts/validate_factorial_plans.py
 bash scripts/run_primary_probe_cifar100.sh --plan-only
-# Two GPUs: two independent job processes, one on each GPU
+# Single GPU: two independent job processes share GPU 0
 bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0
 # One GPU (both processes share it; benchmark capacity first)
 bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0

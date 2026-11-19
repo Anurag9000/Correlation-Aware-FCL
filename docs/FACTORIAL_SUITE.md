@@ -59,7 +59,7 @@ bash scripts/run_all_cifar100.sh --backbone vit --plan-only --export-plan output
 # validate both mathematical registry digests
 python scripts/validate_factorial_plans.py
 # primary intended first study: two jobs in parallel, one seed
-bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,1
+bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0
 ```
 
 **Scope:** This is exhaustive only over the *specified compatible finite axes*, not a full Cartesian product of all continuous hyperparameters or a claim that every source-coded variant is an exact paper implementation. Several advanced client-selection policies require privileged simulator metadata. The official test split must not drive adaptive client selection or hyperparameter tuning; the two-job probe evaluates official test only at the end.

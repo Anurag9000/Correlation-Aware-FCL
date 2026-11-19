@@ -74,8 +74,8 @@ def test_all_five_task_one_workers_overlap_then_all_task_two_workers(monkeypatch
     assert all(x['client_ids']==list(range(5)) for x in barriers)
     assert all(x['completed_count']==5 for x in barriers)
     assert all(x['overlap_window_seconds']>.01 for x in barriers)
-    task1=[x for x in evidence if x[2]==1]
-    task2=[x for x in evidence if x[2]==2]
+    task1=[x for x in evidence if x[2]==0]
+    task2=[x for x in evidence if x[2]==1]
     assert len(task1)==10 and len(task2)==10
     assert max(x[3] for x in task1 if x[0]=='end')<=min(
         x[3] for x in task2 if x[0]=='start')

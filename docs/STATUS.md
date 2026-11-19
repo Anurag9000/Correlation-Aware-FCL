@@ -27,7 +27,7 @@ python -m pytest -q
 python scripts/validate_factorial_plans.py
 python scripts/audit_stream_math.py
 bash scripts/run_primary_probe_cifar100.sh --plan-only
-bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,1
+bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0
 ```
 
 Checkpoint protocol `cifar100_native32_v6`; distinct model-specific results roots. Never count old `cifar100_deit_v4` or v5 checkpoints as native v6 results. v6 prevents accidental resumption of CNN runs predating the BatchNorm reference-gradient fix.

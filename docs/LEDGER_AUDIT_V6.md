@@ -53,7 +53,7 @@ python -m pip install -e '.[test]'
 python -m pytest -q
 python scripts/validate_factorial_plans.py
 bash scripts/run_primary_probe_cifar100.sh --backbone vit --plan-only
-bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,1 --epochs 10
+bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0 --epochs 10
 ```
 
-`--gpus 0,1` starts both jobs concurrently on separate CUDA GPUs. For one GPU, use `--gpus 0,0` only if both concurrent processes fit. The launcher independently logs, checkpoints, and compares both runs. Source/CI checks do **not** claim remote GPU jobs were started.
+Historical two-device wording is superseded: `--gpu 0` starts both federated runs concurrently on the SAME physical GPU. Each run concurrently trains all local client models at each task ordinal, then performs server aggregation. The launcher independently logs, checkpoints, and compares both runs. Source/CI checks do **not** claim remote GPU jobs were started.
