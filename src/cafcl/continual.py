@@ -60,6 +60,13 @@ class LocalState:
     local_experience:int=-1
     first_seen_local_experience:dict[int,int]=field(default_factory=dict)
     local_training_events:list[dict]=field(default_factory=list)
+    private_memory:dict[int,list[int]]=field(default_factory=dict)
+    received_memory:dict[int,list[int]]=field(default_factory=dict)
+    received_example_payloads:dict[int,tuple]=field(default_factory=dict)
+    received_gradient_supports:dict[int,tuple[int,...]]=field(default_factory=dict)
+    pending_importance:dict[str,dict]=field(default_factory=dict)
+    federated_cl_version:int=0
+    lwf_teacher_from_server:bool=False
     def receive(self,weights,version,*,clear_memory=False):
         if clear_memory:
             self.memory.clear()
@@ -73,6 +80,7 @@ class LocalState:
         self.pending_upload_classes=set()
         self.pending_upload_steps=0
         self.pending_class_update_steps={}
+        self.pending_importance={}
     def arrival(self,indices,labels,stage):
         if stage > self.current_stage:
             self.current_indices=[]
@@ -83,24 +91,35 @@ class LocalState:
         self.observed_classes.update(labels)
         for cls in labels:
             self.first_seen_stage.setdefault(int(cls),int(stage))
-    def update_memory(self,indices,targets,budget, rng, policy='random_per_class'):
-        if budget <= 0:return
+    def update_memory(self,indices,targets,budget,rng,policy='random_per_class',*,total_limit=0):
+        """Private 1000-example replay budget; federated archive is not capped."""
+        from .federated_cl import combined_memory
         by_class=defaultdict(list)
-        for idx in indices: by_class[int(targets[idx])].append(int(idx))
-        for cls,samples in by_class.items():
-            old=self.memory.get(cls,[])
-            pool=list(dict.fromkeys(old+samples))
-            if len(pool)>budget:
-                if policy == 'recent_per_class':
-                    pool=pool[-budget:]
-                else:
-                    keep=rng.choice(len(pool),size=budget,replace=False)
-                    pool=[pool[int(j)] for j in sorted(keep)]
-            self.memory[cls]=pool
+        for idx in indices:by_class[int(targets[idx])].append(int(idx))
+        if total_limit>0:
+            merged=combined_memory(self.private_memory,by_class)
+            samples=[(c,i) for c,ids in sorted(merged.items()) for i in ids]
+            if len(samples)>total_limit:
+                chosen=sorted(int(i) for i in rng.choice(len(samples),size=total_limit,replace=False))
+                samples=[samples[i] for i in chosen]
+            private=defaultdict(list)
+            for c,i in samples:private[c].append(i)
+            self.private_memory=dict(private)
+        elif budget>0:
+            for cls,samples in by_class.items():
+                old=self.private_memory.get(cls,[])
+                pool=list(dict.fromkeys(old+samples))
+                if len(pool)>budget:
+                    if policy=='recent_per_class':pool=pool[-budget:]
+                    else:
+                        chosen=rng.choice(len(pool),size=budget,replace=False)
+                        pool=[pool[int(i)] for i in sorted(chosen)]
+                self.private_memory[cls]=pool
+        self.memory=combined_memory(self.private_memory,self.received_memory)
         retained={int(i) for group in self.memory.values() for i in group}
         for i in tuple(self.memory_logits):
-            if i not in retained:
-                del self.memory_logits[i]
+            if i not in retained:del self.memory_logits[i]
+
 
 
 def _trainable_params(model):
@@ -243,22 +262,31 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
             client.si_displacement={n:torch.zeros_like(p.detach().cpu())
                                     for n,p in model.named_parameters()}
         if client.si_stage>=0 and client.local_experience>client.si_stage:
+            fresh_importance={}
             # SI consolidation uses ONLY locally applied optimization steps;
             # the global broadcast is deliberately excluded from the path.
             for n,p in model.named_parameters():
                 delta=client.si_displacement[n]
                 importance=(client.si_path[n]/(delta.square()+cfg.si_xi)).clamp(min=0)
-                client.si_omega[n]+=importance
+                fresh_importance[n]=importance
                 client.si_path[n].zero_()
                 client.si_displacement[n].zero_()
-            client.si_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
+            current_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
+            from .federated_cl import add_importance,weighted_importance
+            add_importance(client,'si',fresh_importance,current_anchor)
+            client.si_omega,client.si_anchor=weighted_importance(
+                client.si_omega,client.si_anchor,fresh_importance,current_anchor)
         elif client.si_anchor is None:
             client.si_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
         client.si_stage=client.local_experience
     # Persist an earlier global teacher across all rounds of the new local stage.
     if cfg.method=='lwf' and client.local_experience>client.lwf_stage:
-        client.lwf_teacher={k:v.detach().cpu().clone() for k,v in model.state_dict().items()} \
-            if client.lwf_stage>=0 else None
+        if client.lwf_teacher_from_server:
+            # Use the global historical teacher once after re-synchronization.
+            client.lwf_teacher_from_server=False
+        else:
+            client.lwf_teacher={k:v.detach().cpu().clone() for k,v in model.state_dict().items()} \
+                if client.lwf_stage>=0 else None
         client.lwf_stage=client.local_experience
     teacher=None
     if cfg.method=='lwf' and client.lwf_teacher is not None:
@@ -450,8 +478,12 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                                           cfg.seed+round_id+client.client_id)))
             optimizer.zero_grad(set_to_none=True)
             F.cross_entropy(model(x.to(device)),y.to(device)).backward()
-            client.ewc_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
-            client.ewc_fisher={n:(p.grad.detach().cpu().square() if p.grad is not None else torch.zeros_like(p.cpu())) for n,p in model.named_parameters()}
+            fresh_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
+            fresh_fisher={n:(p.grad.detach().cpu().square() if p.grad is not None else torch.zeros_like(p.cpu())) for n,p in model.named_parameters()}
+            from .federated_cl import add_importance,weighted_importance
+            add_importance(client,'ewc',fresh_fisher,fresh_anchor)
+            client.ewc_fisher,client.ewc_anchor=weighted_importance(
+                client.ewc_fisher,client.ewc_anchor,fresh_fisher,fresh_anchor)
             client.ewc_stage=client.local_experience
     if (cfg.method=='mas' and (experience_end or (round_id+1)%cfg.rounds_per_stage==0)
             and client.local_experience > client.mas_stage):
@@ -463,14 +495,16 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         squared_output.backward()
         omega={n:(p.grad.detach().cpu().abs() if p.grad is not None else
                    torch.zeros_like(p.detach().cpu())) for n,p in model.named_parameters()}
-        if client.mas_omega is not None:
-            omega={n:omega[n]+client.mas_omega[n] for n in omega}
-        client.mas_omega=omega
-        client.mas_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
+        fresh_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
+        from .federated_cl import add_importance,weighted_importance
+        add_importance(client,'mas',omega,fresh_anchor)
+        client.mas_omega,client.mas_anchor=weighted_importance(
+            client.mas_omega,client.mas_anchor,omega,fresh_anchor)
         client.mas_stage=client.local_experience
     # Never allocate replay/GEM memory for non-memory algorithms.
     if cfg.method in {'gem','agem','replay','er_ace','der','derpp'}:
-        client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy)
+        client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy,
+                             total_limit=(cfg.replay_buffer_capacity if cfg.method=='replay' else 0))
     if cfg.method in {'der','derpp'} and client.memory:
         # Logits recorded at memory insertion/consolidation, never from test data.
         # This is a stage-consolidated local DER adaptation rather than the

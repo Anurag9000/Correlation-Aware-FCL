@@ -17,6 +17,7 @@ from .streaming import compile_stream_scenario,select_offline_cohort
 from .models import create_model,copy_cpu_state,check_finite
 from .continual import LocalState,local_train
 from .class_indexed import classwise_merge,classifier_parameter_names
+from .federated_cl import FederatedCLState
 from .selection import select_clients
 from .evaluation import evaluate
 from .causal import aggregation_leave_one_out,aggregation_subset_report
@@ -27,7 +28,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v6'
+PROTOCOL_VERSION = 'cifar100_native32_v7_shared_cl'
 
 
 def anchored_upload(client, global_state):
@@ -191,7 +192,7 @@ def server_optimizer_step(base,mean,method,cfg,state):
 
 
 def save_round_state(path,cfg,round_id,global_state,version,clients,observed,peak,
-                     integrated,history,rng,server_optimizer_state,server_class_update_counts=None):
+                     integrated,history,rng,server_optimizer_state,server_class_update_counts=None,server_cl_state=None):
     """Durable full-state checkpoint for exact logical-round resumption."""
     payload={'config':cfg.to_dict(),'protocol_version':PROTOCOL_VERSION,'last_completed_round':round_id,
              'global_state':global_state,'version':version,
@@ -200,6 +201,7 @@ def save_round_state(path,cfg,round_id,global_state,version,clients,observed,pea
              'history':history,'selection_rng':rng.bit_generator.state,
              'server_optimizer_state':server_optimizer_state,
              'server_class_update_counts':dict(server_class_update_counts or {}),
+             'server_cl_state':server_cl_state,
              'python_rng':random.getstate(),'numpy_rng':np.random.get_state(),
              'torch_rng':torch.get_rng_state(),
              'cuda_rng':torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []}
@@ -218,13 +220,14 @@ def atomic_json(path,obj):
     os.replace(tmp,path)
 
 
-def save_checkpoint(path,weights,cfg,version,states=None,full_state=False):
+def save_checkpoint(path,weights,cfg,version,states=None,full_state=False,server_cl_state=None):
     path=Path(path)
     tmp=path.with_suffix(path.suffix+'.tmp')
     payload={'model_state':weights,'model_version':version,'protocol_version':PROTOCOL_VERSION,
              'configuration':cfg.to_dict()}
     if full_state:
         payload['clients']={cid:asdict(s) for cid,s in states.items()}
+        payload['server_cl_state']=server_cl_state
         # Retain resumable client memory and model state at full-state checkpoints.
     torch.save(payload,tmp)
     os.replace(tmp,path)
@@ -287,6 +290,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         observed=set();peak={};history=[];version=0
         integrated=set();server_optimizer_state={}
         server_class_update_counts={}
+        server_cl_state=FederatedCLState()
         first_round=0
         rng=np.random.default_rng(cfg.seed+888_777)
         total_rounds=(len(scenario.stages) if cfg.stream_protocol else cfg.stages*cfg.rounds_per_stage)
@@ -319,6 +323,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             observed=set(saved['observed']);peak=saved['peak'];integrated=set(saved['integrated'])
             history=saved['history'];server_optimizer_state=saved['server_optimizer_state']
             server_class_update_counts=saved.get('server_class_update_counts',{})
+            server_cl_state=saved.get('server_cl_state')
+            if not isinstance(server_cl_state,FederatedCLState):
+                raise RuntimeError('Missing v7 federated continual-learning checkpoint state')
             rng.bit_generator.state=saved['selection_rng']
             random.setstate(saved['python_rng']);np.random.set_state(saved['numpy_rng'])
             torch.set_rng_state(saved['torch_rng'])
@@ -563,22 +570,34 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         server_class_update_counts[int(cls)]=(
                             server_class_update_counts.get(int(cls),0)+int(n))
 
+                # Accepted client-private historical state is merged before
+                # the model/state acknowledgement; inactive clients are untouched.
+                if cfg.share_continual_state:
+                    server_cl_state.merge_clients([clients[u['client_id']] for u in accepted],
+                        bank,cfg.method,candidate,version+1)
                 # Candidate is built without mutating the committed server state.
                 for cid in selected:
                     clients[cid].receive(candidate,version+1,
                         clear_memory=cfg.reset_memory_on_sync)
+                    if cfg.share_continual_state:
+                        server_cl_state.broadcast_to(clients[cid],cfg.method)
                     assert all(torch.equal(clients[cid].shared_weights[k],v) for k,v in candidate.items())
                 global_state=candidate
                 server_optimizer_state=new_server_state
                 version+=1
             else:
                 # All active clients still receive the current committed model.
-                for cid in selected:clients[cid].receive(global_state,version,
-                    clear_memory=cfg.reset_memory_on_sync)
+                for cid in selected:
+                    clients[cid].receive(global_state,version,
+                        clear_memory=cfg.reset_memory_on_sync)
+                    if cfg.share_continual_state:
+                        server_cl_state.broadcast_to(clients[cid],cfg.method)
             if cfg.full_sync:
                 for cid in clients:
                     clients[cid].receive(global_state,version,
                         clear_memory=cfg.reset_memory_on_sync)
+                    if cfg.share_continual_state:
+                        server_cl_state.broadcast_to(clients[cid],cfg.method)
             for cid in selected:
                 clients[cid].last_selected=round_id
                 clients[cid].selection_count+=1
@@ -673,6 +692,10 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'uploaded_accumulated_steps':{str(u['client_id']):u['accumulated_steps'] for u in accepted},
                            'client_unsent_steps':{str(cid):c.pending_upload_steps for cid,c in clients.items()},
                            'protocol_version':PROTOCOL_VERSION,
+                           'server_cl_state':server_cl_state.statistics(),
+                           'client_shared_memory_sizes':{str(cid):sum(map(len,c.received_memory.values())) for cid,c in clients.items()},
+                           'client_private_memory_sizes':{str(cid):sum(map(len,c.private_memory.values())) for cid,c in clients.items()},
+                           'client_federated_cl_versions':{str(cid):c.federated_cl_version for cid,c in clients.items()},
                            'local_details':local_details,
                            'seconds':time.monotonic()-round_start,
                            'global_test_includes_inactive':True,
@@ -696,25 +719,26 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                (cfg.stream_protocol or (round_id+1)%cfg.rounds_per_stage==0):
                 save_round_state(latest_checkpoint,cfg,round_id,global_state,version,
                                  clients,observed,peak,integrated,history,rng,
-                                 server_optimizer_state,server_class_update_counts)
+                                 server_optimizer_state,server_class_update_counts,server_cl_state)
                 if cfg.checkpoint_every:
                     save_round_state(run_dir/f'checkpoint_round_{round_id+1:04d}.pt',
                                      cfg,round_id,global_state,version,
                                      clients,observed,peak,integrated,history,rng,
-                                     server_optimizer_state,server_class_update_counts)
+                                     server_optimizer_state,server_class_update_counts,server_cl_state)
             if (cfg.stream_protocol or (round_id+1)%cfg.rounds_per_stage==0):
                 save_checkpoint(run_dir/f'model_stage_{current_stage+1:02d}.pt',global_state,
-                                cfg,version,clients,full_state=True)
+                                cfg,version,clients,full_state=True,server_cl_state=server_cl_state)
             if verbose:
                 acc=('deferred' if result['accuracy'] is None else f'{result["accuracy"]:.4f}')
                 forgetting=('deferred' if result['forgetting'] is None else f'{result["forgetting"]:.4f}')
                 print(f'[{job}] round {round_id+1}/{total_rounds} acc={acc} '
                       f'forgetting={forgetting} clients={len(selected)}',flush=True)
-        save_checkpoint(run_dir/'model_final.pt',global_state,cfg,version,clients,full_state=True)
+        save_checkpoint(run_dir/'model_final.pt',global_state,cfg,version,clients,full_state=True,server_cl_state=server_cl_state)
         atomic_json(run_dir/'summary.json',{'job_id':job,'dataset':cfg.dataset,
                     'fork_source':str(fork_from_checkpoint) if fork_from_checkpoint else None,
                     'device':str(device),'rounds':total_rounds,'backbone':backbone_description,'final_metrics':history[-1],
-                    'model_final':str(run_dir/'model_final.pt')})
+                    'model_final':str(run_dir/'model_final.pt'),
+                    'shared_continual_state':server_cl_state.statistics()})
         atomic_json(status_file,{'status':'completed','protocol_version':PROTOCOL_VERSION,
                                 'finished_at':time.time(),
                                 'rounds':total_rounds})

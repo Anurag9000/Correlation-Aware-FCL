@@ -1,4 +1,4 @@
-"""Precisely two CIFAR-100 A-GEM/FedAvg pilot jobs: full vs rotating 1/5 offline.
+"""Precisely two CIFAR-100 Replay/FedAvg pilot jobs: full vs rotating 1/5 offline.
 
 Each job has five clients, five local intervals, two consecutive binary tasks
 per client per interval, 100 globally distinct labels, no overlap. The
@@ -16,15 +16,15 @@ from .simulator import run_experiment,atomic_json
 from .selection import participation_budget
 
 
-def make_jobs(*,backbone='vit',seed=0,lr=.003,epochs=1,memory_per_class=20):
-    cfg=replace(base(seed=seed,model=backbone),num_clients=5,method='agem',
+def make_jobs(*,backbone='vit',seed=0,lr=.003,epochs=10,memory_per_class=20,buffer_size=1000):
+    cfg=replace(base(seed=seed,model=backbone),num_clients=5,method='replay',replay_buffer_capacity=buffer_size,share_continual_state=True,
         aggregator='fedavg',scenario='disjoint',stream_overlap_kind='none',
         stream_overlap_fraction=0.,classes_per_local_task=2,local_tasks_per_round=2,
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
         stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=memory_per_class,
-        job_id='PRIMARY_FULL_'+resolve_backbone(backbone))
+        job_id='PRIMARY_FULL_REPLAY_SHARED_'+resolve_backbone(backbone))
     partial=replace(cfg,participation=.8,stream_offline_policy='rotate_once',
-                    job_id='PRIMARY_ROTATING_OFFLINE_'+resolve_backbone(backbone))
+                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_SHARED_'+resolve_backbone(backbone))
     for job in (cfg,partial):job.validate()
     return cfg,partial
 
@@ -85,7 +85,7 @@ def build_report(root,jobs):
     with (folder/'per_class.csv').open('w',newline='') as f:
         wr=csv.DictWriter(f,fieldnames=list(rows[0]));wr.writeheader();wr.writerows(rows)
     markdown=['# CIFAR-100 preliminary probe: full participation versus rotating one-client outage','',
-        'Two matched A-GEM/FedAvg runs, five clients, two binary tasks/client/round, five training rounds,',
+        'Two matched Replay/FedAvg runs, five clients, two binary tasks/client/round, five training rounds,',
         'one terminal communication-only flush, seed controlled, original 100-class test split.', '',
         f"- Full accuracy: {overall['full_accuracy']:.6f}",
         f"- Rotating-offline accuracy: {overall['rotating_offline_accuracy']:.6f}",
@@ -104,6 +104,7 @@ def main(argv=None):
     p.add_argument('--lr',type=float,default=.003)
     p.add_argument('--epochs',type=int,default=1)
     p.add_argument('--memory-per-class',type=int,default=20)
+    p.add_argument('--buffer-size',type=int,default=1000,help='Client private buffer limit, not a cap on the synchronized union')
     p.add_argument('--data-root',default='data')
     p.add_argument('--output-dir',default='results')
     p.add_argument('--gpus',default='0,0',help='Two visible GPU IDs for two simultaneous jobs; e.g. 0,1 or 0,0')
@@ -113,9 +114,9 @@ def main(argv=None):
     p.add_argument('--worker',type=int,choices=(0,1),default=None,help=argparse.SUPPRESS)
     args=p.parse_args(argv)
     jobs=make_jobs(backbone=args.backbone,seed=args.seed,lr=args.lr,epochs=args.epochs,
-                   memory_per_class=args.memory_per_class)
+                   memory_per_class=args.memory_per_class,buffer_size=args.buffer_size)
     design=audited_plan(jobs)
-    root=Path(args.output_dir)/('primary_cifar100_native32_v6_'+args.backbone+f'_seed{args.seed}')
+    root=Path(args.output_dir)/('primary_cifar100_shared_cl_v7_'+args.backbone+f'_seed{args.seed}')
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',design)
     if args.plan_only:
@@ -133,7 +134,7 @@ def main(argv=None):
     if len(available)!=2 or not all(x.isdigit() for x in available):p.error('Expected --gpus 0,1 or --gpus 0,0')
     cmd=[sys.executable,'-m','cafcl.primary_probe','--backbone',args.backbone,
          '--seed',str(args.seed),'--lr',str(args.lr),'--epochs',str(args.epochs),
-         '--memory-per-class',str(args.memory_per_class),'--data-root',args.data_root,
+         '--memory-per-class',str(args.memory_per_class),'--buffer-size',str(args.buffer_size),'--data-root',args.data_root,
          '--output-dir',args.output_dir,'--no-download']
     if args.allow_cpu:cmd.append('--allow-cpu')
     processes=[]

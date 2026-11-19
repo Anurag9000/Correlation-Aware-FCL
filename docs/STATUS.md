@@ -31,3 +31,8 @@ bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,1
 ```
 
 Checkpoint protocol `cifar100_native32_v6`; distinct model-specific results roots. Never count old `cifar100_deit_v4` or v5 checkpoints as native v6 results. v6 prevents accidental resumption of CNN runs predating the BatchNorm reference-gradient fix.
+
+
+## V7 shared continual-learning state
+
+The model-only communications protocol is superseded by a v7 model + method-native-state protocol. The central server deduplicates contributed replay samples and DER target logits, aggregates nonduplicate diagonal EWC/SI/MAS importance contributions, and broadcasts its latest shared state only to clients that actually synchronize. The two-job pilot now uses Replay/FedAvg, private replay capacity 1000, and a separate v7 root. The frozen v6 job-geometry manifest is preserved, but v7 results are NOT equivalent to v6 results; old checkpoints cannot be reused. Cached GEM/A-GEM gradients from incompatible models are never naively averaged; their shared class evidence supports current-model reference-gradient recomputation. These updates are a **data-sharing simulator** and are not private FL.

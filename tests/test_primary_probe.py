@@ -12,7 +12,9 @@ def test_probe_has_two_matched_100_label_jobs_and_exhaustive_rotation(backbone):
     full,rotating=make_jobs(backbone=backbone)
     assert full.model==rotating.model==({'vit':VIT_ID,'cnn':CNN_ID}[backbone])
     assert full.batch_size==rotating.batch_size==1024
-    assert full.method==rotating.method=='agem'
+    assert full.method==rotating.method=='replay'
+    assert full.replay_buffer_capacity==rotating.replay_buffer_capacity==1000
+    assert full.share_continual_state and rotating.share_continual_state
     assert full.aggregator==rotating.aggregator=='fedavg'
     assert full.seed==rotating.seed==0
     assert full.evaluate_final_only and rotating.evaluate_final_only

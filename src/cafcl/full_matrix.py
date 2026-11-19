@@ -177,7 +177,7 @@ def main(argv=None):
     if len(seeds)!=len(set(seeds)):p.error('Seed values must be distinct')
     families=['balanced'] if args.suite=='balanced' else args.families
     plan=manifest(seeds=seeds,families=families,model=args.backbone)
-    root=Path(args.output_dir)/('cifar100_native32_v6_'+args.backbone);root.mkdir(parents=True,exist_ok=True)
+    root=Path(args.output_dir)/('cifar100_native32_v7_shared_cl_'+args.backbone);root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'stream_manifest.json',plan)
     print(json.dumps(plan,indent=2),flush=True)
     if args.export_plan:

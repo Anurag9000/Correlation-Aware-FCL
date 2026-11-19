@@ -6,7 +6,7 @@
 |---|---|---|
 | Data | Official CIFAR-100, 100 classes, native 32×32 | Identical |
 | Clients | 5 | 5 |
-| Local method | A-GEM | A-GEM |
+| Local method | Replay | Replay |
 | Server integration | FedAvg + canonical class-row fusion | Identical |
 | Local class overlap | None | None |
 | Classes per task | 2 | 2 |
@@ -48,8 +48,11 @@ bash scripts/run_primary_probe_cifar100.sh --backbone cnn --gpus 0,1
 
 `--gpus` selects GPUs for the **two runs**, not the two backbone types. Running both backbone types would produce four experiments, not the requested two. `--seed 0`, `--lr .003`, `--epochs 1`, `--memory-per-class 20`, `--data-root`, `--output-dir`, `--no-download`, `--plan-only` are configurable. The parent ensures CIFAR-100 is cached before spawning the two worker processes to avoid concurrent download races. Production requires CUDA by default. Independent logs, checkpoints, and status files are saved for both jobs.
 
-Final outputs: `results/primary_cifar100_native32_v6_<vit|cnn>_seed0/comparison/summary.json`, `per_class.csv`, `per_class.json`, and `comparison.md`; all computed only after **both** runs succeed and after verifying all 100 classes have been integrated.
+Final outputs: `results/primary_cifar100_shared_cl_v7_<vit|cnn>_seed0/comparison/summary.json`, `per_class.csv`, `per_class.json`, and `comparison.md`; all computed only after **both** runs succeed and after verifying all 100 classes have been integrated.
 
 **Scientific scope:** This is a feasibility/proof-of-concept ablation, not a published statistical finding. One seed is insufficient for uncertainty estimates. Participation changes communication frequency and the trajectory of stale updates, not merely class identities. The terminal flush changes the protocol but is essential to measure the final 100-class model fairly. Study per-round coverage and pre-flush sensitivity separately later.
 
 **Caveat:** Training a 32×32 ViT-Tiny/16 from random initialization provides only four image tokens and may yield low absolute accuracy. ViT-specific optimizer learning rate and training duration have **not** been tuned. Negative outcomes may be architecture/training issues rather than falsification of the federated-continual-learning hypothesis.
+
+## V7 shared archive
+Each participating client uploads up to 1,000 privately retained training exemplars, which the server merges by class and sample provenance. It stores compact uint8 RGB sample payloads and broadcasts the entire archive to online clients with the aggregated model. Offline clients continue from their last downloaded model and archive. The combined archive is **not** capped at 1,000; 1,000 is the private client budget. The protocol explicitly shares raw images, and therefore is NOT privacy-preserving FL.

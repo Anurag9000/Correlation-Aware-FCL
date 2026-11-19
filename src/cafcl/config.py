@@ -19,6 +19,8 @@ class RunConfig:
     stages: int = 2
     micro_batch_size: int = 16  # physical batch; effective SGD step remains batch_size=1024
     memory_per_class: int = 20
+    replay_buffer_capacity: int = 1000
+    share_continual_state: bool = True
     lr: float = 0.03
     model: str = "vit_tiny_patch16_32"
     seed: int = 0
@@ -151,6 +153,8 @@ class RunConfig:
             from .models import MODEL_IDS
             assert self.model in MODEL_IDS, 'Research requires an explicitly registered native 32x32 research backbone'
         assert self.memory_per_class >= 0
+        assert self.replay_buffer_capacity>=1
+        if self.stream_protocol:assert self.share_continual_state, 'Streaming jobs must synchronize method-specific CL state'
         assert self.causal_max_clients >= 1 and self.checkpoint_every >= 0
         assert self.participation_schedule in {"feedback", "stage", "constant", "increasing", "decreasing", "alternating"}
         assert self.pending_policy in {"latest", "retain_all", "bounded"}
@@ -241,6 +245,9 @@ class RunConfig:
         # Every nondefault protocol variant is still explicitly serialized.
         if data['class_pair_protocol']=='compatible':data.pop('class_pair_protocol')
         if data['classwise_head_merge'] is True:data.pop('classwise_head_merge')
+        # Preserve the frozen v6 geometry ledger. Execution semantics and roots are v7.
+        if data['replay_buffer_capacity']==1000:data.pop('replay_buffer_capacity')
+        if data['share_continual_state'] is True:data.pop('share_continual_state')
         return data
 
     def signature(self):

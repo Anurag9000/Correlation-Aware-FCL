@@ -61,3 +61,8 @@ Supported research backbones are switchable by the model registry, with distinct
 - Only official CIFAR-100 GPU results can establish model performance. The tests are software/mathematical validations, not research accuracy results.
 
 [Factorial families](docs/FACTORIAL_SUITE.md) · [Primary probe protocol](docs/PRIMARY_PROBE.md) · [Overlap specification](docs/OVERLAP_CASES.md) · [Exact design and feasibility audit](configs/designs/stream_v6_native32.json) · [Status and caveats](docs/STATUS.md)
+
+
+## V7 server-synchronized continual learning
+
+The two-job primary probe now uses **Replay + FedAvg**, a 1,000-example private buffer per client, and a server-broadcast archive of all contributed examples. GEM/A-GEM share class-indexed constraint examples and recompute gradients at the receiving model; DER shares stored logits; EWC/SI/MAS combine fresh diagonal importance information; LwF uses a global teacher. See [the protocol](docs/FEDERATED_CL_STATE_V7.md). All execution artifacts use v7 output directories rather than overwriting v6 A-GEM results. **This is a raw-data-sharing research simulation, not privacy-preserving FL.**
