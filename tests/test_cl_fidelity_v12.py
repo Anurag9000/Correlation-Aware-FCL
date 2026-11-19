@@ -209,8 +209,12 @@ def test_si_integral_uses_unregularized_task_gradient_even_with_old_importance()
     client.arrival([4,5,6,7],(2,3),1)
     model.load_state_dict(client.shared_weights)
     before={n:p.detach().clone() for n,p in model.named_parameters()}
-    x=torch.stack([ImageBank.train[i][0] for i in range(4,8)])
-    labels=torch.tensor([2,2,3,3])
+    # The training optimizer always forwards a physical batch of 64.
+    # Reconstruct the exact deterministic final-batch replacement draws.
+    from cafcl.continual import _FixedBatchSampler
+    positions=next(iter(_FixedBatchSampler(4,conf.batch_size,conf.seed,True)))
+    x=torch.stack([ImageBank.train[4+int(i)][0] for i in positions])
+    labels=torch.tensor([2,2,3,3])[positions]
     logits=model(x)
     # New data now competes against every class previously observed by the
     # client (including classes 0 and 1), not just its latest task pair.
