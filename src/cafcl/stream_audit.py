@@ -134,6 +134,10 @@ def check_job(cfg):
         return 'recurrence-selector-has-no-recurrence-signal'
     if cfg.selector=='overlap' and cfg.stream_overlap_kind=='none':
         return 'overlap-selector-has-no-overlap-signal'
+    # This protocol is fixed throughout all active suites; retain historical
+    # task_length candidate names in the raw design only as REJECTED arms.
+    if cfg.classes_per_local_task != 2 or cfg.local_tasks_per_round != 2:
+        return 'retired-variable-task-length-protocol'
     return check_stream(cfg.seed,cfg.num_clients,cfg.classes_per_local_task,
                         cfg.local_tasks_per_round,cfg.stream_overlap_kind,
                         cfg.stream_overlap_fraction,cfg.stream_recurrence_rounds,

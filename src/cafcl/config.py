@@ -161,6 +161,8 @@ class RunConfig:
         if self.replay_reservoir_fraction:
             assert self.method == 'replay', 'Per-class reservoir fraction applies to Replay only'
         if self.dataset=='cifar100':
+            assert self.stream_protocol and self.class_pair_protocol=='strict', (
+                'Every active CIFAR-100 job must use the unique first4-then2 class-pair stream')
             assert self.share_continual_state, 'All CIFAR-100 jobs require synchronized CL state'
             assert not self.reset_memory_on_sync, 'Synchronized history must remain available'
             assert not (self.full_sync and self.participation<1), 'Hidden clients cannot receive server broadcasts'

@@ -1,9 +1,9 @@
 """Precisely two CIFAR-100 Replay/FedAvg pilot jobs: full vs rotating 1/5 offline.
 
-Each job has five clients, five local intervals, two consecutive binary tasks
-per client per interval, 100 globally distinct labels, no overlap. The
-rotation leaves exactly one *different* client offline each interval; final
-communication-only flush integrates the last pending client's model delta.
+Each job has five clients. Initially each client learns two consecutive
+two-class experiences, then one two-class experience per further round.
+Nine training intervals cover all 100 distinct classes. The rotating
+offline client cycles across all five; terminal flush uploads pending state.
 """
 from __future__ import annotations
 import argparse,csv,json,os,subprocess,sys,time
@@ -24,9 +24,9 @@ def make_jobs(*,backbone='vit',seed=0,lr=.003,epochs=10,memory_per_class=20,repl
         stream_overlap_fraction=0.,classes_per_local_task=2,local_tasks_per_round=2,
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
         stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=memory_per_class,
-        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V12_CL_'+resolve_backbone(backbone))
+        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V13_FIRST4_THEN2_'+resolve_backbone(backbone))
     partial=replace(cfg,participation=.8,stream_offline_policy='rotate_once',
-                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V12_CL_'+resolve_backbone(backbone))
+                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V13_FIRST4_THEN2_'+resolve_backbone(backbone))
     for job in (cfg,partial):job.validate()
     return cfg,partial
 
@@ -35,7 +35,7 @@ def audited_plan(jobs):
     baseline,partial=jobs
     stream=make_task_schedule(100,baseline)
     rounds=1+max(r for r,_,_,_,_ in stream)
-    assert rounds==5 and len(stream)==5*5*2
+    assert rounds==9 and len(stream)==5*(2+8)
     flattened=[label for _,_,_,labels,_ in stream for label in labels]
     assert len(flattened)==100 and len(set(flattened))==100 and set(flattened)==set(range(100))
     assert all(len(labels)==2 for _,_,_,labels,_ in stream)
@@ -46,13 +46,13 @@ def audited_plan(jobs):
         absent=set(range(5))-set(selected)
         assert len(absent)==1
         offline.append(next(iter(absent)))
-    assert sorted(offline)==list(range(5))
+    assert set(offline)==set(range(5)) and len(offline)==9
     by_round=[]
     for r in range(rounds):
         by_round.append(dict(round=r+1,offline_client=offline[r],
             offline_classes=sorted({c for rr,cid,_,labels,_ in stream if rr==r and cid==offline[r] for c in labels}),
             online_clients=[c for c in range(5) if c!=offline[r]]))
-        assert len(by_round[-1]['offline_classes'])==4
+        assert len(by_round[-1]['offline_classes'])==(4 if r==0 else 2)
     return dict(dataset='cifar100',seed=baseline.seed,backbone=baseline.model,batch_size=baseline.batch_size,
         micro_batch_size=baseline.micro_batch_size,
         client_execution_mode='parallel_task_barriers',
@@ -63,8 +63,11 @@ def audited_plan(jobs):
         replay_sampling='independent_classwise_algorithm_r',
         training_images_per_class=450,private_reservoir_per_class=ceil(450*baseline.replay_reservoir_fraction),
         expected_server_exemplars_after_flush=100*ceil(450*baseline.replay_reservoir_fraction),
-        clients=5,classes_per_local_task=2,local_tasks_per_round=2,training_intervals=rounds,
-        terminal_communication_only_flush=True,all_classes_once=True,offline_unique_once=True,
+        clients=5,classes_per_local_task=2,initial_local_tasks=2,
+        subsequent_local_tasks=1,initial_new_classes_per_client=4,
+        subsequent_new_classes_per_client=2,training_intervals=rounds,
+        terminal_communication_only_flush=True,all_classes_once=True,
+        offline_rotation_covers_all=True,
         total_jobs=2,job_ids=[c.job_id for c in jobs],offline_schedule=by_round)
 
 
@@ -96,7 +99,8 @@ def build_report(root,jobs):
     with (folder/'per_class.csv').open('w',newline='') as f:
         wr=csv.DictWriter(f,fieldnames=list(rows[0]));wr.writeheader();wr.writerows(rows)
     markdown=['# CIFAR-100 preliminary probe: full participation versus rotating one-client outage','',
-        'Two matched Replay/FedAvg runs, five clients, two binary tasks/client/round, five training rounds,',
+        'Two matched Replay/FedAvg runs, five clients, first round two binary tasks/client,',
+        'then one binary task/client per round for eight more rounds (nine total),',
         'one terminal communication-only flush, seed controlled, original 100-class test split.', '',
         f"- Full accuracy: {overall['full_accuracy']:.6f}",
         f"- Rotating-offline accuracy: {overall['rotating_offline_accuracy']:.6f}",
@@ -135,7 +139,7 @@ def main(argv=None):
                    memory_per_class=args.memory_per_class,replay_fraction=args.replay_fraction,
                    micro_batch_size=args.micro_batch_size)
     design=audited_plan(jobs)
-    root=Path(args.output_dir)/('primary_cifar100_single_gpu_cl_v12_'+args.backbone+
+    root=Path(args.output_dir)/('primary_cifar100_first4_then2_v13_'+args.backbone+
         ('' if abs(args.replay_fraction-.1)<1e-12 else '_pct'+f'{100*args.replay_fraction:g}'.replace('.','p'))+
         f'_bs{args.batch_size}_seed{args.seed}')
     root.mkdir(parents=True,exist_ok=True)

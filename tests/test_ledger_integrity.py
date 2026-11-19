@@ -6,9 +6,11 @@ from cafcl.stream_audit import check_job, check_stream
 
 def test_incomplete_final_outage_cohort_is_not_exact_duration():
     # 10 clients, 4 labels/client/round: 40 + 40 + 20 = 100.
-    # Three training rounds cannot fit successive two-round outage cohorts.
+    # Four training rounds: a two-round offline cohort now fits exactly;
+    # three-round outages leave a truncated final cohort.
     c=replace(base(0),participation=.8,offline_duration_rounds=2)
-    assert check_job(c)=='truncated-or-extended-offline-duration'
+    assert check_job(c) is None
+    assert check_job(replace(c,offline_duration_rounds=3))=='truncated-or-extended-offline-duration'
     assert check_job(replace(c,offline_duration_rounds=1)) is None
 
 

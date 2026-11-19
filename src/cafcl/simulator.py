@@ -30,7 +30,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v12_cl_methods'
+PROTOCOL_VERSION = 'cifar100_native32_v13_first4_then2_global_cl'
 
 
 def anchored_upload(client, global_state, *, current_version=None):
@@ -544,6 +544,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     if cfg.share_continual_state:
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
+                        server_cl_state.assert_complete_download(clients[cid])
                     assert all(torch.equal(clients[cid].shared_weights[k],v) for k,v in candidate.items())
                 global_state=candidate
                 server_optimizer_state=new_server_state
@@ -556,6 +557,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     if cfg.share_continual_state:
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
+                        server_cl_state.assert_complete_download(clients[cid])
             if cfg.full_sync:
                 for cid in clients:
                     clients[cid].receive(global_state,version,
@@ -563,6 +565,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     if cfg.share_continual_state:
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
+                        server_cl_state.assert_complete_download(clients[cid])
             for cid in selected:
                 clients[cid].last_selected=round_id
                 clients[cid].selection_count+=1

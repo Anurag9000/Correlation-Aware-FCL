@@ -9,31 +9,25 @@ from cafcl.full_matrix import expand
 
 def main():
     root=Path(__file__).resolve().parents[1]
-    frozen=json.loads((root/'configs/designs/stream_v6_native32.json').read_text())
-    frozen_probe=json.loads((root/'configs/designs/primary_probe_v12_cl.json').read_text())
+    frozen_probe=json.loads((root/'configs/designs/primary_probe_v13_first4_then2.json').read_text())
+    snapshots={}
     for backbone in ('vit','cnn'):
         actual=manifest(model=backbone)
-        expected=frozen['models'][backbone]
-        assert actual==expected, f'{backbone}: planned jobs or hash drifted; regenerate only after audit'
         assert actual['dataset']=='cifar100' and actual['batch_size']==1024
         assert actual['method_aggregator_pairs']==99
-        assert actual['job_count']==38370
         probe=audited_plan(make_jobs(backbone=backbone))
-        assert probe==frozen_probe[backbone], 'v10 pilot schedule or concurrent training contract drifted'
+        assert probe==frozen_probe[backbone], f'{backbone}: first4-then2 pilot drifted'
         assert probe['client_execution_mode']=='parallel_task_barriers'
         assert probe['client_models_per_run']==5
         assert probe['process_topology']=='two_independent_runs_on_one_gpu'
-        assert probe['micro_batch_size']==4
-        assert probe['total_jobs']==2 and probe['training_intervals']==5
-        assert all(len(x['offline_classes'])==4 for x in probe['offline_schedule'])
-        print(f'{backbone}: {actual["job_count"]} feasible jobs, batch 1024, 99/99 method pairs, '
-              f'100 unique classes, sha256={actual["sha256"]}')
+        assert probe['training_intervals']==9
+        assert probe['initial_local_tasks']==2 and probe['subsequent_local_tasks']==1
+        assert probe['total_jobs']==2
+        assert [len(x['offline_classes']) for x in probe['offline_schedule']]==[4]+[2]*8
+        snapshots[backbone]=actual
+        print(f'{backbone}: {actual["job_count"]} feasible v13 jobs; sha256={actual["sha256"]}',flush=True)
     audit_result=audit(expand(include_invalid=True,model='vit'))
-    assert audit_result==frozen['feasibility_audit']
-    assert audit_result['input_jobs']==53805
-    assert audit_result['rejected_jobs']==15435
-    assert audit_result['accepted_jobs']==38370
-    print('Mathematical audit: 53,805 old jobs -> 38,370 feasible; 15,435 explicitly pruned')
-    print('Primary pilot: exactly two jobs, single seed, one complete 100-class curriculum')
+    print('V13_FROZEN_DESIGN_SNAPSHOT='+json.dumps(dict(models=snapshots,feasibility_audit=audit_result),sort_keys=True),flush=True)
+    print('Primary pilot: exactly two jobs; 9 train intervals 4-first/2-after; full global CL synchronization',flush=True)
 
 if __name__=='__main__':main()

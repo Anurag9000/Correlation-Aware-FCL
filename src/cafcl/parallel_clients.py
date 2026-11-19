@@ -81,8 +81,11 @@ def _train_one(runtime, client, bank, cfg, device, round_id, event,
 def _prepare_events(cfg, client, cid, raw_events, current_stage):
     if cfg.stream_protocol:
         events = list(raw_events)
-        if len(events) > cfg.local_tasks_per_round:
-            raise AssertionError('Exceeded local task budget per server interval')
+        expected=(2 if current_stage==0 else 1)
+        if len(events)>expected:
+            raise AssertionError('Only two initial tasks or one subsequent task allowed')
+        if current_stage>0 and len(events)>1:
+            raise AssertionError('Only one post-sync task is permitted')
         if any(len(set(e['class_ids'])) < 2 for e in events):
             raise AssertionError('Singleton local task in strict stream')
     else:

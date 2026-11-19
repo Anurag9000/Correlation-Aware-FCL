@@ -1,7 +1,8 @@
 """CIFAR-100 communication-interval curriculum with canonical class-indexed tasks.
 
-Each client learns ``local_tasks_per_round`` sequential multi-class episodes BEFORE
-server selection. Each episode has ``classes_per_local_task`` distinct labels.
+The first communication interval has two two-class local experiences/client;
+every later interval has exactly ONE two-class experience/client before sync.
+This is the sole active class-pair curriculum for every server/client method.
 No task ID or task-specific classifier is created. This generator is deterministic,
 uses only original TRAIN images, and never intentionally duplicates raw images
 unless ``sample_overlap_fraction`` is nonzero.
@@ -20,12 +21,12 @@ OVERLAP_KINDS = ('none','intra_same_round','intra_cross_round',
 def make_task_schedule(num_classes, cfg):
     """Return ordered (round, client, task ordinal, class IDs, recurrence flag).
 
-    Default 10 clients × 2 tasks × 2 classes gives exactly the example
-    0,1 / 20,21 on client 0 in round 0, then 40,41 / 60,61 in round 1.
-    No-overlap never reuses a class and never creates a singleton task.
+    Client-first initial class allocation: client 0 sees (0,1) then
+    (2,3); client 1 sees (4,5) then (6,7), etc. Subsequent rounds assign
+    one two-class episode per client, under all methods and suites.
     """
-    if cfg.classes_per_local_task < 2 or cfg.local_tasks_per_round < 1:
-        raise ValueError('Every local task needs >=2 classes and positive task count')
+    if cfg.classes_per_local_task != 2 or cfg.local_tasks_per_round != 2:
+        raise ValueError('Only two initial two-class tasks and one subsequent two-class task are supported')
     rng = np.random.default_rng(cfg.seed + 73019)
     order = list(cfg.class_order_override) if cfg.class_order_override else list(range(num_classes))
     if len(order)!=num_classes or set(order)!=set(range(num_classes)):
@@ -38,7 +39,7 @@ def make_task_schedule(num_classes, cfg):
         raise ValueError('No-overlap stream cannot request label reuse')
     if cfg.sample_overlap_fraction and cfg.stream_overlap_kind=='none':
         raise ValueError('Raw sample overlap requires repeated class ownership')
-    K=cfg.num_clients; C=cfg.classes_per_local_task; T=cfg.local_tasks_per_round
+    K=cfg.num_clients; C=2; first_tasks=2
     current=0; rnd=0; history={cid:[] for cid in range(K)}
     schedule=[]; seen=set()
     # Reuse only *previously assigned* classes, including earlier tasks within
@@ -46,8 +47,10 @@ def make_task_schedule(num_classes, cfg):
     while current<len(order):
         made=0
         current_round={cid:[] for cid in range(K)}
-        for task in range(T):
-            for cid in range(K):
+        # First interval: four new labels/client. Later: just two/client.
+        # Client-first order keeps consecutive task pairs together.
+        for cid in range(K):
+            for task in range(first_tasks if rnd==0 else 1):
                 if current>=len(order):break
                 eligible=[]
                 kind=cfg.stream_overlap_kind
@@ -106,13 +109,13 @@ def make_task_schedule(num_classes, cfg):
     # These use fresh TRAIN examples from previously encountered labels, not
     # new labels and not repeated raw images (unless intentionally configured).
     for extra in range(cfg.stream_recurrence_rounds):
-        for task in range(T):
-            for cid in range(K):
+        for cid in range(K):
+            for task in range(1):
                 own=[v for _,group in history[cid] for v in group]
                 if not own:continue
                 unique=list(dict.fromkeys(own))
                 if len(unique)<C:continue
-                start=(extra*T+task)*C % len(unique)
+                start=(extra+task)*C % len(unique)
                 labels=tuple(unique[(start+j)%len(unique)] for j in range(C))
                 if len(set(labels))<2:continue
                 schedule.append((rnd,cid,task,labels,True))
@@ -193,18 +196,19 @@ def select_offline_cohort(cfg,round_id,total_rounds,standard_selected):
     This is a deliberate scheduling intervention superseding the selector.
     """
     if cfg.stream_offline_policy == 'rotate_once':
-        # Exactly one distinct client remains offline in each *training* interval.
-        # A final communication-only flush is required for the last excluded client.
+        # One client offline per training interval, cyclically covering every
+        # client. For five clients/100 classes the new protocol runs NINE
+        # training rounds; the old five-round exact-once rule is invalid.
         training_rounds=total_rounds-int(cfg.stream_terminal_flush)
-        if training_rounds!=cfg.num_clients:
-            raise ValueError('rotate_once requires one training interval per client')
+        if training_rounds<cfg.num_clients:
+            raise ValueError('rotate_once requires at least one outage per client')
         if cfg.stream_overlap_kind!='none' or cfg.stream_recurrence_rounds:
             raise ValueError('rotate_once pilot requires disjoint, nonrecurrent classes')
         if len(standard_selected)!=cfg.num_clients-1:
             raise ValueError('rotate_once requires exactly one offline client')
         if round_id>=training_rounds:return list(range(cfg.num_clients))
         order=np.random.default_rng(cfg.seed+771721).permutation(cfg.num_clients).tolist()
-        return [c for c in range(cfg.num_clients) if c!=order[round_id]]
+        return [c for c in range(cfg.num_clients) if c!=order[round_id % cfg.num_clients]]
     if not cfg.offline_duration_rounds:return standard_selected
     if cfg.selector!='random':
         raise ValueError('Controlled outage cohort currently requires random selector')

@@ -21,11 +21,13 @@ def test_probe_has_two_matched_100_label_jobs_and_exhaustive_rotation(backbone):
     assert full.evaluate_final_only and rotating.evaluate_final_only
     assert full.participation==1. and rotating.participation==.8
     plan=audited_plan((full,rotating))
-    assert plan['training_intervals']==5
+    assert plan['training_intervals']==9
+    assert plan['initial_local_tasks']==2 and plan['subsequent_local_tasks']==1
     assert plan['total_jobs']==2
-    assert sorted(x['offline_client'] for x in plan['offline_schedule'])==list(range(5))
+    assert set(x['offline_client'] for x in plan['offline_schedule'])==set(range(5))
+    assert len(plan['offline_schedule'])==9
     assert len(set(c for x in plan['offline_schedule'] for c in x['offline_classes']))==20
-    assert all(len(x['offline_classes'])==4 for x in plan['offline_schedule'])
+    assert [len(x['offline_classes']) for x in plan['offline_schedule']]==[4]+[2]*8
 
 
 def test_pilot_incompatible_rotation_rejected():
@@ -57,11 +59,12 @@ def test_report_requires_both_complete_and_all_classes(tmp_path):
         build_report(root,(full,partial))
 
 
-def test_mathematical_audit_discards_impossible_overlap_arms():
-    full=list(expand(seeds=(0,),families=('task_length',),include_invalid=True))
-    feasible=list(expand(seeds=(0,),families=('task_length',)))
-    assert len(feasible)<len(full)
-    assert any(c.stream_overlap_kind=='intra_same_round' and c.local_tasks_per_round==1
-               for _,c in full)
-    assert not any(c.stream_overlap_kind=='intra_same_round' and c.local_tasks_per_round==1
-                   for _,c in feasible)
+def test_retired_task_length_arms_cannot_enter_active_experiment_plan():
+    from cafcl.stream_audit import check_job
+    from cafcl.full_matrix import base
+    for classes,tasks in ((2,1),(2,3),(4,1),(4,2),(4,3)):
+        variant=replace(base(0),classes_per_local_task=classes,
+                        local_tasks_per_round=tasks)
+        assert check_job(variant)=='retired-variable-task-length-protocol'
+    assert all(c.classes_per_local_task==2 and c.local_tasks_per_round==2
+               for _,c in expand(seeds=(0,),families=('task_length',)))

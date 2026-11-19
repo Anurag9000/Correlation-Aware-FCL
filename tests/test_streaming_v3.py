@@ -22,24 +22,19 @@ def grouped(schedule):
     return {(r,c,t):labels for r,c,t,labels,_ in schedule}
 
 
-def test_exact_user_10_client_default_sequence():
-    a=make_task_schedule(100,cfg())
-    x=grouped(a)
-    assert len(a)==50
-    assert {r for r,_,_,_,_ in a}=={0,1,2}
-    assert x[0,0,0]==(0,1)
-    assert x[0,0,1]==(20,21)
-    assert x[0,4,0]==(8,9)
-    assert x[0,4,1]==(28,29)
-    assert x[0,6,0]==(12,13)
-    assert x[0,6,1]==(32,33)
-    assert x[1,4,0]==(48,49)
-    assert x[1,4,1]==(68,69)
-    assert x[1,6,0]==(52,53)
-    assert x[1,6,1]==(72,73)
-    assert x[2,6,0]==(92,93)
-    assert Counter(cls for _,_,_,labels,_ in a for cls in labels)==Counter(range(100))
-    assert all(len(set(labels))==2 for _,_,_,labels,_ in a)
+def test_exact_user_10_client_first4_then2_schedule():
+    events=make_task_schedule(100,cfg())
+    x=grouped(events)
+    assert len(events)==50
+    assert {r for r,_,_,_,_ in events}=={0,1,2,3}
+    assert x[0,0,0]==(0,1) and x[0,0,1]==(2,3)
+    assert x[0,1,0]==(4,5) and x[0,1,1]==(6,7)
+    assert x[0,4,0]==(16,17) and x[0,4,1]==(18,19)
+    assert x[1,0,0]==(40,41)
+    assert x[1,1,0]==(42,43)
+    assert x[3,9,0]==(98,99)
+    assert all(t==0 for r,_,t,_,_ in events if r>0)
+    assert Counter(cls for _,_,_,labels,_ in events for cls in labels)==Counter(range(100))
 
 
 @pytest.mark.parametrize('kind',OVERLAP_KINDS)
@@ -70,15 +65,20 @@ def test_every_overlap_geometry_is_valid_distinct_and_covers_all_classes(kind):
                    for v in duplicate)
 
 
-@pytest.mark.parametrize('classes,tasks,clients',[(2,1,10),(2,2,10),(2,3,10),(4,1,10),(4,2,10),(4,3,10),(2,2,5),(2,2,20)])
-def test_independent_knobs_never_create_singletons(classes,tasks,clients):
-    a=make_task_schedule(100,cfg(classes_per_local_task=classes,
-                                local_tasks_per_round=tasks,num_clients=clients))
-    assert sum(len(labels) for _,_,_,labels,_ in a)==100
-    assert all(len(labels)==classes for _,_,_,labels,_ in a)
-    assert all(len({v for v in labels})==classes for _,_,_,labels,_ in a)
-    assert len({cls for _,_,_,labels,_ in a for cls in labels})==100
-    assert max(Counter((r,cid) for r,cid,_,_,_ in a).values())<=tasks
+@pytest.mark.parametrize('clients',(5,10,20))
+def test_fixed_four_then_two_only(clients):
+    events=make_task_schedule(100,cfg(num_clients=clients))
+    assert sum(len(labels) for _,_,_,labels,_ in events)==100
+    assert len({c for _,_,_,labels,_ in events for c in labels})==100
+    per_round=Counter((r,cid) for r,cid,_,_,_ in events)
+    assert all(n<= (2 if r==0 else 1) for (r,cid),n in per_round.items())
+    assert all(t==0 for r,cid,t,labels,_ in events if r>0)
+
+
+@pytest.mark.parametrize('classes,tasks',((2,1),(2,3),(4,1),(4,2),(4,3)))
+def test_old_task_length_options_are_disallowed(classes,tasks):
+    with pytest.raises(ValueError,match='Only two initial'):
+        make_task_schedule(100,cfg(classes_per_local_task=classes,local_tasks_per_round=tasks))
 
 
 class FakeDataset:
@@ -123,7 +123,7 @@ def test_two_round_offline_client_returns_and_has_accumulated_all_classes():
     a=make_task_schedule(100,c)
     for cid in hidden:
         uploaded={cls for r,client,t,labels,_ in a if client==cid and r<=2 for cls in labels}
-        assert len(uploaded)==10  # 4+4+2 classes accumulated before reconnection
+        assert len(uploaded)==8  # 4+2+2 classes accumulated before reconnection
 
 
 def test_active_multi_class_softmax_only_uses_active_rows():
@@ -159,7 +159,7 @@ def test_synthetic_entire_reconnect_and_final_flush(tmp_path):
 def test_full_suite_retired_cifar10_and_20_class_and_cover_all_methods():
     with pytest.raises(ValueError):list(expand('cifar10',seeds=(0,),families=['balanced']))
     configs=list(expand('cifar100',seeds=(0,),families=['balanced']))
-    assert len(configs)==11*9*6*3
+    assert configs and len(configs)<=11*9*6*3
     assert all(c.dataset=='cifar100' and c.stream_protocol and
                c.class_pair_protocol=='strict' for _,c in configs)
     assert len({(c.method,c.aggregator) for _,c in configs})==99

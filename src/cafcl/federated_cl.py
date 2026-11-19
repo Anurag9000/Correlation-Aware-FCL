@@ -138,11 +138,11 @@ class FederatedCLState:
                         if not torch.isfinite(x).all():raise ValueError(f'Nonfinite {kind} state')
                         old=table[key].get(name)
                         table[key][name]=x.detach().cpu().clone() if old is None else old+x.detach().cpu()
-        if any(m=='lwf' for m in method_by_client.values()):
-            # Use the newly committed global model as a common teacher;
-            # stale client teacher weights cannot be meaningfully averaged.
-            self.teacher=_cpu_dict(teacher_model)
-            self.teacher_version=int(version)
+        # Publish the current committed global model as LwF teacher on
+        # EVERY synchronization, not only when a LwF client participated.
+        # The latest model is the cumulative teacher for all prior classes.
+        self.teacher=_cpu_dict(teacher_model)
+        self.teacher_version=int(version)
         self.uploaded_clients.update(int(c.client_id) for c in uploaded_clients)
         self.version=int(version)
 
@@ -173,37 +173,72 @@ class FederatedCLState:
         # algorithm decides whether to use replay, constraints, or regularizers.
         client.received_example_payloads={int(i):(x.clone(),int(y))
             for i,(x,y) in self.exemplar_payloads.items()}
-        if method in MEMORY_METHODS:
-            if method in {'gem','agem'}:
-                client.received_gradient_supports={
-                    int(c):tuple(map(int,ids)) for c,ids in self.memory.items()}
-            if method in {'der','derpp'}:
-                # Server logits are authoritative for already integrated IDs;
-                # preserve local-only logits if not yet acknowledged.
-                private_only={int(i):v.detach().cpu().clone()
-                    for i,v in client.memory_logits.items() if int(i) not in self.memory_logits}
-                client.memory_logits={**private_only,**{int(i):v.detach().cpu().clone()
-                                      for i,v in self.memory_logits.items()}}
-            for cls in client.received_memory:
-                client.first_seen_stage.setdefault(int(cls),int(self.version))
-                client.first_seen_local_experience.setdefault(int(cls),client.local_experience)
-                client.trained_classes.add(int(cls))
-                client.observed_classes.add(int(cls))
-        elif method in REGULARIZERS:
-            stats=self.importance.get(method,{})
+        # ALL selected clients now install the entire available CL history.
+        # Applying it remains method-specific in local_train: replay, GEM,
+        # Fisher, SI, MAS and LwF continue to use their own original updates.
+        # Passive snapshots alone are insufficient when methods change or
+        # mixed-method clients arrive later; keep full active copies as well.
+        private_only={int(i):v.detach().cpu().clone()
+            for i,v in client.memory_logits.items() if int(i) not in self.memory_logits}
+        client.memory_logits={**private_only,**{int(i):v.detach().cpu().clone()
+                              for i,v in self.memory_logits.items()}}
+        for cls in self.integrated_classes:
+            client.first_seen_stage.setdefault(int(cls),int(self.version))
+            client.first_seen_local_experience.setdefault(int(cls),client.local_experience)
+        for kind in REGULARIZERS:
+            stats=self.importance.get(kind,{})
             precision=stats.get('precision',{})
             numerator=stats.get('weighted_anchor',{})
-            if precision:
-                anchor={name:torch.where(p>0,numerator[name]/p.clamp_min(1e-30),
-                    client.shared_weights[name].detach().cpu()) for name,p in precision.items()}
-                importance={name:p.detach().cpu().clone() for name,p in precision.items()}
-                if method=='ewc':client.ewc_fisher,client.ewc_anchor=importance,anchor
-                elif method=='si':client.si_omega,client.si_anchor=importance,anchor
-                else:client.mas_omega,client.mas_anchor=importance,anchor
-        elif method=='lwf' and self.teacher:
+            if not precision:continue
+            anchors={name:torch.where(p>0,numerator[name]/p.clamp_min(1e-30),
+                client.shared_weights[name].detach().cpu()) for name,p in precision.items()}
+            importance={name:p.detach().cpu().clone() for name,p in precision.items()}
+            if kind=='ewc':client.ewc_fisher,client.ewc_anchor=importance,anchors
+            elif kind=='si':client.si_omega,client.si_anchor=importance,anchors
+            else:client.mas_omega,client.mas_anchor=importance,anchors
+        if self.teacher is not None:
             client.lwf_teacher=_cpu_dict(self.teacher)
             client.lwf_teacher_from_server=True
         client.federated_cl_version=self.version
+
+    def assert_complete_download(self,client):
+        """Validate ALL CL artifacts after every selected-client server sync.
+
+        Check the acknowledged global CL-state ledger, not only the currently
+        enabled method. Offline clients must never be called here.
+        """
+        if client.federated_cl_version != self.version:
+            raise RuntimeError('Client CL-state version differs from committed server')
+        if set(client.received_memory)!=set(self.memory):
+            raise RuntimeError('Client missing globally integrated replay classes')
+        for cls,indices in self.memory.items():
+            if set(indices)!=set(client.received_memory[cls]):
+                raise RuntimeError(f'Client missing server replay evidence for class {cls}')
+        if set(client.received_example_payloads)!=set(self.exemplar_payloads):
+            raise RuntimeError('Client missing raw exemplar payloads')
+        if set(client.received_memory_logits)!=set(self.memory_logits):
+            raise RuntimeError('Client missing historical DER trajectory logits')
+        if set(client.received_gradient_supports)!=set(self.memory):
+            raise RuntimeError('Client missing GEM/A-GEM historical gradient supports')
+        if set(client.received_importance)!=set(self.importance):
+            raise RuntimeError('Client missing some EWC/SI/MAS importance methods')
+        for kind,table in self.importance.items():
+            for key in ('precision','weighted_anchor'):
+                remote=client.received_importance[kind][key]
+                if set(remote)!=set(table[key]):
+                    raise RuntimeError(f'Client missing {kind} {key} coordinates')
+                for name,x in table[key].items():
+                    if not torch.equal(remote[name],x):
+                        raise RuntimeError(f'Client {kind} importance disagrees with server')
+        if client.received_lwf_teacher_version!=self.teacher_version:
+            raise RuntimeError('Client has stale global LwF teacher')
+        if self.teacher is not None:
+            if client.lwf_teacher is None or set(client.lwf_teacher)!=set(self.teacher):
+                raise RuntimeError('Client missing complete global teacher')
+        if client.received_server_class_sample_exposure!=self.class_sample_exposure:
+            raise RuntimeError('Client historical class exposure table is incomplete')
+        if not set(self.integrated_classes).issubset(client.observed_classes):
+            raise RuntimeError('Client did not inherit all globally integrated class labels')
 
     def statistics(self):
         return {'version':self.version,
