@@ -17,16 +17,16 @@ from .simulator import run_experiment,atomic_json
 from .selection import participation_budget
 
 
-def make_jobs(*,backbone='vit',seed=0,lr=.003,epochs=10,memory_per_class=20,replay_fraction=.10,batch_size=1024,micro_batch_size=4):
+def make_jobs(*,backbone='vit',seed=0,lr=.03,epochs=10,memory_per_class=20,replay_fraction=1/9,batch_size=64,micro_batch_size=8):
     pct_tag=f'{100*replay_fraction:g}'.replace('.','p')
     cfg=replace(base(seed=seed,model=backbone),num_clients=5,batch_size=batch_size,micro_batch_size=micro_batch_size,classwise_head_merge=False,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
         aggregator='fedavg',scenario='disjoint',stream_overlap_kind='none',
         stream_overlap_fraction=0.,classes_per_local_task=2,local_tasks_per_round=2,
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
         stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=memory_per_class,
-        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V13_FIRST4_THEN2_'+resolve_backbone(backbone))
+        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V14_CALIBRATED_'+resolve_backbone(backbone))
     partial=replace(cfg,participation=.8,stream_offline_policy='rotate_once',
-                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V13_FIRST4_THEN2_'+resolve_backbone(backbone))
+                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V14_CALIBRATED_'+resolve_backbone(backbone))
     for job in (cfg,partial):job.validate()
     return cfg,partial
 
@@ -53,7 +53,7 @@ def audited_plan(jobs):
             offline_classes=sorted({c for rr,cid,_,labels,_ in stream if rr==r and cid==offline[r] for c in labels}),
             online_clients=[c for c in range(5) if c!=offline[r]]))
         assert len(by_round[-1]['offline_classes'])==(4 if r==0 else 2)
-    return dict(dataset='cifar100',seed=baseline.seed,backbone=baseline.model,batch_size=baseline.batch_size,
+    return dict(dataset='cifar100',seed=baseline.seed,backbone=baseline.model,batch_size=baseline.batch_size,sgd_momentum=baseline.momentum,sgd_weight_decay=baseline.weight_decay,
         micro_batch_size=baseline.micro_batch_size,
         client_execution_mode='parallel_task_barriers',
         client_models_per_run=baseline.num_clients,
@@ -101,7 +101,9 @@ def build_report(root,jobs):
     markdown=['# CIFAR-100 preliminary probe: full participation versus rotating one-client outage','',
         'Two matched Replay/FedAvg runs, five clients, first round two binary tasks/client,',
         'then one binary task/client per round for eight more rounds (nine total),',
-        'one terminal communication-only flush, seed controlled, original 100-class test split.', '',
+        'one terminal communication-only flush, seed controlled, original 100-class test split.',
+        'Per-sync held-out scores are REPORTING ONLY: never used by client selection/training.',
+        'Per-sync CSV, PNG, JSON and MD tables: runs/<job_id>/per_sync_accuracy/sync_###.*', '',
         f"- Full accuracy: {overall['full_accuracy']:.6f}",
         f"- Rotating-offline accuracy: {overall['rotating_offline_accuracy']:.6f}",
         f"- Difference (offline minus full): {overall['delta']:+.6f}",
@@ -116,14 +118,14 @@ def main(argv=None):
     p=argparse.ArgumentParser(description='Two simultaneous 5-client task-barrier simulations sharing ONE GPU')
     p.add_argument('--backbone',choices=('vit','cnn'),default='vit')
     p.add_argument('--seed',type=int,default=0)
-    p.add_argument('--lr',type=float,default=.003)
+    p.add_argument('--lr',type=float,default=.03)
     p.add_argument('--epochs',type=int,default=10)
-    p.add_argument('--batch-size',type=int,default=1024,
-                   help='Effective logical SGD batch size shared by both jobs (default: 1024)')
+    p.add_argument('--batch-size',type=int,default=64,
+                   help='Effective logical SGD batch size shared by both jobs (default: 64; 1024 allowed as ablation)')
     p.add_argument('--memory-per-class',type=int,default=20)
-    p.add_argument('--micro-batch-size',type=int,default=4,
-                   help='Physical GPU microbatch; logical optimizer batch remains 1024')
-    p.add_argument('--replay-fraction',type=float,default=.10,help='Per-class fraction of available TRAIN examples retained by Algorithm R')
+    p.add_argument('--micro-batch-size',type=int,default=8,
+                   help='Physical GPU microbatch; logical optimizer batch remains --batch-size')
+    p.add_argument('--replay-fraction',type=float,default=1/9,help='Per-class fraction of available TRAIN examples retained by Algorithm R')
     p.add_argument('--data-root',default='data')
     p.add_argument('--output-dir',default='results')
     p.add_argument('--gpu',type=int,default=0,
@@ -139,7 +141,7 @@ def main(argv=None):
                    memory_per_class=args.memory_per_class,replay_fraction=args.replay_fraction,
                    micro_batch_size=args.micro_batch_size)
     design=audited_plan(jobs)
-    root=Path(args.output_dir)/('primary_cifar100_first4_then2_v13_'+args.backbone+
+    root=Path(args.output_dir)/('primary_cifar100_calibrated_v14_'+args.backbone+
         ('' if abs(args.replay_fraction-.1)<1e-12 else '_pct'+f'{100*args.replay_fraction:g}'.replace('.','p'))+
         f'_bs{args.batch_size}_seed{args.seed}')
     root.mkdir(parents=True,exist_ok=True)

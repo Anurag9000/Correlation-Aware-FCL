@@ -34,7 +34,7 @@ def base(seed=0,model=None):
         stream_overlap_kind='none',stream_overlap_fraction=0,
         num_clients=10,participation=.8,selector='random',seed=seed,
         micro_batch_size=16,
-        stages=1,rounds_per_stage=1,batch_size=1024,
+        stages=1,rounds_per_stage=1,batch_size=64,
         model=resolve_backbone(model or 'vit'))
 
 
@@ -149,7 +149,7 @@ def manifest(seeds=SEEDS,families=None,model='vit'):
     for family,cfg in expand(seeds=seeds,families=families,model=model):
         counts[family]+=1;pairs.add((cfg.method,cfg.aggregator))
         digest.update((cfg.job_id+':'+fingerprint(cfg)+'\n').encode())
-    return dict(dataset='cifar100',batch_size=1024,backbone=resolve_backbone(model),job_count=sum(counts.values()),
+    return dict(dataset='cifar100',batch_size=64,backbone=resolve_backbone(model),job_count=sum(counts.values()),
                 families=dict(sorted(counts.items())),method_aggregator_pairs=len(pairs),
                 sha256=digest.hexdigest(),seeds=list(seeds),
                 warning='These are planned runs, not trained CIFAR-100 results.')
@@ -177,7 +177,7 @@ def main(argv=None):
     if len(seeds)!=len(set(seeds)):p.error('Seed values must be distinct')
     families=['balanced'] if args.suite=='balanced' else args.families
     plan=manifest(seeds=seeds,families=families,model=args.backbone)
-    root=Path(args.output_dir)/('cifar100_native32_v13_first4_then2_'+args.backbone);root.mkdir(parents=True,exist_ok=True)
+    root=Path(args.output_dir)/('cifar100_native32_v14_calibrated_'+args.backbone);root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'stream_manifest.json',plan)
     print(json.dumps(plan,indent=2),flush=True)
     if args.export_plan:

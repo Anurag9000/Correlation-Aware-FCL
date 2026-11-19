@@ -11,9 +11,11 @@ from cafcl.stream_audit import check_stream
 def test_probe_has_two_matched_100_label_jobs_and_exhaustive_rotation(backbone):
     full,rotating=make_jobs(backbone=backbone)
     assert full.model==rotating.model==({'vit':VIT_ID,'cnn':CNN_ID}[backbone])
-    assert full.batch_size==rotating.batch_size==1024
-    assert full.micro_batch_size==rotating.micro_batch_size==4
+    assert full.batch_size==rotating.batch_size==64
+    assert full.micro_batch_size==rotating.micro_batch_size==8
     assert full.method==rotating.method=='replay'
+    assert full.momentum==rotating.momentum==0.9
+    assert full.weight_decay==rotating.weight_decay==0.0005
     assert full.replay_buffer_capacity==rotating.replay_buffer_capacity==1000
     assert full.share_continual_state and rotating.share_continual_state
     assert full.aggregator==rotating.aggregator=='fedavg'

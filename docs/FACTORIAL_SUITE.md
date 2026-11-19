@@ -1,3 +1,5 @@
+> **ACTIVE v14:** The full 11-method × 9-server-algorithm suite now defaults to effective batch 64 and momentum SGD 0.9/weight decay 5e-4, standard ViT-Base/16 (or CIFAR ResNet-18), first-four-then-two task cadence, and a separate global accuracy table after every server sync. Historical geometry and file paths below are retained for comparison. [Current v14 protocol](V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md).
+
 # CIFAR-100 v6 factorial ledger — feasibility-filtered, native 32×32 backbones
 
 ## Source and version

@@ -22,7 +22,7 @@ def test_only_cifar100_stream_registry_active():
     assert plan['method_aggregator_pairs']==99
     assert plan['job_count']==11*9*6*3
     jobs=list(expand(seeds=(0,),families=('balanced',)))
-    assert all(c.dataset=='cifar100' and c.batch_size==1024 and c.stream_protocol for _,c in jobs)
+    assert all(c.dataset=='cifar100' and c.batch_size==64 and c.stream_protocol for _,c in jobs)
 
 
 def test_synthetic_data_complete_unique_allocations():

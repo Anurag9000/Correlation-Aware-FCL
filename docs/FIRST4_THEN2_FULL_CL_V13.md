@@ -1,3 +1,5 @@
+> **v14 supersedes ONLY local learning/optimizer/backbone/reporting specifics below.** The first-4-then-2 communication schedule and cumulative server/client CL-state synchronization remain exactly intact. Old text describing a frozen *old-class* head and ViT-Tiny is historical; current v14 updates all **known** head rows and only freezes genuinely unseen future rows. Standard ViT-Base/16 is the active ViT model; momentum SGD and per-sync global accuracy reports are enabled. See [v14 specification](V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md).
+
 # v13 — The only active CIFAR-100 local CL/synchronization curriculum
 
 ## Single immutable training rule throughout all active CIFAR-100 jobs

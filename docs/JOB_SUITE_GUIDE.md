@@ -1,3 +1,5 @@
+> **Current v14 execution defaults:** [new protocol](V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md). ViT now refers to **ViT-Base/16**, not Tiny. Per-sync tables after every communication for every run, momentum SGD .9 with decay .0005, batch64 by default, and calibrated class-IL head training. Other old commands below are archival examples and may launch obsolete configurations.
+
 # Experiment ledger and recommended execution order
 
 **Run the two-job preliminary pilot first.** Do not launch the 38,370-job factorial suite to answer the initial research-direction question.

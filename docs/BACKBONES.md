@@ -1,3 +1,16 @@
+# CURRENT v14: Production 32×32 CIFAR-100 backbones
+
+| CLI | Actual current model ID | Exact implementation | Default optimizer |
+|---|---|---|---|
+| `--backbone vit` | `vit_base_patch16_32` | Native standard **ViT-Base/16**, 12 layers × 768 channels × 12 heads, four 16×16 patches + CLS | SGD momentum 0.9, weight decay 5e-4 |
+| `--backbone cnn` | `resnet18_cifar32` | Native CIFAR-stem **ResNet-18**, [2,2,2,2] BasicBlocks, 3×3 stem/no maxpool | Same SGD |
+
+Both are randomly initialized and trained at native 32×32. Default effective batch64 (1024 is an explicit ablation). Both primary pilot arms share one GPU and have independently concurrent client models. ViT-Base is much larger than previous Tiny; a single GPU may not have sufficient VRAM for ten client instances. See [v14 scientific protocol](V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md).
+
+---
+
+## Historical pre-v14 backbone documentation (not the active suite)
+
 # Native 32×32 CIFAR-100 backbone registry (v6)
 
 ## Exactly two production choices

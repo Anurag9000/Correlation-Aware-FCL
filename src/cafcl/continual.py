@@ -322,6 +322,13 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         active_pair_classes=tuple(sorted(set(int(c) for c in active_pair_classes)))
         if len(active_pair_classes)<2:
             raise ValueError('Local task requires at least two distinct labels')
+    # Class-incremental local objective: new images must compete with every
+    # class already known to this client, including freshly synchronized
+    # server classes. Future classes alone remain inactive/frozen.
+    seen_classes=tuple(sorted(set(client.observed_classes) |
+                              set(active_pair_classes or ())))
+    if active_pair_classes is not None and not set(active_pair_classes).issubset(seen_classes):
+        raise RuntimeError('Active class pair was lost from client CL history')
     indices=list(dict.fromkeys(client.current_indices))
     if not indices:
         return None
@@ -339,7 +346,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         # synchronized image archive, not the simulator's privileged data bank.
         from .federated_cl import ClientArchiveDataset
         training_data=ClientArchiveDataset(training_data,client.received_example_payloads)
-    optimizer=torch.optim.SGD(model.parameters(),lr=cfg.lr,momentum=cfg.momentum)
+    optimizer=torch.optim.SGD(model.parameters(),lr=cfg.lr,momentum=cfg.momentum,
+                              weight_decay=cfg.weight_decay)
     if cfg.optimizer_state_policy=='persist' and client.optimizer_state is not None:
         optimizer.load_state_dict(client.optimizer_state)
     params=_trainable_params(model)
@@ -452,7 +460,12 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     for idx,z in zip(original_ids.tolist(),logits.detach().cpu()):
                         captured_logits[int(idx)]=z.clone()
                 if active_pair_classes is not None:
-                    loss=canonical_active_loss(logits,y,active_pair_classes)
+                    # ER-ACE is intentionally asymmetric in its source paper:
+                    # mask historical logits for *new* examples only, unlike
+                    # standard ER, EWC, SI, MAS, GEM, LwF and DER.
+                    current_competition=(active_pair_classes if cfg.method=='er_ace'
+                                         else seen_classes)
+                    loss=canonical_active_loss(logits,y,current_competition)
                 elif cfg.learning_setting=='task_il':
                     if task_classes is None or not set(y.tolist()).issubset(set(task_classes)):
                         raise RuntimeError('Task-IL labels do not match the known local task')
@@ -487,7 +500,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     chosen=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
                     rx,ry=next(iter(_example_loader(training_data,chosen,ref_count,
                         cfg.seed+round_id+client.client_id,shuffle=False)))
-                    loss=loss+F.cross_entropy(model(rx.to(device)),ry.to(device))
+                    loss=loss+canonical_active_loss(
+                        model(rx.to(device)),ry.to(device),seen_classes)
                 if cfg.method in {'er_ace','der','derpp'} and oldmemory:
                     ref_count=min(len(oldmemory),cfg.micro_batch_size,max(1,int(round(len(y)*cfg.replay_ratio))))
                     chosen=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
@@ -496,7 +510,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     rx,ry=rx.to(device,non_blocking=True),ry.to(device,non_blocking=True)
                     replay_logits=model(rx)
                     if cfg.method=='er_ace':
-                        loss=loss+cfg.der_beta*F.cross_entropy(replay_logits,ry)
+                        loss=loss+cfg.der_beta*canonical_active_loss(replay_logits,ry,seen_classes)
                     else:
                         missing=[int(i) for i in chosen if int(i) not in client.memory_logits]
                         if missing:
@@ -513,8 +527,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                             cls_idx=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
                             bx,by=next(iter(_example_loader(training_data,cls_idx,ref_count,
                                 cfg.seed+round_id+client.client_id+913,shuffle=False)))
-                            loss=loss+cfg.der_beta*F.cross_entropy(
-                                model(bx.to(device)),by.to(device))
+                            loss=loss+cfg.der_beta*canonical_active_loss(
+                                model(bx.to(device)),by.to(device),seen_classes)
                 if cfg.method=='lwf' and teacher is not None:
                     with torch.no_grad():t_logits=teacher(x)
                     old_labels=sorted(c for c,s in client.first_seen_local_experience.items()
@@ -553,12 +567,12 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                 (loss*(len(y)/logical_size)).backward()
             if cfg.method in {'gem','agem'} and oldmemory:
                 if active_pair_classes is not None:
-                    freeze_other_class_rows(model,active_pair_classes)
+                    freeze_other_class_rows(model,seen_classes)
                 g=_flatten_grads(params)
                 if cfg.method=='agem':
                     refidx=rng.choice(oldmemory,size=min(cfg.batch_size,len(oldmemory)),replace=False).tolist()
                     ref=_reference_gradient(model,params,training_data,refidx,cfg.batch_size,device,
-                                            cfg.seed+round_id+client.client_id,active_pair_classes)
+                                            cfg.seed+round_id+client.client_id,seen_classes)
                     z,last_projection,v=agem_project(g,ref)
                 else:
                     refs=[]
@@ -589,18 +603,18 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                             if historical_classes is not None and len(historical_classes)<2:
                                 historical_classes=None  # sparse class-imbalanced memory
                             refs.append(_reference_gradient(model,params,training_data,mem,
-                                                            cfg.batch_size,device,cfg.seed+(group if isinstance(group,int) else (group[0]*100003+group[1])),active_pair_classes,
+                                                            cfg.batch_size,device,cfg.seed+(group if isinstance(group,int) else (group[0]*100003+group[1])),seen_classes,
                                                             historical_classes))
                     z,last_projection,v=gem_project(g,refs)
                     qp_calls+=int(v>0)
                 num_violations+=v
                 _set_grads(params,z)
             if active_pair_classes is not None:
-                freeze_other_class_rows(model,active_pair_classes)
+                freeze_other_class_rows(model,seen_classes)
             frozen=None
             if active_pair_classes is not None:
                 from .class_indexed import snapshot_frozen_rows,restore_frozen_rows
-                frozen=snapshot_frozen_rows(model,active_pair_classes)
+                frozen=snapshot_frozen_rows(model,seen_classes)
             if cfg.method=='si':
                 before={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
                 # SI uses the unregularized data-loss path integral.
@@ -654,7 +668,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         fresh=estimate_diagonal_importance(model,training_data,indices,device,
             kind=cfg.method,max_samples=cfg.importance_samples_per_experience,
             seed=cfg.seed+round_id*100003+client.client_id*127+client.local_experience,
-            active_classes=active_pair_classes)
+            active_classes=(seen_classes if active_pair_classes is not None else None))
         fresh_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
         from .federated_cl import add_importance,weighted_importance
         add_importance(client,cfg.method,fresh,fresh_anchor)
@@ -700,4 +714,6 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
             'method_used':cfg.method,'fedprox_mu':cfg.fedprox_mu,
             'local_old_loss_before':old_loss_before,
             'local_old_loss_after':old_loss_after,
-            'optimizer_state_policy':cfg.optimizer_state_policy}
+            'optimizer_state_policy':cfg.optimizer_state_policy,
+            'sgd_momentum':cfg.momentum,'sgd_weight_decay':cfg.weight_decay,
+            'classification_competitor_classes':list(seen_classes)}

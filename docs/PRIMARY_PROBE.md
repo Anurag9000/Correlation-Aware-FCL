@@ -1,3 +1,5 @@
+> **ACTIVE v14 DUAL-SUITE PROTOCOL:** [full v14 specification](V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md). Historical v10–v13 five-round statements below are **not** the current execution. Current pilot: **9 training intervals** (4 classes/client first, 2/client subsequently), **1 final flush**, five concurrent clients in each of two independent GPU-0 processes, random ViT-Base/16 or CIFAR-stem ResNet-18, SGD momentum .9 weight decay .0005, batch64, microbatch8, lr .03, 10 epochs/task, exactly 50 private replay examples/class. Produces `per_sync_accuracy/sync_001.png` through `sync_010.png` for each run, with CSV/Markdown/JSON alongside. Original class-ID stream and canonical whole-model FedAvg are preserved.
+
 # Primary investigation: two matched CIFAR-100 jobs, 5 clients, 5 rounds
 
 **Goal:** Determine whether periodically withholding one continuously learning client changes final global 100-class accuracy, without conflating the result with never training that client's classes.

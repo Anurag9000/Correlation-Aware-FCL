@@ -1,5 +1,10 @@
 # Correlation-Aware Federated Continual Learning — CIFAR-100, native 32×32 (v6)
 
+> **CURRENT v14 protocol:** [Seen-class optimization and per-sync reporting](docs/V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md). The archival sections below describe historical v10–v13 experiments and must not be used as the current launch specification.
+
+**Current active default:** random **ViT-Base/16**, or CIFAR-stem ResNet-18, 32×32; **SGD momentum 0.9, weight decay 0.0005**, effective batch 64, pilot lr 0.03/10 epochs, 50 TRAIN replay images per class. Two concurrent baseline and rotating-offline runs on GPU 0. Each client gets 4 classes initially as two successive tasks; then one two-class task per further synchronization: **9 training syncs + 1 final flush**. Every single run generates `per_sync_accuracy/sync_001..010.{png,md,csv,json}` with server-global class-retention tables, classifier bias and BatchNorm mismatch diagnostics. FedAvg continues canonical full-model weighted averaging. Previous v10 final results (4.62%/5.64%) are historical and cannot be treated as v14 outcomes.
+
+
 **Primary goal: run exactly TWO initial investigation jobs**, not the ~50K-job factorial sweep. This project simulates independent continuous client learning under partial server participation. Every client sees consecutive supervised tasks, continues training even when disconnected, and eventually uploads accumulated parameter changes since its last synchronization. Every connected client receives the newly aggregated server model after the upload; the disconnected clients receive nothing. Private A-GEM/GEM/replay/EWC/SI/DER/etc. memories persist through normal sync.
 
 ## Selected architectures — identical native 32×32 image data

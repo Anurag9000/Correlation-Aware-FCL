@@ -1,0 +1,164 @@
+"""Immutable, post-sync, server-model class-retention diagnostics.
+
+Each communication produces a complete seen-class table. The test split is
+read only for reporting and NEVER used by client selection, training, growth,
+hyperparameters, or control decisions. Validation drives any online feedback.
+Per-stage outputs are independent of the terminal-only official test score.
+"""
+from __future__ import annotations
+
+import csv
+import json
+from collections import Counter
+from pathlib import Path
+
+def _entries(arrivals, current_round, per_class, num_clients):
+    introduced={}
+    for a in arrivals:
+        rd=int(a.round_id)
+        if rd>current_round:continue
+        cid=int(a.client_id)
+        for cls in a.labels:
+            introduced.setdefault((cid,rd),set()).add(int(cls))
+    entries=[]
+    for cid in range(num_clients):
+        for rd in range(current_round+1):
+            classes=sorted(int(c) for c in introduced.get((cid,rd),()) if int(c) in per_class)
+            if not classes:continue
+            entries.append(dict(client_id=cid,first_round=rd+1,
+                classes=classes,mean_accuracy=sum(float(per_class[c]) for c in classes)/len(classes),
+                per_class={c:float(per_class[c]) for c in classes}))
+    return entries
+
+
+def render_sync_report(run_dir, *, round_number, model_version, num_clients,
+                       arrivals, test_metrics, validation_metrics=None,
+                       selected_clients=(), terminal_flush=False, backbone='',
+                       optimizer=None,classifier_bias=None,
+                       integrated_classes=None,integrated_metrics=None):
+    """Save a new PNG, Markdown, CSV and JSON after EVERY server synchronization."""
+    root=Path(run_dir)/'per_sync_accuracy'
+    root.mkdir(parents=True,exist_ok=True)
+    stem=f'sync_{int(round_number):03d}'
+    per_class={int(k):float(v) for k,v in test_metrics['per_class'].items()}
+    entries=_entries(arrivals,int(round_number)-1,per_class,int(num_clients))
+    integrated=set(map(int,integrated_classes if integrated_classes is not None else per_class))
+    for entry in entries:
+        entry['pending_not_accepted_classes']=[int(c) for c in entry['classes'] if int(c) not in integrated]
+    cells={(r['client_id'],r['first_round']):r for r in entries}
+    confusion=test_metrics['confusion_matrix']['counts']
+    n_classes=len(confusion)
+    predicted=[sum(int(row[c]) for row in confusion) for c in range(n_classes)]
+    zero_labels=[int(c) for c,n in enumerate(predicted) if n==0]
+    seen=sorted(per_class)
+    accuracy=float(test_metrics['accuracy'] or 0.0)
+    bias_summary={}
+    if classifier_bias is not None:
+        biases=classifier_bias.detach().cpu().flatten().tolist()
+        if len(biases)>=n_classes:
+            new_ids=sorted({c for e in entries if e['first_round']==int(round_number)
+                            for c in e['classes']})
+            old_ids=sorted(set(seen)-set(new_ids))
+            bias_summary={'bias_by_class':{int(c):float(biases[c]) for c in seen},
+                          'new_classes':new_ids,'old_classes':old_ids,
+                          'mean_new_bias':(sum(biases[c] for c in new_ids)/len(new_ids)
+                                           if new_ids else None),
+                          'mean_old_bias':(sum(biases[c] for c in old_ids)/len(old_ids)
+                                           if old_ids else None)}
+            if new_ids and old_ids:
+                bias_summary['new_minus_old_mean_bias']=(
+                    bias_summary['mean_new_bias']-bias_summary['mean_old_bias'])
+    metadata=dict(round=int(round_number),version=int(model_version),
+        terminal_communication_only_flush=bool(terminal_flush),
+        test_accuracy=accuracy,validation_accuracy=(
+            None if validation_metrics is None else validation_metrics['accuracy']),
+        observed_classes=seen,observed_class_count=len(seen),
+        server_integrated_classes=sorted(integrated),
+        server_integrated_class_count=len(integrated),
+        pending_unintegrated_classes=sorted(set(seen)-integrated),
+        integrated_only_test_accuracy=(integrated_metrics['accuracy'] if integrated_metrics else None),
+        selected_clients=list(map(int,selected_clients)),zero_prediction_classes=zero_labels,
+        predicted_class_counts={int(c):int(v) for c,v in enumerate(predicted) if v},
+        backbone=backbone,optimizer=optimizer or {},classifier_bias_diagnostics=bias_summary,
+        per_class_true_logit_margin=test_metrics.get('per_class_true_logit_margin',{}),
+        test_only_no_feedback=True,entries=entries)
+    (root/(stem+'.json')).write_text(json.dumps(metadata,indent=2)+'\n')
+    with (root/(stem+'.csv')).open('w',newline='') as handle:
+        writer=csv.DictWriter(handle,fieldnames=[
+            'server_sync','client_id','introduced_sync','class_id','test_correct',
+            'test_total','test_accuracy','seen_class_global_accuracy'])
+        writer.writeheader()
+        for entry in entries:
+            for cls in entry['classes']:
+                totals=sum(int(x) for x in confusion[cls])
+                writer.writerow(dict(server_sync=int(round_number),
+                    client_id=entry['client_id'],introduced_sync=entry['first_round'],
+                    class_id=cls,test_correct=int(confusion[cls][cls]),
+                    test_total=totals,test_accuracy=f'{per_class[cls]:.6f}',
+                    seen_class_global_accuracy=f'{accuracy:.6f}'))
+    latest=max([e['first_round'] for e in entries],default=0)
+    md=[f'# Server sync {round_number} — global model v{model_version}',
+        '',f'Backbone: {backbone}; held-out CIFAR-100 TEST diagnostic only.',
+        f'Seen-class global accuracy: {accuracy:.2%} on {len(seen)} observed labels.',
+        f'Validation accuracy: {metadata["validation_accuracy"]}; seen labels never predicted: {len(zero_labels)}.',
+        f'Server-accepted classes: {len(integrated)}; pending private classes: {len(set(seen)-integrated)}.',
+        f'Accepted-only TEST accuracy: {metadata["integrated_only_test_accuracy"]}.',
+        f'Terminal flush: {bool(terminal_flush)}. Selected clients: {list(selected_clients)}.',
+        '**Test diagnostics MUST NOT control training, optimizer choice, selection, or tuning.**',
+        '', '| Client | '+' | '.join(f'U{i}' for i in range(1,latest+1))+' |',
+        '|:--|'+'|'.join(':--:' for _ in range(latest))+'|']
+    for cid in range(num_clients):
+        row=[]
+        for rd in range(1,latest+1):
+            e=cells.get((cid,rd))
+            if not e:
+                row.append('—')
+                continue
+            suffix=' [PENDING upload]' if e['pending_not_accepted_classes'] else ''
+            row.append(f'**{e["mean_accuracy"]:.1%}** ('+', '.join(
+                f'{c}: {e["per_class"][c]:.0%}' for c in e['classes'])+')'+suffix)
+        md.append(f'| Client {cid} | '+' | '.join(row)+' |')
+    (root/(stem+'.md')).write_text('\n'.join(md)+'\n')
+
+    # PNG is a presentation of the exact same immutable JSON/CSV data.
+    # Matplotlib uses a noninteractive backend and never touches model state.
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    cols=latest+1
+    height=max(2.8,1.5+0.82*num_clients)
+    width=max(9,2.3*cols)
+    fig=Figure(figsize=(width,height),dpi=130,facecolor='#f6f8fc')
+    FigureCanvasAgg(fig)
+    ax=fig.add_axes((.02,.02,.96,.80));ax.axis('off')
+    data=[]
+    for cid in range(num_clients):
+        row=[f'Client {cid}']
+        for rd in range(1,latest+1):
+            e=cells.get((cid,rd))
+            if e:
+                row.append(f'{e["mean_accuracy"]:.1%}\n'+
+                           '  '.join(f'{c}: {e["per_class"][c]:.0%}' for c in e['classes'])+
+                           ('\nPENDING upload' if e['pending_not_accepted_classes'] else ''))
+            else:row.append('—')
+        data.append(row)
+    headers=['CLIENT']+[f'U{n}' for n in range(1,latest+1)]
+    table=ax.table(cellText=data,colLabels=headers,cellLoc='center',colLoc='center',
+                   loc='center',bbox=[0,0,1,1])
+    table.auto_set_font_size(False)
+    table.set_fontsize(8.5 if cols<9 else 7)
+    for (ri,ci),cell in table.get_celld().items():
+        cell.set_edgecolor('#b7c7dc');cell.set_linewidth(.55)
+        cell.set_facecolor('#e3ebf7' if ri==0 else
+                           ('#f5f7fb' if ri%2==0 else '#ffffff'))
+        if ri==0 or ci==0:cell.get_text().set_fontweight('bold')
+    fig.text(.028,.95,f'Server sync {round_number} · {len(seen)} seen classes · {backbone}',
+             fontsize=15,fontweight='bold',color='#152846')
+    fig.text(.028,.885,
+             f'Global seen-class TEST accuracy {accuracy:.2%}  |  '
+             f'Never-predicted output classes {len(zero_labels)}  |  '
+             f'Online clients {list(selected_clients)}',
+             fontsize=9,color='#374862')
+    fig.savefig(root/(stem+'.png'),dpi=130,facecolor=fig.get_facecolor())
+    return {'stem':stem,'relative_dir':'per_sync_accuracy',
+            'test_accuracy':accuracy,'seen_class_count':len(seen),
+            'never_predicted_classes':len(zero_labels)}

@@ -1,3 +1,7 @@
+> **CURRENT v14 source-of-truth:** [V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md](V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md). The remaining v6–v13 sections below are retained only as historical audit notes, not active protocol settings.
+
+The active ViT is standard **ViT-Base/16**, not Tiny; ResNet-18 CIFAR stem remains. All active jobs use momentum SGD 0.9 and L2 decay 5e-4 by default. New supervised samples compete with *all known* classes, and all known classifier rows can update; only unseen future rows stay frozen. The main probe defaults to effective batch64, microbatch8 and 50 replay images per class. After all 9 training syncs and final flush, a separate full post-server-sync accuracy table is written at every update (including before the final one). Held-out per-sync scores are diagnostics only. Prior results need a v14 rerun.
+
 # CIFAR-100 v6 implementation and validation status
 
 ## Completed in source

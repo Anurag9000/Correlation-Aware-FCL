@@ -30,7 +30,37 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v13_first4_then2_global_cl'
+PROTOCOL_VERSION = 'cifar100_native32_v14_seen_class_calibrated_sync_tables'
+
+
+def _normalization_aggregation_diagnostics(previous,committed,uploads):
+    """Read-only BN-buffer spread and classifier row drift.
+
+    BatchNorm running statistics are not optimizer-gradient parameters;
+    client-specific disjoint-class BN estimates may diverge substantially.
+    These statistics do not modify FedAvg, synchronization or any predictor.
+    """
+    bn_names=[key for key in committed
+              if key.endswith('running_mean') or key.endswith('running_var')]
+    spread=[]
+    drift=[]
+    for key in bn_names:
+        after=committed[key].detach().float().cpu()
+        before=previous[key].detach().float().cpu()
+        drift.append(float(torch.linalg.vector_norm(after-before)))
+        for u in uploads:
+            value=u['weights'][key].detach().float().cpu()
+            spread.append(float(torch.linalg.vector_norm(value-after)))
+    name='classifier.bias' if 'classifier.bias' in committed else None
+    classifier_shift=None
+    if name is not None:
+        classifier_shift=float(torch.linalg.vector_norm(
+            committed[name].float().cpu()-previous[name].float().cpu()))
+    return dict(batchnorm_running_buffer_keys=len(bn_names),
+                bn_mean_client_to_server_l2=(
+                    sum(spread)/len(spread) if spread else None),
+                bn_mean_server_drift_l2=(sum(drift)/len(drift) if drift else None),
+                classifier_bias_update_l2=classifier_shift)
 
 
 def anchored_upload(client, global_state, *, current_version=None):
@@ -314,7 +344,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         # explicit communication, except deliberate full-sync ablations.
         for client in clients.values():
             client.receive(global_state,version=0)
-        observed=set();peak={};history=[];version=0
+        observed=set();peak={};test_peak={};history=[];version=0
         integrated=set();server_optimizer_state={}
         server_class_update_counts={}
         server_cl_state=FederatedCLState()
@@ -349,6 +379,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             clients={int(cid):LocalState(**state) for cid,state in saved['clients'].items()}
             observed=set(saved['observed']);peak=saved['peak'];integrated=set(saved['integrated'])
             history=saved['history'];server_optimizer_state=saved['server_optimizer_state']
+            # Rebuild audit-only held-out peaks from prior persisted metrics.
+            # The test history is never an input to selection/training.
+            for previous in history:
+                for cls,acc in previous.get('per_sync_test_per_class',{}).items():
+                    c=int(cls)
+                    test_peak[c]=max(test_peak.get(c,0.),float(acc))
             server_class_update_counts=saved.get('server_class_update_counts',{})
             server_cl_state=saved.get('server_cl_state')
             if not isinstance(server_cl_state,FederatedCLState):
@@ -422,8 +458,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 class_relationships=pairwise_vector_cosines(vectors)
             risks={}
             if history:
+                # Never feed held-out TEST information into client selection.
+                # Prior published server-sync tables are diagnostic only.
+                observed_validation=history[-1].get('selection_validation_per_class',
+                                                     history[-1].get('per_class',{}))
                 risks={int(c):max(0.,peak.get(int(c),0.)-float(v))
-                       for c,v in history[-1]['per_class'].items()}
+                       for c,v in observed_validation.items()}
             selected=select_clients(clients,cfg,round_id,rng,old_classes=old,new_classes=new,
                                     coarse_by_fine=bank.coarse_by_fine,
                                     relationships=class_relationships,class_forgetting=risks)
@@ -499,6 +539,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 arrived=set(server_cl_state.acknowledged_train_indices)
                 pre_representation=arrived_feature_means(model,bank,old,device,
                                                           allowed_indices=arrived)
+            aggregation_norm_diagnostics=None
             custom_head_fusion=False
             if accepted:
                 old_gradient=None
@@ -558,6 +599,10 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
                         server_cl_state.assert_complete_download(clients[cid])
+            # Capture server-level backbone/head compatibility diagnostics
+            # after the commit, without changing any global or local weights.
+            aggregation_norm_diagnostics=_normalization_aggregation_diagnostics(
+                base_global_state,global_state,accepted)
             if cfg.full_sync:
                 for cid in clients:
                     clients[cid].receive(global_state,version,
@@ -616,6 +661,11 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         old_update_alignment={str(cid):vector_cosine(mean_old_grad,delta)
                             for cid,delta in deltas.items()}
                     model.load_state_dict(global_state)
+            # Some optional gradient/causal diagnostics temporarily load
+            # candidate or pre-aggregation weights. Restore the committed
+            # server model explicitly before ANY scored evaluation.
+            model.load_state_dict(global_state)
+            model.to(device)
             if cfg.evaluate_final_only and round_id!=total_rounds-1:
                 # The pilot's official test split is read exactly ONCE, after
                 # the terminal flush. Earlier rounds store communication and
@@ -631,6 +681,61 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                                      task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
                                      split=('test' if cfg.evaluate_final_only else 'validation'))
                 result['evaluation_deferred']=False
+            # Every communication interval, including the all-client closing
+            # flush, gets a fresh server-global evaluation over every currently
+            # observed class. Held-out TEST scores are audit-only: do not use
+            # them in client selection, training or hyperparameter search.
+            from .stage_report import render_sync_report
+            validation_report=None
+            if evaluation_bank.validation is not None:
+                validation_report,_=evaluate(model,evaluation_bank,observed,
+                    cfg.batch_size,device,peak={},integrated=integrated,
+                    old=old,new=new,
+                    task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                    split='validation')
+            per_sync_test,test_peak=evaluate(model,evaluation_bank,observed,
+                cfg.batch_size,device,peak=test_peak,integrated=integrated,
+                old=old,new=new,
+                task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                split='test')
+            # Report the previously defined all-arrived metric AND the
+            # accepted-only server capability. Offline unsent classes must
+            # never be presented as already learned by the server.
+            integrated_test=None
+            if integrated:
+                integrated_test,_=evaluate(model,evaluation_bank,set(integrated),
+                    cfg.batch_size,device,peak={},integrated=integrated,
+                    old=old,new=new,
+                    task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                    split='test')
+            sync_report=render_sync_report(run_dir,round_number=round_id+1,
+                model_version=version,num_clients=cfg.num_clients,
+                arrivals=scenario.arrivals,test_metrics=per_sync_test,
+                validation_metrics=validation_report,selected_clients=selected,
+                terminal_flush=bool(cfg.stream_protocol and cfg.stream_terminal_flush and round_id==total_rounds-1),
+                backbone=cfg.model,
+                optimizer=dict(name='sgd',lr=cfg.lr,momentum=cfg.momentum,weight_decay=cfg.weight_decay),
+                classifier_bias=(global_state[classifier_parameter_names(model)[1]]
+                                 if classifier_parameter_names(model)[1] is not None else None),
+                integrated_classes=integrated,integrated_metrics=integrated_test)
+            # Used by validation-based selectors and never by the test audit.
+            result['selection_validation_per_class']=(
+                validation_report['per_class'] if validation_report else {})
+            result['per_sync_test_accuracy']=per_sync_test['accuracy']
+            result['per_sync_server_integrated_only_accuracy']=(
+                integrated_test['accuracy'] if integrated_test else None)
+            result['per_sync_pending_classes']=sorted(set(observed)-set(integrated))
+            result['per_sync_test_per_class']=per_sync_test['per_class']
+            result['per_sync_validation_accuracy']=(
+                validation_report['accuracy'] if validation_report else None)
+            result['sync_accuracy_report']=sync_report
+            result['per_sync_forgetting']=per_sync_test['forgetting']
+            if cfg.evaluate_final_only and round_id==total_rounds-1:
+                # Final public TEST score is the same held-out evaluation.
+                # Reuse its peak-based forgetting rather than falsely claiming
+                # zero forgetting because historical testing was deferred.
+                result['forgetting']=per_sync_test['forgetting']
+                result['all_observed_peak_drop']=per_sync_test['all_observed_peak_drop']
             if cfg.spurious_ood_eval and cfg.spurious_strength:
                 from .data import DataBank
                 from .domains import SpuriousTest
@@ -666,6 +771,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                                 else ('canonical_full_model' if cfg.aggregator in
                                       {'fedavg','fedavgm','fedadam'} else 'repository_specific_custom'))),
                            'classwise_head_merge_applied':custom_head_fusion,
+                           'aggregation_norm_diagnostics':aggregation_norm_diagnostics,
                            'stale_rebased_client_ids':[u['client_id'] for u in accepted if u['stale_rebased']],
                            'upload_model_origins':{str(u['client_id']):u['aggregation_input_semantics'] for u in accepted},
                            'server_class_sample_exposure':{str(k):int(v) for k,v in sorted(server_cl_state.class_sample_exposure.items())},
@@ -722,7 +828,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'fork_source':str(fork_from_checkpoint) if fork_from_checkpoint else None,
                     'device':str(device),'rounds':total_rounds,'backbone':backbone_description,'final_metrics':history[-1],
                     'model_final':str(run_dir/'model_final.pt'),
-                    'shared_continual_state':server_cl_state.statistics()})
+                    'shared_continual_state':server_cl_state.statistics(),
+                    'per_sync_accuracy_report_dir':str(run_dir/'per_sync_accuracy'),
+                    'per_sync_report_count':total_rounds})
         atomic_json(status_file,{'status':'completed','protocol_version':PROTOCOL_VERSION,
                                 'finished_at':time.time(),
                                 'rounds':total_rounds})

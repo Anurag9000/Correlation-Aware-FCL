@@ -1,6 +1,7 @@
 """Native, swappable 32x32 research backbones.
 
-ViT-Tiny/16: 12 transformer blocks, 192 hidden dimensions, 3 heads,
+ViT-Base/16 (standard ViT-B): 12 transformer blocks, 768 hidden dimensions, 12 heads.
+Legacy ViT-Tiny/16 (not part of current suites): 192 dimensions, 3 heads,
 16x16 patches (four image tokens at 32x32) with a learned class token.
 ResNet-18: canonical [2,2,2,2] BasicBlock stages with CIFAR 3x3/stride-1
 stem and *no* stem maxpool. Both have a single class-indexed final Linear.
@@ -16,7 +17,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-VIT_ID='vit_tiny_patch16_32'
+VIT_ID='vit_base_patch16_32'
+LEGACY_VIT_TINY_ID='vit_tiny_patch16_32'
 CNN_ID='resnet18_cifar32'
 BACKBONE_ID=VIT_ID  # backward-compatible default-model constant
 INPUT_SIZE=32
@@ -64,6 +66,31 @@ class ViTTinyFeature(nn.Module):
         tokens=self.blocks(tokens+self.pos_embed)
         return self.norm(tokens)[:,0]
 
+class ViTBaseFeature(nn.Module):
+    """Standard ViT-Base/16 width, depth and heads adapted to native 32x32.
+
+    Four 16x16 image patches plus CLS token. This is RANDOMLY initialized
+    ViT-B/16, not a pretrained ImageNet ViT or an ImageNet-resolution model.
+    """
+    num_features=768
+    def __init__(self):
+        super().__init__()
+        self.patch_embed=nn.Conv2d(3,768,kernel_size=16,stride=16)
+        self.cls_token=nn.Parameter(torch.zeros(1,1,768))
+        self.pos_embed=nn.Parameter(torch.zeros(1,5,768))
+        self.blocks=nn.Sequential(*(TransformerBlock(768,12) for _ in range(12)))
+        self.norm=nn.LayerNorm(768,eps=1e-6)
+        nn.init.trunc_normal_(self.cls_token,std=.02)
+        nn.init.trunc_normal_(self.pos_embed,std=.02)
+    def forward(self,x):
+        if x.ndim!=4 or tuple(x.shape[1:])!=(3,32,32):
+            raise ValueError('ViT-Base/16 requires (N,3,32,32) images')
+        patches=self.patch_embed(x).flatten(2).transpose(1,2)
+        tokens=torch.cat((self.cls_token.expand(x.size(0),-1,-1),patches),dim=1)
+        tokens=self.blocks(tokens+self.pos_embed)
+        return self.norm(tokens)[:,0]
+
+
 class BasicBlock(nn.Module):
     expansion=1
     def __init__(self,inplanes,planes,stride=1):
@@ -110,7 +137,7 @@ class CIFARResNet18Feature(nn.Module):
 # Feature-builder registry: registering a new CNN or ViT is a single, explicit
 # factory addition. Public CLI aliases remain intentionally limited to the
 # requested two production variants until another architecture is approved.
-FEATURE_FACTORIES={VIT_ID:ViTTinyFeature,CNN_ID:CIFARResNet18Feature}
+FEATURE_FACTORIES={VIT_ID:ViTBaseFeature,CNN_ID:CIFARResNet18Feature}
 MODEL_IDS=tuple(FEATURE_FACTORIES)
 
 class CanonicalClassifier(nn.Module):
@@ -123,6 +150,7 @@ class CanonicalClassifier(nn.Module):
             input_size=32,classes=classes,pretrained=False,initialization='seeded_random',
             normalization_mean=NORMALIZATION_MEAN,normalization_std=NORMALIZATION_STD,
             patch_size=16 if backbone_name==VIT_ID else None,
+            vit_variant='ViT-Base/16' if backbone_name==VIT_ID else None,
             classifier='canonical_class_indexed',implementation='native_torch')
     def forward(self,x):return self.classifier(self.features(x))
 

@@ -57,7 +57,7 @@ def test_backward_uses_only_active_classifier_rows_both_backbones():
 def test_production_batch1024_and_swappable_backbone_guard():
     from cafcl.full_matrix import base
     for model_id in (VIT_ID,CNN_ID):
-        cfg=replace(base(0),model=model_id,batch_size=1024)
+        cfg=replace(base(0),model=model_id,batch_size=64)
         cfg.validate()
     with pytest.raises(AssertionError,match='1024'):
         replace(RunConfig(),batch_size=512).validate()
@@ -68,7 +68,7 @@ def test_production_batch1024_and_swappable_backbone_guard():
         jobs=list(expand(seeds=(0,),families=('balanced',),model=choice))
         assert 0<len(jobs)<=11*9*6*3
         assert {cfg.model for _,cfg in jobs}=={resolve_backbone(choice)}
-        assert {cfg.batch_size for _,cfg in jobs}=={1024}
+        assert {cfg.batch_size for _,cfg in jobs}=={64}
 
 
 def test_resnet_bn_integer_counters_with_nonuniform_offline_updates():

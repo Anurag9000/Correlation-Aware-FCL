@@ -28,6 +28,7 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
     model.eval()
     correct={c:0 for c in observed};count={c:0 for c in observed}
     class_losses={c:0. for c in observed}
+    class_margins={c:0. for c in observed}
     confusion=torch.zeros((bank.num_classes,bank.num_classes),dtype=torch.int64)
     allowed_class_ids=torch.as_tensor(sorted(observed),dtype=torch.long,device=device)
     for x,y in loader:
@@ -78,15 +79,21 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
                     lookup={c:i for i,c in enumerate(allowed)}
                     labels=torch.tensor([lookup[int(v)] for v in y[mask]],device=device)
                     per_sample_loss[mask]=F.cross_entropy(selected,labels,reduction='none').cpu()
+        true_logit=logits.gather(1,y.to(device).unsqueeze(1)).squeeze(1)
+        competing=logits.clone()
+        competing.scatter_(1,y.to(device).unsqueeze(1),-1.e9)
+        margins=(true_logit-competing.max(dim=1).values).detach().cpu()
         for cls in y.unique().tolist():
             mask=y==cls
             correct[int(cls)]+=int((pred[mask]==y[mask]).sum())
             count[int(cls)]+=int(mask.sum())
             class_losses[int(cls)]+=float(per_sample_loss[mask].sum())
+            class_margins[int(cls)]+=float(margins[mask].sum())
     per_class={int(c):correct[c]/count[c] if count[c] else 0. for c in sorted(observed)}
     micro=sum(correct.values())/max(1,sum(count.values()))
     micro_loss=sum(class_losses.values())/max(1,sum(count.values()))
     per_class_loss={c:class_losses[c]/max(1,count[c]) for c in sorted(observed)}
+    per_class_margin={c:class_margins[c]/max(1,count[c]) for c in sorted(observed)}
     macro=float(np.mean(list(per_class.values())))
     historical=dict(peak or {})
     # All observed labels contribute to official global accuracy. Forgetting
@@ -113,6 +120,7 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
             'confusion_matrix':{'labels':list(range(bank.num_classes)),
                                 'counts':confusion.tolist()},
             'cross_entropy_loss':micro_loss,'per_class_loss':per_class_loss,
+            'per_class_true_logit_margin':per_class_margin,
             'forgetting':forgetting, 'all_observed_peak_drop':observed_peak_drop,
             'integrated_forgetting':float(np.mean(list(integrated_prior.values()))) if integrated_prior else 0.,
             'historically_learned_class_count':len(eligible),

@@ -23,7 +23,7 @@ class RunConfig:
     replay_reservoir_fraction: float = 0.0  # positive => fixed per-class Algorithm R reservoir
     share_continual_state: bool = True
     lr: float = 0.03
-    model: str = "vit_tiny_patch16_32"
+    model: str = "vit_base_patch16_32"
     seed: int = 0
     full_sync: bool = False
     relation: str = "natural"
@@ -151,7 +151,7 @@ class RunConfig:
         assert self.aggregator in {"class_balanced", "inverse_participation", "conflict_aware", "retention_aware", "conflict_projection", "fedavg", "uniform", "fedadam", "fedavgm"}
         assert self.scenario in {"stationary", "gradual_drift", "shifted_recurrence", "task_incremental", "disjoint", "iid", "overlap", "related", "recurrence", "asynchronous", "mixed", "domain", "non_iid"}
         if self.dataset == 'synthetic':
-            assert self.model in {'test_linear','test_mlp','test_smallcnn','vit_tiny_patch16_32','resnet18_cifar32'}
+            assert self.model in {'test_linear','test_mlp','test_smallcnn','vit_base_patch16_32','resnet18_cifar32'}
         else:
             from .models import MODEL_IDS
             assert self.model in MODEL_IDS, 'Research requires an explicitly registered native 32x32 research backbone'
