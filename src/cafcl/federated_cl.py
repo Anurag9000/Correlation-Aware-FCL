@@ -157,6 +157,9 @@ class FederatedCLState:
         client.received_memory=_clone_memory(self.memory)
         client.memory=combined_memory(client.private_memory,client.received_memory)
         client.received_sample_origins=dict(self.memory_origins)
+        # Every selected client receives the entire acknowledged class table,
+        # not any classes still held privately by disconnected clients.
+        client.received_server_class_sample_exposure=dict(self.class_sample_exposure)
         client.received_gradient_supports={int(c):tuple(map(int,ids))
             for c,ids in self.memory.items()}
         client.received_memory_logits={int(i):v.detach().cpu().clone()

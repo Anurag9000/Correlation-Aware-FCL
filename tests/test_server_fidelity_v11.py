@@ -221,6 +221,9 @@ def test_server_acknowledges_only_online_client_dataset_ids(tmp_path):
     selected=set(ck['clients'][1]['seen_indices'])
     hidden=set(ck['clients'][0]['seen_indices'])
     assert server.acknowledged_train_indices==selected
+    # Only the connected client receives the merged server class-history table.
+    assert ck['clients'][1]['received_server_class_sample_exposure']==server.class_sample_exposure
+    assert not ck['clients'][0]['received_server_class_sample_exposure']
     assert not server.acknowledged_train_indices.intersection(hidden)
     h=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
     assert h[0]['server_acknowledged_train_examples']==len(selected)

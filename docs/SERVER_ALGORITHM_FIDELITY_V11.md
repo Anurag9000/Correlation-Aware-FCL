@@ -65,3 +65,6 @@ Source-code and CPU numerical tests **do not demonstrate** high CIFAR-100 accura
 ### Privacy boundary of server gradients and class statistics
 
 Server-side historical-gradient diagnostics and retention-aware weighting now restrict training-data references to `acknowledged_train_indices`—the union of indices belonging to clients **whose model upload was accepted**. Hidden clients' unsent sample IDs are not included until an accepted upload. Representation-drift measurements reuse the *same acknowledged historical cohort* before and after aggregation, avoiding a changing-denominator artifact. This is still a privileged common-dataset simulation: merely knowing acknowledged IDs is not the same as having uploaded every raw image. Production FL would require transmitting the authorized reference samples or sufficient gradient summaries explicitly.
+
+
+**Class-table broadcast:** The accepted-only per-class TRAIN-example exposure table is included in every selected client's downloaded CL snapshot as `received_server_class_sample_exposure`. An offline client retains its previous table; its new local class counts remain unuploaded and absent from the server until reconnection. This is independently asserted in the v11 server tests.

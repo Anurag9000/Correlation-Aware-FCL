@@ -75,6 +75,7 @@ class LocalState:
     received_sample_origins:dict[int,tuple[int,int]]=field(default_factory=dict)
     received_importance:dict[str,dict]=field(default_factory=dict)
     received_memory_logits:dict[int,torch.Tensor]=field(default_factory=dict)
+    received_server_class_sample_exposure:dict[int,int]=field(default_factory=dict)
     received_lwf_teacher:dict|None=None
     received_lwf_teacher_version:int=-1
     last_learning_method:str='' 
