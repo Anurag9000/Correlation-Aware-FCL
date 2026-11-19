@@ -244,7 +244,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         if old.get('status')=='completed':
             if old.get('protocol_version')!=PROTOCOL_VERSION:
                 raise RuntimeError('Completed run uses incompatible local-training protocol; use a new output root')
-            if not config_file.exists() or json.loads(config_file.read_text())!=cfg.to_dict():
+            normalized_config=json.loads(json.dumps(cfg.to_dict(),default=str))
+            if not config_file.exists() or json.loads(config_file.read_text())!=normalized_config:
                 raise RuntimeError(f'Completed job ID collision: {job}')
             if any(not (run_dir/name).exists() for name in
                    ('model_final.pt','summary.json','metrics.json')):
