@@ -1,4 +1,4 @@
-# Correlation-Aware Federated Continual Learning — CIFAR-100, native 32×32 (v5)
+# Correlation-Aware Federated Continual Learning — CIFAR-100, native 32×32 (v6)
 
 **Primary goal: run exactly TWO initial investigation jobs**, not the ~50K-job factorial sweep. This project simulates independent continuous client learning under partial server participation. Every client sees consecutive supervised tasks, continues training even when disconnected, and eventually uploads accumulated parameter changes since its last synchronization. Every connected client receives the newly aggregated server model after the upload; the disconnected clients receive nothing. Private A-GEM/GEM/replay/EWC/SI/DER/etc. memories persist through normal sync.
 
@@ -40,7 +40,7 @@ The launch tool prepares two independent processes, logs, resumable checkpoints,
 
 ## Revised full factorial registry (do not launch until pilot review)
 
-The **source-generated, mathematically audited CIFAR-100 ledger contains 51,627 feasible configurations per selected backbone** (not 53,805). The audit rejected **2,178** original combinations that could not actually realize their declared temporal/within-client overlap geometry. The **5,346-job balanced core remains complete** across all 11 local CL methods, all nine server methods, six overlap geometries, three participation rates, and three seeds. The user-requested two-job probe uses one seed and a single rotating 80% participation policy; it is **not** the balanced core.
+The **source-generated, mathematically audited CIFAR-100 ledger contains 38,559 feasible configurations per selected backbone** (not 53,805). The stricter audit rejected **15,246** registrations: 2,178 unrealized overlap geometries, 6,534 truncated offline-duration interventions, and 6,534 inert, aliased, or signal-free selection interventions. The **5,346-job balanced core remains complete** across all 11 local CL methods, all nine server methods, six overlap geometries, three participation rates, and three seeds. The user-requested two-job probe uses one seed and a single rotating 80% participation policy; it is **not** the balanced core.
 
 ```bash
 python scripts/audit_stream_math.py
@@ -60,4 +60,4 @@ Supported research backbones are switchable by the model registry, with distinct
 - Five communication intervals plus a final flush is mathematically valid for 5 clients and 100 distinct classes; extending this to 10 clients for five full intervals without overlap is invalid.
 - Only official CIFAR-100 GPU results can establish model performance. The tests are software/mathematical validations, not research accuracy results.
 
-[Factorial families](docs/FACTORIAL_SUITE.md) · [Primary probe protocol](docs/PRIMARY_PROBE.md) · [Overlap specification](docs/OVERLAP_CASES.md) · [Exact design and feasibility audit](configs/designs/stream_v5_native32.json) · [Status and caveats](docs/STATUS.md)
+[Factorial families](docs/FACTORIAL_SUITE.md) · [Primary probe protocol](docs/PRIMARY_PROBE.md) · [Overlap specification](docs/OVERLAP_CASES.md) · [Exact design and feasibility audit](configs/designs/stream_v6_native32.json) · [Status and caveats](docs/STATUS.md)

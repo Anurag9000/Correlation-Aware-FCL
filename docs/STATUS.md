@@ -1,4 +1,4 @@
-# CIFAR-100 v5 implementation and validation status
+# CIFAR-100 v6 implementation and validation status
 
 ## Completed in source
 
@@ -8,7 +8,7 @@
 - No raw data or historical memory uploaded. Offline clients continue on persistent private weights and CL histories. On reconnection, pending changes are rebased to the current server model; participating clients get the newly merged global weights; disconnected clients remain untouched.
 - Canonical 100-class output mapping with a locally active task softmax; noncurrent classifier rows protected; representation backbone remains trainable.
 - ResNet-18 BatchNorm running counters are handled as monotone integer buffers, rather than causing aggregation to fail when disconnected clients have different counts.
-- **Mathematical audit:** of 53,805 existing per-backbone registrations, 51,627 remain feasible and 2,178 are excluded with recorded failure reasons. Both choices cover all 99 local CL/server method combinations and the complete 5,346 balanced core.
+- **Mathematical audit:** of 53,805 existing per-backbone registrations, 38,559 remain structurally feasible and semantically distinguishable; 15,246 are excluded with recorded failure reasons (2,178 invalid overlap geometries, 6,534 invalid offline durations, and 6,534 inert/aliased selection variants). Both choices cover all 99 local CL/server method combinations and the complete 5,346 balanced core.
 - Dedicated offline tests cover model shapes, active classifier rows, complete 100-class task schedule, exact once-only client exclusion, paired report, model switch, and math-audit pruning.
 
 ## Not established
@@ -30,4 +30,4 @@ bash scripts/run_primary_probe_cifar100.sh --plan-only
 bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,1
 ```
 
-Checkpoint protocol `cifar100_native32_v5`; distinct model-specific results roots. Never count old `cifar100_deit_v4` checkpoints as native v5 results.
+Checkpoint protocol `cifar100_native32_v6`; distinct model-specific results roots. Never count old `cifar100_deit_v4` or v5 checkpoints as native v6 results. v6 prevents accidental resumption of CNN runs predating the BatchNorm reference-gradient fix.

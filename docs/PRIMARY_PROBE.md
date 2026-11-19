@@ -48,7 +48,7 @@ bash scripts/run_primary_probe_cifar100.sh --backbone cnn --gpus 0,1
 
 `--gpus` selects GPUs for the **two runs**, not the two backbone types. Running both backbone types would produce four experiments, not the requested two. `--seed 0`, `--lr .003`, `--epochs 1`, `--memory-per-class 20`, `--data-root`, `--output-dir`, `--no-download`, `--plan-only` are configurable. The parent ensures CIFAR-100 is cached before spawning the two worker processes to avoid concurrent download races. Production requires CUDA by default. Independent logs, checkpoints, and status files are saved for both jobs.
 
-Final outputs: `results/primary_cifar100_native32_v5_<vit|cnn>_seed0/comparison/summary.json`, `per_class.csv`, `per_class.json`, and `comparison.md`; all computed only after **both** runs succeed and after verifying all 100 classes have been integrated.
+Final outputs: `results/primary_cifar100_native32_v6_<vit|cnn>_seed0/comparison/summary.json`, `per_class.csv`, `per_class.json`, and `comparison.md`; all computed only after **both** runs succeed and after verifying all 100 classes have been integrated.
 
 **Scientific scope:** This is a feasibility/proof-of-concept ablation, not a published statistical finding. One seed is insufficient for uncertainty estimates. Participation changes communication frequency and the trajectory of stale updates, not merely class identities. The terminal flush changes the protocol but is essential to measure the final 100-class model fairly. Study per-round coverage and pre-flush sensitivity separately later.
 

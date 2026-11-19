@@ -1,4 +1,4 @@
-# Native 32×32 CIFAR-100 backbone registry (v5)
+# Native 32×32 CIFAR-100 backbone registry (v6)
 
 ## Exactly two production choices
 
@@ -19,11 +19,11 @@ Both backbones are implemented directly with PyTorch in `src/cafcl/models.py`. A
 
 **ResNet-specific server state:** `BatchNorm.num_batches_tracked` counters differ across clients; the server uses a monotone maximum, not an invalid exact-equality assertion. Floating-point batch statistics still follow the selected aggregation rule. This is a declared federated BatchNorm heuristic and should not be presented as mathematically equivalent to a centralized BatchNorm pass.
 
-**Versioning:** `cifar100_native32_v5` protocol, distinct model-specific job fingerprints/output roots (`results/cifar100_native32_v5_vit` versus `_cnn`), and immutable backbone description in each run. Never resume a DeiT-v4 or SmallCNN-v3 checkpoint into either v5 model. The default full ledger is the ViT; `--backbone cnn` changes the model family, **not** the data or algorithm cross.
+**Versioning:** `cifar100_native32_v6` protocol, distinct model-specific job fingerprints/output roots (`results/cifar100_native32_v6_vit` versus `_cnn`), and immutable backbone description in each run. Never resume an old DeiT-v4, SmallCNN-v3, or native-v5 checkpoint into a v6 model. v6 also isolates the CNN BatchNorm reference-gradient correction. The default full ledger is the ViT; `--backbone cnn` changes the model family, **not** the data or algorithm cross.
 
 ### Literature
 
 - Dosovitskiy et al., *An Image Is Worth 16x16 Words: Transformers for Image Recognition at Scale* (ICLR 2021): ViT design. https://arxiv.org/abs/2010.11929
 - He et al., *Deep Residual Learning for Image Recognition* (CVPR 2016): ResNet-18 family. https://arxiv.org/abs/1512.03385
 
-No official CIFAR-100 GPU results for these v5 architectures have been measured here.
+No official CIFAR-100 GPU results for these v6 architectures have been measured here.

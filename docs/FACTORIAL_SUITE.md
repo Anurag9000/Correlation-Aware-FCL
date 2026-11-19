@@ -1,8 +1,8 @@
-# CIFAR-100 v5 factorial ledger — feasibility-filtered, native 32×32 backbones
+# CIFAR-100 v6 factorial ledger — feasibility-filtered, native 32×32 backbones
 
 ## Source and version
 
-`src/cafcl/full_matrix.py` lazily enumerates the declared finite experiment grids. `src/cafcl/stream_audit.py` independently checks, for every generated configuration, all local-task label sets, canonical class coverage, within/across client-and-time overlap provenance, controlled outages, and finite class-example budgets. Misnamed/no-op overlap geometries are **excluded**, not silently treated as real interventions. Source to reproduce the audit: `python scripts/audit_stream_math.py`. The exact frozen hash, counts and exclusion report live in `configs/designs/stream_v5_native32.json`.
+`src/cafcl/full_matrix.py` lazily enumerates the declared finite experiment grids. `src/cafcl/stream_audit.py` independently checks, for every generated configuration, all local-task label sets, canonical class coverage, within/across client-and-time overlap provenance, controlled outages, and finite class-example budgets. Misnamed/no-op overlap geometries are **excluded**, not silently treated as real interventions. Source to reproduce the audit: `python scripts/audit_stream_math.py`. The exact frozen hash, counts and exclusion report live in `configs/designs/stream_v6_native32.json`.
 
 All CIFAR-100 production configurations now use either `vit_tiny_patch16_32` (`--backbone vit`, **default**) or `resnet18_cifar32` (`--backbone cnn`), 32×32 input and effective batch size 1024. The two backbones are **alternative executions of the same finite design**, not simultaneous model assignments in a single federated job. They have separate job IDs, checkpoints and output roots. The old CIFAR-10 and 20-class jobs remain retired.
 
@@ -11,12 +11,12 @@ All CIFAR-100 production configurations now use either `vit_tiny_patch16_32` (`-
 | Result | Jobs per backbone |
 |---|---:|
 | Old raw distinct generator registrations | 53,805 |
-| Removed (impossible/absent/misnamed overlap mechanism) | **2,178** |
-| **Feasible registered jobs retained** | **51,627** |
+| Rejected (unrealized overlap, truncated outage, redundant/ineffective selector) | **15,246** |
+| **Feasible registered jobs retained** | **38,559** |
 | Local methods × server methods | **11 × 9 = 99/99** |
 | Balanced methodology core retained | **5,346** |
 
-The 2,178 removed registrations are all in `task_length` configurations where the requested overlap was impossible or the combined condition did not actually instantiate every named geometry. For example, `intra_same_round` cannot occur with one task per client per communication interval, and cross-round overlap cannot occur when the entire novel stream ends after just one interval. The scheduler was also repaired to **never fill an incomplete final task using unrelated historical labels**; it may defer a terminal task to an eligible client slot or reject the schedule.
+Rejections comprise **2,178** unrealized overlap geometries, **6,534** truncated exact-duration offline schedules, and **6,534** no-op/alias selection variants. For example, `intra_same_round` is impossible with one task per client per interval, and a D=2 offline cohort started in the last of three training rounds cannot complete two hidden intervals. Selector policies with 100% participation select everyone, while some source implementations are exact aliases or have no signal on a nonrecurrent disjoint stream. The scheduler never fills an incomplete terminal task with unrelated labels. See [the v6 audit ledger](LEDGER_AUDIT_V6.md).
 
 ## Retained family counts (per backbone, after deduplication and feasibility audit)
 
@@ -24,10 +24,10 @@ The 2,178 removed registrations are all in `task_length` configurations where th
 |---|---:|---|
 | Balanced method × server × overlap × participation × seed | 5,346 | 11 × 9 × 6 geometries × 3 rates × 3 seeds |
 | Local task length | **6,732** | Classes/task 2,4; tasks/interval 1,2,3; invalid geometry cases removed |
-| Offline duration | 13,662 | Consecutive disconnection 1–4 feasible intervals |
+| Offline duration | 7,128 | Consecutive disconnection 1–4 feasible intervals |
 | Overlap strength | 2,970 | Probabilistic class reuse 25%, 50%, 100% |
 | Raw sample overlap | 1,188 | Different-client shared-image fraction |
-| Client selection | 10,692 | Selection policies and participation |
+| Client selection | 4,158 | Selection policies and participation |
 | Local SGD optimization | 3,267 | Learning rates × epochs |
 | CL memory capacity | 756 | Examples per class |
 | Importance regularization | 324 | EWC/SI/MAS/LwF strength |
@@ -43,7 +43,7 @@ The 2,178 removed registrations are all in `task_length` configurations where th
 | Class imbalance | 891 | 0, .5, 1, 2 |
 | Client quantity skew | 594 | 0, 1, 3 |
 | Terminal flush | 297 | Enabled/disabled |
-| **Total** | **51,627** | Finite-grid jobs, not GPU executions |
+| **Total** | **38,559** | Finite-grid jobs, not GPU executions |
 
 The balanced core's six overlap geometries are: no overlap; same-client same-interval; same-client cross-interval; different-client same-interval; different-client cross-interval; combined. Its rates are 100%, 80%, 50%, with three seeds. The primary two-job probe intentionally does **not** use three seeds and does **not** have overlap.
 
@@ -55,7 +55,7 @@ bash scripts/run_all_cifar100.sh --backbone vit --plan-only
 # switch to native CIFAR-stem ResNet-18
 bash scripts/run_all_cifar100.sh --backbone cnn --plan-only
 # export exact finite-grid configurations
-bash scripts/run_all_cifar100.sh --backbone vit --plan-only --export-plan outputs/cifar100_vit_v5.jsonl.gz
+bash scripts/run_all_cifar100.sh --backbone vit --plan-only --export-plan outputs/cifar100_vit_v6.jsonl.gz
 # validate both mathematical registry digests
 python scripts/validate_factorial_plans.py
 # primary intended first study: two jobs in parallel, one seed
