@@ -272,11 +272,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             # Every job in a sequential research campaign must start from
             # the identical published pretrained feature extractor.
             reference=Path(output_root)/(cfg.model+'_architecture_reference.json')
+            normalized_description=json.loads(json.dumps(backbone_description))
             if reference.exists():
-                if json.loads(reference.read_text())!=backbone_description:
+                if json.loads(reference.read_text())!=normalized_description:
                     raise RuntimeError('Backbone definition differs from prior jobs; use a new experiment root')
             else:
-                atomic_json(reference,backbone_description)
+                atomic_json(reference,normalized_description)
         global_state=copy_cpu_state(model)
         # Initial model is shared at round zero. Subsequent downloads require
         # explicit communication, except deliberate full-sync ablations.
