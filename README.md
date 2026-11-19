@@ -1,3 +1,5 @@
+> **CURRENT v15 dual pilot:** Physical batch 64 = effective batch 64 on both ResNet-18 and ViT-Base/16. No microbatching or gradient accumulation in the two-run campaign; the microbatch setting is explicitly tied to the requested batch size. The Python runner does one full logical-batch forward/backward before each SGD step (a final incomplete batch naturally contains fewer than 64 images). Job IDs and output roots are isolated from v14. The factorial research ledger is unchanged and still has its separately configured physical microbatch behavior. [Current launch settings](docs/V15_PHYSICAL_BATCH_PILOT.md).
+
 # Correlation-Aware Federated Continual Learning — CIFAR-100, native 32×32 (v6)
 
 > **CURRENT v14 protocol:** [Seen-class optimization and per-sync reporting](docs/V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md). The archival sections below describe historical v10–v13 experiments and must not be used as the current launch specification.

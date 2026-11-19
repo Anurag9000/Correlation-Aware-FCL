@@ -17,16 +17,16 @@ from .simulator import run_experiment,atomic_json
 from .selection import participation_budget
 
 
-def make_jobs(*,backbone='vit',seed=0,lr=.03,epochs=10,memory_per_class=20,replay_fraction=1/9,batch_size=64,micro_batch_size=8):
+def make_jobs(*,backbone='vit',seed=0,lr=.03,epochs=10,memory_per_class=20,replay_fraction=1/9,batch_size=64):
     pct_tag=f'{100*replay_fraction:g}'.replace('.','p')
-    cfg=replace(base(seed=seed,model=backbone),num_clients=5,batch_size=batch_size,micro_batch_size=micro_batch_size,classwise_head_merge=False,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
+    cfg=replace(base(seed=seed,model=backbone),num_clients=5,batch_size=batch_size,micro_batch_size=batch_size,classwise_head_merge=False,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
         aggregator='fedavg',scenario='disjoint',stream_overlap_kind='none',
         stream_overlap_fraction=0.,classes_per_local_task=2,local_tasks_per_round=2,
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
         stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=memory_per_class,
-        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V14_CALIBRATED_'+resolve_backbone(backbone))
+        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V15_NO_ACCUMULATION_'+resolve_backbone(backbone))
     partial=replace(cfg,participation=.8,stream_offline_policy='rotate_once',
-                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V14_CALIBRATED_'+resolve_backbone(backbone))
+                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V15_NO_ACCUMULATION_'+resolve_backbone(backbone))
     for job in (cfg,partial):job.validate()
     return cfg,partial
 
@@ -121,10 +121,8 @@ def main(argv=None):
     p.add_argument('--lr',type=float,default=.03)
     p.add_argument('--epochs',type=int,default=10)
     p.add_argument('--batch-size',type=int,default=64,
-                   help='Effective logical SGD batch size shared by both jobs (default: 64; 1024 allowed as ablation)')
+                   help='Physical SGD batch size for both jobs; no microbatching or gradient accumulation')
     p.add_argument('--memory-per-class',type=int,default=20)
-    p.add_argument('--micro-batch-size',type=int,default=8,
-                   help='Physical GPU microbatch; logical optimizer batch remains --batch-size')
     p.add_argument('--replay-fraction',type=float,default=1/9,help='Per-class fraction of available TRAIN examples retained by Algorithm R')
     p.add_argument('--data-root',default='data')
     p.add_argument('--output-dir',default='results')
@@ -138,10 +136,9 @@ def main(argv=None):
     p.add_argument('--worker',type=int,choices=(0,1),default=None,help=argparse.SUPPRESS)
     args=p.parse_args(argv)
     jobs=make_jobs(backbone=args.backbone,seed=args.seed,lr=args.lr,epochs=args.epochs,batch_size=args.batch_size,
-                   memory_per_class=args.memory_per_class,replay_fraction=args.replay_fraction,
-                   micro_batch_size=args.micro_batch_size)
+                   memory_per_class=args.memory_per_class,replay_fraction=args.replay_fraction)
     design=audited_plan(jobs)
-    root=Path(args.output_dir)/('primary_cifar100_calibrated_v14_'+args.backbone+
+    root=Path(args.output_dir)/('primary_cifar100_physical_v15_'+args.backbone+
         ('' if abs(args.replay_fraction-.1)<1e-12 else '_pct'+f'{100*args.replay_fraction:g}'.replace('.','p'))+
         f'_bs{args.batch_size}_seed{args.seed}')
     root.mkdir(parents=True,exist_ok=True)
@@ -167,7 +164,7 @@ def main(argv=None):
          '--seed',str(args.seed),'--lr',str(args.lr),'--epochs',str(args.epochs),
          '--batch-size',str(args.batch_size),
          '--memory-per-class',str(args.memory_per_class),'--replay-fraction',str(args.replay_fraction),
-         '--micro-batch-size',str(args.micro_batch_size),'--data-root',args.data_root,
+         '--data-root',args.data_root,
          '--output-dir',args.output_dir,'--no-download']
     if args.allow_cpu:cmd.append('--allow-cpu')
     processes=[]
