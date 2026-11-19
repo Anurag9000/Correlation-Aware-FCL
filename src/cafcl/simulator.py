@@ -33,6 +33,32 @@ from .diagnostics import (diagnostic_gradient_relationships,
 PROTOCOL_VERSION = 'cifar100_native32_v14_seen_class_calibrated_sync_tables'
 
 
+def _classwise_fedavg_contribution(uploads):
+    """Example-weight fractions for class-specific local updates.
+
+    This is an exact explanation of canonical FedAvg weights for fresh
+    synchronized inputs. It is a REFERENCE diagnostic, not the weighting
+    of repository-specific custom server methods. 'Direct' refers to
+    examples with that true class; 'head' includes seen-class softmax
+    competition and replay-driven classifier row updates.
+    """
+    total=sum(int(u['examples']) for u in uploads)
+    if total<=0:return {}
+    classes={int(c) for u in uploads
+             for c in set(u.get('class_counts',{}))|set(u.get('class_update_steps',{}))}
+    result={}
+    for cls in sorted(classes):
+        direct=sum(int(u['examples']) for u in uploads
+                   if int(u.get('class_counts',{}).get(cls,0))>0)
+        head=sum(int(u['examples']) for u in uploads
+                 if int(u.get('class_update_steps',{}).get(cls,0))>0)
+        result[str(cls)]={'direct_new_class_example_weight_fraction':direct/total,
+                          'updated_classifier_row_weight_fraction':head/total,
+                          'uploader_count':sum(1 for u in uploads
+                              if int(u.get('class_update_steps',{}).get(cls,0))>0)}
+    return result
+
+
 def _normalization_aggregation_diagnostics(previous,committed,uploads):
     """Read-only BN-buffer spread and classifier row drift.
 
@@ -780,6 +806,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                                 else ('canonical_full_model' if cfg.aggregator in
                                       {'fedavg','fedavgm','fedadam'} else 'repository_specific_custom'))),
                            'classwise_head_merge_applied':custom_head_fusion,
+                           'canonical_fedavg_reference_class_contributions':_classwise_fedavg_contribution(accepted),
                            'aggregation_norm_diagnostics':aggregation_norm_diagnostics,
                            'stale_rebased_client_ids':[u['client_id'] for u in accepted if u['stale_rebased']],
                            'upload_model_origins':{str(u['client_id']):u['aggregation_input_semantics'] for u in accepted},

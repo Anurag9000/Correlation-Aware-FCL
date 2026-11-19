@@ -234,3 +234,19 @@ experiments.
 
 
 **Per-sync zero-prediction-class integrity:** The collapse count only includes classes that have actually arrived by that communication interval. The preallocated 100-way output rows for future unarrived classes are excluded; treating all 100 output slots as eligible at early rounds would falsely report unavoidable future-class masking as catastrophic collapse.
+
+
+## Exact per-class FedAvg dilution diagnostic
+
+Each round now records \`canonical_fedavg_reference_class_contributions\`:
+\`direct_new_class_example_weight_fraction\`,
+\`updated_classifier_row_weight_fraction\`, and \`uploader_count\`.
+For five equally sized clients, a class newly introduced at exactly one
+client has a **0.2 direct-example weight** in the canonical FedAvg
+sum. This can dilute its new-class classifier head update even when
+that client learned it locally. For later rounds, the updated-row
+fraction can be higher because all clients have synchronized and
+trained historical seen-class softmax rows. This is a VALID FedAvg
+consequence, not defective arithmetic: do not silently reweight it
+away in the FedAvg baseline. Compare custom class-aware aggregation
+arms independently if the dilution is unacceptable.

@@ -216,3 +216,23 @@ def test_unarrived_future_outputs_not_false_flagged_as_prediction_collapse(tmp_p
     assert result['zero_prediction_classes']==[]
     assert result['observed_class_count']==2
     assert len(result['predicted_class_counts'])==2
+
+
+def test_canonical_fedavg_new_class_head_dilution_is_explicit_not_hidden():
+    from cafcl.simulator import _classwise_fedavg_contribution,aggregate
+    updates=[]
+    base={'classifier.bias':torch.zeros(4)}
+    for client_id in range(5):
+        bias=torch.zeros(4)
+        if client_id==0:bias[2]=5.
+        updates.append({'client_id':client_id,'weights':{'classifier.bias':bias},
+                        'examples':90,'class_counts':{2:90} if client_id==0 else {},
+                        'class_update_steps':{2:3} if client_id==0 else {0:3,1:3}})
+    details=_classwise_fedavg_contribution(updates)
+    assert details['2']['direct_new_class_example_weight_fraction']==pytest.approx(.2)
+    assert details['2']['updated_classifier_row_weight_fraction']==pytest.approx(.2)
+    assert details['2']['uploader_count']==1
+    result=aggregate(updates,base,'fedavg')
+    assert result['classifier.bias'][2].item()==pytest.approx(1.)
+    # The original new-class bias is 5, so dilution to 1 is
+    # mathematically canonical in this disjoint five-client scenario.
