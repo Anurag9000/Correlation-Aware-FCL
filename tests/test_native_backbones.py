@@ -26,7 +26,7 @@ def test_both_architectures_are_native_32_and_canonical():
 
 def test_native_vit_architecture_exact_patch_grid():
     m=create_model('vit_base_patch16_32',100)
-    assert isinstance(m.features,ViTTinyFeature)
+    assert isinstance(m.features,ViTBaseFeature)
     assert m.features.patch_embed.kernel_size==(16,16)
     assert m.features.patch_embed.stride==(16,16)
     assert m.features.pos_embed.shape==(1,5,768) # 1 CLS + four 16x16 patches

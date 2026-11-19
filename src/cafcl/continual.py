@@ -13,6 +13,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader,Subset,Dataset
 from .cl_estimators import estimate_diagonal_importance
+from .class_indexed import canonical_active_loss,freeze_other_class_rows
 from scipy.optimize import minimize
 
 @dataclass
@@ -318,7 +319,6 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     model.to(device)
     model.train()
     if active_pair_classes is not None:
-        from .class_indexed import canonical_active_loss,freeze_other_class_rows
         active_pair_classes=tuple(sorted(set(int(c) for c in active_pair_classes)))
         if len(active_pair_classes)<2:
             raise ValueError('Local task requires at least two distinct labels')
@@ -510,7 +510,9 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     rx,ry=rx.to(device,non_blocking=True),ry.to(device,non_blocking=True)
                     replay_logits=model(rx)
                     if cfg.method=='er_ace':
-                        loss=loss+cfg.der_beta*canonical_active_loss(replay_logits,ry,seen_classes)
+                        loss=loss+cfg.der_beta*(
+                            canonical_active_loss(replay_logits,ry,seen_classes)
+                            if active_pair_classes is not None else F.cross_entropy(replay_logits,ry))
                     else:
                         missing=[int(i) for i in chosen if int(i) not in client.memory_logits]
                         if missing:
@@ -527,8 +529,10 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                             cls_idx=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
                             bx,by=next(iter(_example_loader(training_data,cls_idx,ref_count,
                                 cfg.seed+round_id+client.client_id+913,shuffle=False)))
-                            loss=loss+cfg.der_beta*canonical_active_loss(
-                                model(bx.to(device)),by.to(device),seen_classes)
+                            supervised_logits=model(bx.to(device))
+                            loss=loss+cfg.der_beta*(
+                                canonical_active_loss(supervised_logits,by.to(device),seen_classes)
+                                if active_pair_classes is not None else F.cross_entropy(supervised_logits,by.to(device)))
                 if cfg.method=='lwf' and teacher is not None:
                     with torch.no_grad():t_logits=teacher(x)
                     old_labels=sorted(c for c,s in client.first_seen_local_experience.items()

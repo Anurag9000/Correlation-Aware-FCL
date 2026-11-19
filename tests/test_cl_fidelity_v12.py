@@ -210,9 +210,11 @@ def test_si_integral_uses_unregularized_task_gradient_even_with_old_importance()
     model.load_state_dict(client.shared_weights)
     before={n:p.detach().clone() for n,p in model.named_parameters()}
     x=torch.stack([ImageBank.train[i][0] for i in range(4,8)])
-    labels=torch.tensor([0,0,1,1])
+    labels=torch.tensor([2,2,3,3])
     logits=model(x)
-    old_task_loss=F.cross_entropy(logits[:,[2,3]],labels)
+    # New data now competes against every class previously observed by the
+    # client (including classes 0 and 1), not just its latest task pair.
+    old_task_loss=F.cross_entropy(logits[:,[0,1,2,3]],labels)
     params=dict(model.named_parameters())
     gradients=torch.autograd.grad(old_task_loss,list(params.values()),
                                    allow_unused=True)

@@ -128,7 +128,10 @@ def test_resume_after_interrupted_round_is_identical(tmp_path,monkeypatch):
     calls={'n':0}
     def fail_once(*args,**kwargs):
         calls['n']+=1
-        if calls['n']==2:raise RuntimeError('injected interruption')
+        # Extra audit-only evaluations must NOT move the interruption
+        # earlier than the previous successfully saved model checkpoint.
+        if (tmp_path/'interrupted_midrun'/'checkpoint_latest.pt').is_file():
+            raise RuntimeError('injected interruption')
         return original_evaluate(*args,**kwargs)
     with monkeypatch.context() as m:
         m.setattr(sim,'evaluate',fail_once)

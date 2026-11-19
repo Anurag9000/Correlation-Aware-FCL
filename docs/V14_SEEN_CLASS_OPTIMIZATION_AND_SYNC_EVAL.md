@@ -65,6 +65,15 @@ and no future-label supervision is introduced.
 
 ## Momentum SGD and sufficient optimizer steps
 
+**Optimizer evidence qualification:** SGD+momentum is a strong conventional
+CIFAR-ResNet baseline and can generalize differently from Adam, but it is
+NOT guaranteed superior for every model. The original ViT paper trained
+large ViTs with Adam in pretraining and used SGD for fine-tuning,
+not for the same randomly initialized 32x32 federated stream. Here,
+SGD is a user-selected standardization, NOT a proven ViT accuracy optimum.
+See https://arxiv.org/abs/1712.07628 and
+https://arxiv.org/abs/2010.11929.
+
 * Default optimizer for ALL active local learning methods: SGD with momentum
   \`0.9\` and weight decay \`0.0005\`. This is NOT Adam and not FedAdam.
   The server algorithm remains the selected FedAvg/FedAvgM/FedAdam or
