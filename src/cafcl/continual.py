@@ -506,7 +506,15 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                             raise RuntimeError('DER logits incompatible with classifier schema')
                         loss=loss+cfg.der_alpha*F.mse_loss(replay_logits,old_logits)
                         if cfg.method=='derpp':
-                            loss=loss+cfg.der_beta*F.cross_entropy(replay_logits,ry)
+                            # The original DER++ samples TWO memory minibatches:
+                            # one for old trajectory-logit MSE, one independently
+                            # for supervised old-label CE. Sharing a single draw
+                            # couples their gradient estimators unnecessarily.
+                            cls_idx=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
+                            bx,by=next(iter(_example_loader(training_data,cls_idx,ref_count,
+                                cfg.seed+round_id+client.client_id+913,shuffle=False)))
+                            loss=loss+cfg.der_beta*F.cross_entropy(
+                                model(bx.to(device)),by.to(device))
                 if cfg.method=='lwf' and teacher is not None:
                     with torch.no_grad():t_logits=teacher(x)
                     old_labels=sorted(c for c,s in client.first_seen_local_experience.items()

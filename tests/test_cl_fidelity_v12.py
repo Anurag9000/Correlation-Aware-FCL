@@ -274,3 +274,29 @@ def test_inactive_rows_are_bitwise_frozen_even_with_optimizer_momentum():
                        torch.zeros_like(model.weight[2:]))
     assert torch.equal(optimizer.state[model.bias]['momentum_buffer'][2:],
                        torch.zeros_like(model.bias[2:]))
+
+
+@pytest.mark.parametrize('method,expected_replay_draws',(('der',1),('derpp',2)))
+def test_derpp_independently_samples_logit_and_label_replay_minibatches(
+    method,expected_replay_draws,monkeypatch
+):
+    from cafcl import continual as cl
+    model,client=client_model()
+    client.local_experience=0
+    client.arrival([0,1,2,3],(0,1),0)
+    client.first_seen_local_experience.update({0:0,1:0})
+    first=local_train(model,client,ImageBank(),cfg(method),
+        torch.device('cpu'),0,experience_end=True,active_pair_classes=(0,1))
+    client.shared_weights=first['weights']
+    client.local_experience=1
+    client.arrival([4,5,6,7],(2,3),1)
+    original=cl._example_loader
+    recorded=[]
+    def traced(*args,**kwargs):
+        if kwargs.get('shuffle') is False:
+            recorded.append(tuple(args[1]))
+        return original(*args,**kwargs)
+    monkeypatch.setattr(cl,'_example_loader',traced)
+    local_train(model,client,ImageBank(),cfg(method),
+                torch.device('cpu'),0,experience_end=True,active_pair_classes=(2,3))
+    assert len(recorded)==expected_replay_draws

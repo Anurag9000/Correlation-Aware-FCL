@@ -118,7 +118,7 @@ Signature replay term: \`alpha * E_{(x,z_old)~buffer} ||f_theta(x)-z_old||²\` a
 
 Same Buzzega et al. source. Objective:
 \`L_incoming + alpha * MSE(f_theta(x_mem), z_old) + beta * CE(f_theta(x_mem), y_mem)\`.
-It uses the same **v12 online pre-step logit capture** and reservoir mechanics as DER, with the additional supervised memory CE term. The code stores both historical raw logits and labels. Unlike DER alone, DER++ directly optimizes supervised old-class replay accuracy through the shared backbone (while inactive local classifier rows stay frozen).
+It uses the same **v12 online pre-step logit capture** and reservoir mechanics as DER, with the additional supervised memory CE term. Its two replay losses draw **independent memory minibatches**, as in the original DER++ implementation, rather than reusing a single correlated replay selection. The code stores both historical raw logits and labels. Unlike DER alone, DER++ directly optimizes supervised old-class replay accuracy through the shared backbone (while inactive local classifier rows stay frozen).
 
 ## Auxiliary FedProx regularizer (not a twelfth CL method)
 
