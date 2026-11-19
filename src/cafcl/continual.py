@@ -675,7 +675,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     # Online DER inserts the model's PRE-UPDATE output at the
                     # moment an input enters the episodic reservoir. The original
                     # logit target must not be overwritten by a later checkpoint.
-                    batch_new_ids=list(map(int,batch_ids.tolist()))
+                    batch_new_ids=list(map(int,original_ids.tolist()))
                     client.update_memory(batch_new_ids,bank.train.targets,
                         cfg.memory_per_class,rng,cfg.memory_policy)
                     retained={int(i) for group in client.private_memory.values() for i in group}
