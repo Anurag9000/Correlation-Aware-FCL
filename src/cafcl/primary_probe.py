@@ -24,9 +24,9 @@ def make_jobs(*,backbone='vit',seed=0,lr=.003,epochs=10,memory_per_class=20,repl
         stream_overlap_fraction=0.,classes_per_local_task=2,local_tasks_per_round=2,
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
         stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=memory_per_class,
-        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V11_SERVER_'+resolve_backbone(backbone))
+        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V12_CL_'+resolve_backbone(backbone))
     partial=replace(cfg,participation=.8,stream_offline_policy='rotate_once',
-                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V11_SERVER_'+resolve_backbone(backbone))
+                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V12_CL_'+resolve_backbone(backbone))
     for job in (cfg,partial):job.validate()
     return cfg,partial
 
@@ -135,7 +135,7 @@ def main(argv=None):
                    memory_per_class=args.memory_per_class,replay_fraction=args.replay_fraction,
                    micro_batch_size=args.micro_batch_size)
     design=audited_plan(jobs)
-    root=Path(args.output_dir)/('primary_cifar100_single_gpu_server_v11_'+args.backbone+
+    root=Path(args.output_dir)/('primary_cifar100_single_gpu_cl_v12_'+args.backbone+
         ('' if abs(args.replay_fraction-.1)<1e-12 else '_pct'+f'{100*args.replay_fraction:g}'.replace('.','p'))+
         f'_bs{args.batch_size}_seed{args.seed}')
     root.mkdir(parents=True,exist_ok=True)

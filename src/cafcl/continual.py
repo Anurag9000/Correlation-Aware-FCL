@@ -11,7 +11,8 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader,Subset
+from torch.utils.data import DataLoader,Subset,Dataset
+from .cl_estimators import estimate_diagonal_importance
 from scipy.optimize import minimize
 
 @dataclass
@@ -154,16 +155,29 @@ class LocalState:
                     private[c].append(i)
                 self.private_memory=dict(private)
             elif budget>0:
-                for cls,samples in by_class.items():
-                    old=self.private_memory.get(cls,[])
-                    pool=list(dict.fromkeys(old+samples))
-                    if len(pool)>budget:
-                        if policy=='recent_per_class':
-                            pool=pool[-budget:]
+                if policy=='random_per_class':
+                    # Exact per-class Algorithm R across multiple experiences,
+                    # rather than repeatedly re-sampling a previously reduced
+                    # pool (which biases the reservoir toward recent arrivals).
+                    for idx in indices:
+                        idx=int(idx)
+                        if idx in self.private_reservoir_seen_indices:continue
+                        self.private_reservoir_seen_indices.add(idx)
+                        cls=int(targets[idx])
+                        seen=self.private_reservoir_seen_counts.get(cls,0)+1
+                        self.private_reservoir_seen_counts[cls]=seen
+                        group=self.private_memory.setdefault(cls,[])
+                        if len(group)<budget:
+                            group.append(idx)
                         else:
-                            chosen=rng.choice(len(pool),size=budget,replace=False)
-                            pool=[pool[int(i)] for i in sorted(chosen)]
-                    self.private_memory[cls]=pool
+                            slot=int(rng.integers(0,seen))
+                            if slot<budget:group[slot]=idx
+                elif policy=='recent_per_class':
+                    for cls,samples in by_class.items():
+                        pool=list(dict.fromkeys(self.private_memory.get(cls,[])+samples))
+                        self.private_memory[cls]=pool[-budget:]
+                else:
+                    raise ValueError(f'Unsupported memory sampling policy: {policy}')
         self.memory=combined_memory(self.private_memory,self.received_memory)
         retained={int(i) for group in self.memory.values() for i in group}
         for i in tuple(self.memory_logits):
@@ -230,13 +244,25 @@ def agem_project(g, reference):
     return z,float(torch.linalg.vector_norm(z-g).item()),1
 
 
-def _example_loader(dataset,indices,batch_size,seed,shuffle=True):
+class _IndexedDataset(Dataset):
+    """Expose original TRAIN sample IDs for online DER logit capture."""
+    def __init__(self,dataset):
+        self.dataset=dataset
+    def __len__(self):
+        return len(self.dataset)
+    def __getitem__(self,index):
+        x,y=self.dataset[index]
+        return x,y,int(index)
+
+
+def _example_loader(dataset,indices,batch_size,seed,shuffle=True,*,include_indices=False):
     generator=torch.Generator().manual_seed(seed)
-    return DataLoader(Subset(dataset,list(indices)),batch_size=batch_size,shuffle=shuffle,
+    source=_IndexedDataset(dataset) if include_indices else dataset
+    return DataLoader(Subset(source,list(indices)),batch_size=batch_size,shuffle=shuffle,
                       num_workers=0,generator=generator,pin_memory=torch.cuda.is_available())
 
 
-def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,active_pair_classes=None):
+def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,active_pair_classes=None,reference_classes=None):
     model.zero_grad(set_to_none=True)
     # Reference gradients are read-only with respect to BatchNorm running
     # statistics. Otherwise A-GEM/GEM accidentally trains CNN buffers on
@@ -256,7 +282,15 @@ def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,acti
         selected=[indices[int(i)] for i in order]
         for x,y in _example_loader(dataset,selected,micro,seed,shuffle=False):
             x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
-            (F.cross_entropy(model(x),y)*(len(y)/total)).backward()
+            reference_logits=model(x)
+            if reference_classes is not None:
+                # A past task must be constrained by its OWN task objective,
+                # never the two classes currently arriving at this client.
+                from .class_indexed import canonical_active_loss
+                ref_loss=canonical_active_loss(reference_logits,y,reference_classes)
+            else:
+                ref_loss=F.cross_entropy(reference_logits,y)
+            (ref_loss*(len(y)/total)).backward()
         if active_pair_classes is not None:
             from .class_indexed import freeze_other_class_rows
             freeze_other_class_rows(model,active_pair_classes)
@@ -372,6 +406,11 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                       if (cls in client.trained_classes if cfg.boundary_mode=='hidden'
                           else client.first_seen_local_experience.get(cls,client.local_experience)<client.local_experience)}
     oldmemory=[i for group in eligible_history.values() for i in group]
+    if cfg.method in {'der','derpp'}:
+        # A heterogeneous remote replay archive can contain images from
+        # clients running other methods that never stored trajectory logits.
+        # Do not hallucinate model-logit targets or crash on missing targets.
+        oldmemory=[idx for idx in oldmemory if idx in client.memory_logits]
     def local_old_loss():
         if not oldmemory:return None
         was_train=model.training
@@ -392,14 +431,26 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
             batch_indices=indices+chosen
         else:
             batch_indices=indices
-        for x,y in _example_loader(training_data,batch_indices,cfg.batch_size,
-                                   cfg.seed+round_id*100_003+client.client_id*127+epoch):
+        online_der=cfg.method in {'der','derpp'}
+        for loaded in _example_loader(training_data,batch_indices,cfg.batch_size,
+                                   cfg.seed+round_id*100_003+client.client_id*127+epoch,
+                                   include_indices=online_der):
+            batch_x,batch_y=loaded[:2]
+            batch_ids=loaded[2] if online_der else None
             optimizer.zero_grad(set_to_none=True)
-            logical_size=len(y)
+            logical_size=len(batch_y)
             macro_loss=0.
-            for x,y in zip(x.split(cfg.micro_batch_size), y.split(cfg.micro_batch_size)):
+            si_task_grads=None
+            captured_logits={}
+            ids_chunks=(batch_ids.split(cfg.micro_batch_size) if batch_ids is not None
+                        else [None]*len(batch_y.split(cfg.micro_batch_size)))
+            for x,y,original_ids in zip(batch_x.split(cfg.micro_batch_size),
+                                        batch_y.split(cfg.micro_batch_size),ids_chunks):
                 x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
                 logits=model(x)
+                if original_ids is not None:
+                    for idx,z in zip(original_ids.tolist(),logits.detach().cpu()):
+                        captured_logits[int(idx)]=z.clone()
                 if active_pair_classes is not None:
                     loss=canonical_active_loss(logits,y,active_pair_classes)
                 elif cfg.learning_setting=='task_il':
@@ -420,6 +471,17 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     loss=F.cross_entropy(stream_logits,y)
                 elif active_pair_classes is None:
                     loss=F.cross_entropy(logits,y)
+                if cfg.method=='si':
+                    # SI path integral uses *unregularized current task loss*
+                    # (not SI/EWC/FedProx penalties or projected gradients).
+                    task_grad=torch.autograd.grad(loss,params,retain_graph=True,
+                                                  allow_unused=True)
+                    if si_task_grads is None:
+                        si_task_grads=[torch.zeros_like(p.detach(),device='cpu')
+                                       for p in params]
+                    for j,(parameter,grad) in enumerate(zip(params,task_grad)):
+                        if grad is not None:
+                            si_task_grads[j]+=grad.detach().cpu()*(len(y)/logical_size)
                 if cfg.method=='replay' and oldmemory and active_pair_classes is not None:
                     ref_count=min(len(oldmemory),cfg.micro_batch_size,max(1,int(round(len(y)*cfg.replay_ratio))))
                     chosen=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
@@ -514,8 +576,13 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     for group in sorted(groups):
                         mem=groups[group]
                         if mem:
+                            historical_classes=(tuple(sorted(set(int(bank.train.targets[int(i)]) for i in mem)))
+                                if cfg.gem_grouping=='stage' else None)
+                            if historical_classes is not None and len(historical_classes)<2:
+                                historical_classes=None  # sparse class-imbalanced memory
                             refs.append(_reference_gradient(model,params,training_data,mem,
-                                                            cfg.batch_size,device,cfg.seed+(group if isinstance(group,int) else (group[0]*100003+group[1])),active_pair_classes))
+                                                            cfg.batch_size,device,cfg.seed+(group if isinstance(group,int) else (group[0]*100003+group[1])),active_pair_classes,
+                                                            historical_classes))
                     z,last_projection,v=gem_project(g,refs)
                     qp_calls+=int(v>0)
                 num_violations+=v
@@ -528,9 +595,9 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                 frozen=snapshot_frozen_rows(model,active_pair_classes)
             if cfg.method=='si':
                 before={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
-                applied_grad={n:(p.grad.detach().cpu().clone() if p.grad is not None
-                                 else torch.zeros_like(p.detach().cpu()))
-                              for n,p in model.named_parameters()}
+                # SI uses the unregularized data-loss path integral.
+                applied_grad={n:si_task_grads[j].clone()
+                              for j,(n,p) in enumerate(model.named_parameters())}
             optimizer.step()
             if frozen is not None:
                 restore_frozen_rows(model,optimizer,frozen)
@@ -539,6 +606,17 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     displacement=p.detach().cpu()-before[n]
                     client.si_path[n]+=-applied_grad[n]*displacement
                     client.si_displacement[n]+=displacement
+            if online_der:
+                # Online DER inserts the model's PRE-UPDATE output at the
+                # moment an input enters the episodic reservoir. The original
+                # logit target must not be overwritten by a later checkpoint.
+                batch_new_ids=list(map(int,batch_ids.tolist()))
+                client.update_memory(batch_new_ids,bank.train.targets,
+                    cfg.memory_per_class,rng,cfg.memory_policy)
+                retained={int(i) for group in client.private_memory.values() for i in group}
+                for idx in retained:
+                    if idx in captured_logits and idx not in client.memory_logits:
+                        client.memory_logits[idx]=captured_logits[idx]
             step_count+=1
             loss_total+=macro_loss
     # Finalize the just-completed SI experience *before* communication. In v7,
@@ -557,65 +635,35 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         client.si_omega,client.si_anchor=weighted_importance(
             client.si_omega,client.si_anchor,fresh,fresh_anchor)
         client.si_stage=client.local_experience
-    # Diagonal Fisher approximation for EWC, consolidated at each stage transition.
-    if cfg.method=='ewc' and (experience_end or (round_id+1)%cfg.rounds_per_stage==0):
-        if client.ewc_anchor is None or client.local_experience > client.ewc_stage:
-            # Use a bounded local batch; this is an approximation, recorded in diagnostics.
-            x,y=next(iter(_example_loader(training_data,indices,min(cfg.micro_batch_size,128),
-                                          cfg.seed+round_id+client.client_id)))
-            optimizer.zero_grad(set_to_none=True)
-            logits=model(x.to(device))
-            if active_pair_classes is not None:
-                from .class_indexed import canonical_active_loss,freeze_other_class_rows
-                canonical_active_loss(logits,y.to(device),active_pair_classes).backward()
-                freeze_other_class_rows(model,active_pair_classes)
-            else:
-                F.cross_entropy(logits,y.to(device)).backward()
-            fresh_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
-            fresh_fisher={n:(p.grad.detach().cpu().square() if p.grad is not None else torch.zeros_like(p.cpu())) for n,p in model.named_parameters()}
-            from .federated_cl import add_importance,weighted_importance
-            add_importance(client,'ewc',fresh_fisher,fresh_anchor)
-            client.ewc_fisher,client.ewc_anchor=weighted_importance(
-                client.ewc_fisher,client.ewc_anchor,fresh_fisher,fresh_anchor)
-            client.ewc_stage=client.local_experience
-    if (cfg.method=='mas' and (experience_end or (round_id+1)%cfg.rounds_per_stage==0)
-            and client.local_experience > client.mas_stage):
-        # MAS surrogate importance uses output sensitivity, independent of labels.
-        xm,_=next(iter(_example_loader(training_data,indices,min(cfg.micro_batch_size,128),
-                                      cfg.seed+round_id+client.client_id)))
-        model.zero_grad(set_to_none=True)
-        squared_output=model(xm.to(device)).square().sum(dim=1).mean()
-        squared_output.backward()
-        omega={n:(p.grad.detach().cpu().abs() if p.grad is not None else
-                   torch.zeros_like(p.detach().cpu())) for n,p in model.named_parameters()}
+    # EWC and MAS must average individual-sample importance contributions.
+    # Squaring or abs() AFTER averaging a minibatch gradient is biased and
+    # allows gradients from different examples to cancel.
+    if cfg.method in {'ewc','mas'} and experience_end:
+        if cfg.method=='ewc' and client.local_experience<=client.ewc_stage:
+            raise RuntimeError('Repeated EWC importance consolidation for one experience')
+        if cfg.method=='mas' and client.local_experience<=client.mas_stage:
+            raise RuntimeError('Repeated MAS importance consolidation for one experience')
+        fresh=estimate_diagonal_importance(model,training_data,indices,device,
+            kind=cfg.method,max_samples=cfg.importance_samples_per_experience,
+            seed=cfg.seed+round_id*100003+client.client_id*127+client.local_experience,
+            active_classes=active_pair_classes)
         fresh_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
         from .federated_cl import add_importance,weighted_importance
-        add_importance(client,'mas',omega,fresh_anchor)
-        client.mas_omega,client.mas_anchor=weighted_importance(
-            client.mas_omega,client.mas_anchor,omega,fresh_anchor)
-        client.mas_stage=client.local_experience
+        add_importance(client,cfg.method,fresh,fresh_anchor)
+        if cfg.method=='ewc':
+            client.ewc_fisher,client.ewc_anchor=weighted_importance(
+                client.ewc_fisher,client.ewc_anchor,fresh,fresh_anchor)
+            client.ewc_stage=client.local_experience
+        else:
+            client.mas_omega,client.mas_anchor=weighted_importance(
+                client.mas_omega,client.mas_anchor,fresh,fresh_anchor)
+            client.mas_stage=client.local_experience
     # Never allocate replay/GEM memory for non-memory algorithms.
-    if cfg.method in {'gem','agem','replay','er_ace','der','derpp'}:
+    if cfg.method in {'gem','agem','replay','er_ace'}:
         client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy,
                              total_limit=(cfg.replay_buffer_capacity if cfg.method=='replay' else 0),
                              reservoir_fraction=(cfg.replay_reservoir_fraction if cfg.method=='replay' else 0.),
                              class_totals=(Counter(map(int,bank.train.targets)) if cfg.method=='replay' and cfg.replay_reservoir_fraction else None))
-    if cfg.method in {'der','derpp'} and client.memory:
-        # Logits recorded at memory insertion/consolidation, never from test data.
-        # This is a stage-consolidated local DER adaptation rather than the
-        # paper's step-wise online reservoir update.
-        retained=[int(i) for group in client.memory.values() for i in group]
-        unseen=[i for i in retained if i not in client.memory_logits]
-        if unseen:
-            model.eval()
-            with torch.no_grad():
-                for batch_start in range(0,len(unseen),cfg.micro_batch_size):
-                    batch_ids=unseen[batch_start:batch_start+cfg.micro_batch_size]
-                    x=torch.stack([training_data[i][0] for i in batch_ids]).to(device)
-                    logits=model(x).detach().cpu()
-                    for i,z in zip(batch_ids,logits):
-                        client.memory_logits[int(i)]=z.clone()
-            model.train()
     old_loss_after=local_old_loss() if cfg.prepost_diagnostics else None
     client.last_constraint_violations=num_violations
     if cfg.optimizer_state_policy=='persist':

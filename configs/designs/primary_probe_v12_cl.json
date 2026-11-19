@@ -1,0 +1,222 @@
+{
+  "vit": {
+    "all_classes_once": true,
+    "backbone": "vit_tiny_patch16_32",
+    "batch_size": 1024,
+    "classes_per_local_task": 2,
+    "clients": 5,
+    "dataset": "cifar100",
+    "job_ids": [
+      "PRIMARY_FULL_REPLAY_RESERVOIR10_V12_CL_vit_tiny_patch16_32",
+      "PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR10_V12_CL_vit_tiny_patch16_32"
+    ],
+    "local_tasks_per_round": 2,
+    "offline_schedule": [
+      {
+        "offline_classes": [
+          2,
+          3,
+          12,
+          13
+        ],
+        "offline_client": 1,
+        "online_clients": [
+          0,
+          2,
+          3,
+          4
+        ],
+        "round": 1
+      },
+      {
+        "offline_classes": [
+          28,
+          29,
+          38,
+          39
+        ],
+        "offline_client": 4,
+        "online_clients": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "round": 2
+      },
+      {
+        "offline_classes": [
+          44,
+          45,
+          54,
+          55
+        ],
+        "offline_client": 2,
+        "online_clients": [
+          0,
+          1,
+          3,
+          4
+        ],
+        "round": 3
+      },
+      {
+        "offline_classes": [
+          66,
+          67,
+          76,
+          77
+        ],
+        "offline_client": 3,
+        "online_clients": [
+          0,
+          1,
+          2,
+          4
+        ],
+        "round": 4
+      },
+      {
+        "offline_classes": [
+          80,
+          81,
+          90,
+          91
+        ],
+        "offline_client": 0,
+        "online_clients": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "round": 5
+      }
+    ],
+    "offline_unique_once": true,
+    "seed": 0,
+    "terminal_communication_only_flush": true,
+    "total_jobs": 2,
+    "training_intervals": 5,
+    "replay_reservoir_fraction": 0.1,
+    "replay_sampling": "independent_classwise_algorithm_r",
+    "training_images_per_class": 450,
+    "private_reservoir_per_class": 45,
+    "expected_server_exemplars_after_flush": 4500,
+    "micro_batch_size": 4,
+    "client_execution_mode": "parallel_task_barriers",
+    "client_models_per_run": 5,
+    "process_topology": "two_independent_runs_on_one_gpu",
+    "canonical_whole_model_aggregation": true
+  },
+  "cnn": {
+    "all_classes_once": true,
+    "backbone": "resnet18_cifar32",
+    "batch_size": 1024,
+    "classes_per_local_task": 2,
+    "clients": 5,
+    "dataset": "cifar100",
+    "job_ids": [
+      "PRIMARY_FULL_REPLAY_RESERVOIR10_V12_CL_resnet18_cifar32",
+      "PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR10_V12_CL_resnet18_cifar32"
+    ],
+    "local_tasks_per_round": 2,
+    "offline_schedule": [
+      {
+        "offline_classes": [
+          2,
+          3,
+          12,
+          13
+        ],
+        "offline_client": 1,
+        "online_clients": [
+          0,
+          2,
+          3,
+          4
+        ],
+        "round": 1
+      },
+      {
+        "offline_classes": [
+          28,
+          29,
+          38,
+          39
+        ],
+        "offline_client": 4,
+        "online_clients": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "round": 2
+      },
+      {
+        "offline_classes": [
+          44,
+          45,
+          54,
+          55
+        ],
+        "offline_client": 2,
+        "online_clients": [
+          0,
+          1,
+          3,
+          4
+        ],
+        "round": 3
+      },
+      {
+        "offline_classes": [
+          66,
+          67,
+          76,
+          77
+        ],
+        "offline_client": 3,
+        "online_clients": [
+          0,
+          1,
+          2,
+          4
+        ],
+        "round": 4
+      },
+      {
+        "offline_classes": [
+          80,
+          81,
+          90,
+          91
+        ],
+        "offline_client": 0,
+        "online_clients": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "round": 5
+      }
+    ],
+    "offline_unique_once": true,
+    "seed": 0,
+    "terminal_communication_only_flush": true,
+    "total_jobs": 2,
+    "training_intervals": 5,
+    "replay_reservoir_fraction": 0.1,
+    "replay_sampling": "independent_classwise_algorithm_r",
+    "training_images_per_class": 450,
+    "private_reservoir_per_class": 45,
+    "expected_server_exemplars_after_flush": 4500,
+    "micro_batch_size": 4,
+    "client_execution_mode": "parallel_task_barriers",
+    "client_models_per_run": 5,
+    "process_topology": "two_independent_runs_on_one_gpu",
+    "canonical_whole_model_aggregation": true
+  }
+}

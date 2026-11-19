@@ -82,6 +82,7 @@ class RunConfig:
     optimizer_state_policy: str = "reset"
     momentum: float = 0.0
     si_xi: float = 0.1
+    importance_samples_per_experience: int = 32
     # Additional supervised selection and aggregation variants are privileged
     # simulator controls, not deployable privacy-preserving policies.
     selection_temperature: float = 1.0
@@ -176,6 +177,7 @@ class RunConfig:
             # or simulator label-aware client selection in the noise baseline.
             assert self.method=='sgd' and self.selector=='random'
             assert self.aggregator=='fedavg' 
+        assert self.importance_samples_per_experience >= 1
         assert self.regularization_strength >= 0 and self.fedprox_mu >= 0
         assert self.server_lr > 0 and 0 <= self.server_beta1 < 1 and 0 <= self.server_beta2 < 1
         assert self.fedadam_epsilon > 0
@@ -255,6 +257,7 @@ class RunConfig:
         if data['class_pair_protocol']=='compatible':data.pop('class_pair_protocol')
         if data['classwise_head_merge'] is True:data.pop('classwise_head_merge')
         # Preserve the frozen v6 geometry ledger. Execution semantics and roots are v7.
+        if data['importance_samples_per_experience']==32:data.pop('importance_samples_per_experience')
         if data['replay_buffer_capacity']==1000:data.pop('replay_buffer_capacity')
         if data['replay_reservoir_fraction']==0.0:data.pop('replay_reservoir_fraction')
         if data['share_continual_state'] is True:data.pop('share_continual_state')

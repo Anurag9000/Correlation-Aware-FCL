@@ -73,7 +73,7 @@ def test_paired_probe_both_use_reservoir_and_share_state(backbone):
     for c in (full,partial):
         assert c.method=='replay' and c.share_continual_state
         assert c.replay_reservoir_fraction==pytest.approx(.10)
-        assert c.batch_size==1024 and 'RESERVOIR10_V11_SERVER' in c.job_id
+        assert c.batch_size==1024 and 'RESERVOIR10_V12_CL' in c.job_id
     plan=audited_plan((full,partial))
     assert plan['total_jobs']==2
     assert plan['private_reservoir_per_class']==45
@@ -88,6 +88,6 @@ def test_reservoir_guardrails():
 def test_rate_change_separates_job_ids_and_budget():
     full,partial=make_jobs(replay_fraction=.20)
     plan=audited_plan((full,partial))
-    assert 'RESERVOIR20_V11_SERVER' in full.job_id
+    assert 'RESERVOIR20_V12_CL' in full.job_id
     assert plan['private_reservoir_per_class']==90
     assert plan['expected_server_exemplars_after_flush']==9000
