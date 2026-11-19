@@ -4,9 +4,9 @@ from cafcl.models import create_model
 from cafcl.class_indexed import (canonical_pair_loss,freeze_other_class_rows,
     classifier_parameter_names,classwise_merge)
 
-@pytest.mark.parametrize('name',['smallcnn','mlp','linear'])
+@pytest.mark.parametrize('name',['test_smallcnn','test_mlp','test_linear'])
 def test_only_two_classifier_rows_receive_gradients(name):
-    model=create_model(name,10)
+    model=create_model(name,10,allow_test_model=True)
     x=torch.rand(4,3,32,32)
     y=torch.tensor([3,7,3,7])
     loss=canonical_pair_loss(model(x),y,(7,3))
@@ -45,8 +45,8 @@ def test_all_methods_two_binary_episodes_same_round_while_offline(method,tmp_pat
     from cafcl.config import RunConfig
     from cafcl.simulator import run_experiment
     holders={str(c):((0,) if c<4 else (1,)) for c in range(10)}
-    cfg=RunConfig(dataset='synthetic',num_clients=2,stages=1,rounds_per_stage=1,
-        model='linear',participation=.5,participation_overrides={'0':(1,)},
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,stages=1,rounds_per_stage=1,
+        participation=.5,participation_overrides={'0':(1,)},
         method=method,aggregator='fedavg',holders_override=holders,
         class_pair_protocol='strict',checkpoint_every=1,
         memory_per_class=4,job_id='pairs_'+method)
@@ -64,7 +64,7 @@ def test_all_methods_two_binary_episodes_same_round_while_offline(method,tmp_pat
 def test_strict_pair_protocol_rejects_singleton_arrival(tmp_path):
     from cafcl.config import RunConfig
     from cafcl.simulator import run_experiment
-    cfg=RunConfig(dataset='synthetic',num_clients=10,stages=1,rounds_per_stage=1,
-        scenario='disjoint',model='linear',class_pair_protocol='strict',job_id='strict_odd')
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=10,stages=1,rounds_per_stage=1,
+        scenario='disjoint',class_pair_protocol='strict',job_id='strict_odd')
     with pytest.raises(ValueError,match='insufficient distinct class'):
         run_experiment(cfg,str(tmp_path),verbose=False)

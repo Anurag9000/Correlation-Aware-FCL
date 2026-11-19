@@ -17,9 +17,10 @@ class RunConfig:
     aggregator: str = "fedavg"
     scenario: str = "disjoint"
     stages: int = 2
+    micro_batch_size: int = 16  # physical batch; effective SGD step remains batch_size=512
     memory_per_class: int = 20
     lr: float = 0.03
-    model: str = "smallcnn"
+    model: str = "deit_tiny_patch16_224.fb_in1k"
     seed: int = 0
     full_sync: bool = False
     relation: str = "natural"
@@ -108,6 +109,7 @@ class RunConfig:
     def validate(self):
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
         assert self.batch_size == 512 or self.dataset == "synthetic", "CIFAR run batch size must remain 512"
+        assert 1 <= self.micro_batch_size <= self.batch_size, "Invalid physical microbatch size"
         assert self.num_clients >= 2
         assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
         assert self.stream_overlap_kind in {'none','intra_same_round','intra_cross_round','inter_same_round','inter_cross_round','combined'}
@@ -132,7 +134,10 @@ class RunConfig:
         assert self.method in {"si", "sgd", "replay", "agem", "gem", "ewc", "er_ace", "der", "derpp", "mas", "lwf"}
         assert self.aggregator in {"class_balanced", "inverse_participation", "conflict_aware", "retention_aware", "conflict_projection", "fedavg", "uniform", "fedadam", "fedavgm"}
         assert self.scenario in {"stationary", "gradual_drift", "shifted_recurrence", "task_incremental", "disjoint", "iid", "overlap", "related", "recurrence", "asynchronous", "mixed", "domain", "non_iid"}
-        assert self.model in {"smallcnn", "linear", "mlp"}
+        if self.dataset == 'synthetic':
+            assert self.model in {'test_linear','test_mlp','test_smallcnn','deit_tiny_patch16_224.fb_in1k'}
+        else:
+            assert self.model == 'deit_tiny_patch16_224.fb_in1k', 'Research requires paper-standard DeiT-Tiny/16'
         assert self.memory_per_class >= 0
         assert self.causal_max_clients >= 1 and self.checkpoint_every >= 0
         assert self.participation_schedule in {"feedback", "stage", "constant", "increasing", "decreasing", "alternating"}

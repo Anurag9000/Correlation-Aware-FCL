@@ -27,7 +27,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_communication_interval_v3'
+PROTOCOL_VERSION = 'cifar100_deit_tiny_v4'
 
 
 def anchored_upload(client, global_state):
@@ -257,7 +257,17 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'duplicated_training_samples':scenario.duplicate_sample_ids,
                     'unused_training_samples':scenario.unused_sample_ids},run_dir/'scenario.pt')
         clients={cid:LocalState(cid) for cid in range(cfg.num_clients)}
-        model=create_model(cfg.model,bank.num_classes).to(device)
+        model=create_model(cfg.model,bank.num_classes,allow_test_model=(cfg.dataset=='synthetic')).to(device)
+        backbone_description=getattr(model,'backbone_description',{'test_only':True})
+        if cfg.dataset=='cifar100':
+            # Every job in a sequential research campaign must start from
+            # the identical published pretrained feature extractor.
+            reference=Path(output_root)/'deit_tiny_pretrained_reference.json'
+            if reference.exists():
+                if json.loads(reference.read_text())!=backbone_description:
+                    raise RuntimeError('Pretrained ViT reference differs from prior jobs; use a new experiment root')
+            else:
+                atomic_json(reference,backbone_description)
         global_state=copy_cpu_state(model)
         # Initial model is shared at round zero. Subsequent downloads require
         # explicit communication, except deliberate full-sync ablations.
@@ -671,7 +681,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         save_checkpoint(run_dir/'model_final.pt',global_state,cfg,version,clients,full_state=True)
         atomic_json(run_dir/'summary.json',{'job_id':job,'dataset':cfg.dataset,
                     'fork_source':str(fork_from_checkpoint) if fork_from_checkpoint else None,
-                    'device':str(device),'rounds':total_rounds,'final_metrics':history[-1],
+                    'device':str(device),'rounds':total_rounds,'backbone':backbone_description,'final_metrics':history[-1],
                     'model_final':str(run_dir/'model_final.pt')})
         atomic_json(status_file,{'status':'completed','protocol_version':PROTOCOL_VERSION,
                                 'finished_at':time.time(),

@@ -1,8 +1,8 @@
-# CIFAR-100-only continuous-local-task experiment catalogue (v3)
+# CIFAR-100-only continuous-local-task experiment catalogue (v4, uniform DeiT-Tiny/16)
 
 ## Source of truth
 
-`src/cafcl/full_matrix.py` lazily generates the active experiment ledger. Every job has a unique configuration fingerprint, a deterministic ID beginning `ST_`, batch size 512, strictly active-label task training, and the same communication-v3 simulator. **Old CIFAR-10, CIFAR-100/20, and stage-based 425-job/69,722-job suite registrations are retired.**
+`src/cafcl/full_matrix.py` lazily generates the active experiment ledger. Every job has a unique configuration fingerprint, a deterministic ID beginning `ST_`, batch size 512, strictly active-label task training, and the same communication-v4 simulator and pretrained DeiT-Tiny/16 backbone. **Old CIFAR-10, CIFAR-100/20, and stage-based 425-job/69,722-job suite registrations are retired.**
 
 ## Exact registered runs
 
@@ -37,7 +37,7 @@ Every one of the 99 local-learner/server-aggregator pairings appears in the six 
 
 `11 × 9 × 6 × 3 × 3 = 5,346` common-condition jobs.
 
-**No CIFAR-10 job configurations exist in this active registry.** The `--dataset` parser accepts only `cifar100`; `cafcl suite` delegates to this registry. The prior `cafcl` old-stage job planner and its entrypoints have been removed.
+**Every experiment uses the same ImageNet-1K pretrained DeiT-Tiny/16 backbone and 224×224 preprocessing, with a new canonical CIFAR-100 classifier. See `docs/VIT_BACKBONE.md`. No CIFAR-10 job configurations exist in this active registry.** The `--dataset` parser accepts only `cifar100`; `cafcl suite` delegates to this registry. The prior `cafcl` old-stage job planner and its entrypoints have been removed.
 
 ### Defaults and independent knobs
 
@@ -54,7 +54,7 @@ pytest -q
 python scripts/validate_factorial_plans.py
 bash scripts/run_all_cifar100.sh --plan-only
 bash scripts/run_all_cifar100.sh --suite balanced --seeds 0 --plan-only
-bash scripts/run_all_cifar100.sh --plan-only --export-plan outputs/cifar100_stream_v3.jsonl.gz
+bash scripts/run_all_cifar100.sh --plan-only --export-plan outputs/cifar100_deit_v4.jsonl.gz
 ```
 
 ### Launch only after GPU pilot

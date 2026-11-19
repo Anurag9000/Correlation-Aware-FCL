@@ -27,7 +27,7 @@ def test_only_cifar100_stream_registry_active():
 
 def test_synthetic_data_complete_unique_allocations():
     bank=get_data_bank('synthetic','unused')
-    cfg=RunConfig(dataset='synthetic',num_clients=4,stages=2,rounds_per_stage=1,scenario='recurrence')
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=4,stages=2,rounds_per_stage=1,scenario='recurrence')
     scenario=compile_scenario(bank,cfg)
     all_ids=[i for a in scenario.arrivals for i in a.indices]
     assert sorted(all_ids)==list(range(len(bank.train)))
@@ -73,8 +73,8 @@ def test_fedavg_weights_and_uniform():
 
 
 def test_post_sync_and_all_observed_inactive(tmp_path):
-    cfg=RunConfig(dataset='synthetic',num_clients=3,stages=2,rounds_per_stage=1,
-                  participation=1/3,model='linear',batch_size=512,job_id='test_sync')
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=3,stages=2,rounds_per_stage=1,
+                  participation=1/3,batch_size=512,job_id='test_sync')
     result=run_experiment(cfg,str(tmp_path/'runs'),str(tmp_path/'data'),verbose=False)
     assert result['status']=='completed'
     rd=tmp_path/'runs'/'test_sync'
@@ -103,7 +103,7 @@ def test_client_history_gem_only_previous_stages():
 
 def test_overlapping_client_holders_changes_with_control():
     bank=get_data_bank('synthetic','unused')
-    base=RunConfig(dataset='synthetic',num_clients=5,stages=2,rounds_per_stage=1,
+    base=RunConfig(dataset='synthetic',model='test_linear',num_clients=5,stages=2,rounds_per_stage=1,
                    scenario='overlap',overlap=0.)
     x=compile_scenario(bank,base)
     y=compile_scenario(bank,replace(base,overlap=1.))
@@ -113,7 +113,7 @@ def test_overlapping_client_holders_changes_with_control():
 
 def test_dirichlet_allocator_is_not_uniform():
     bank=get_data_bank('synthetic','unused')
-    cfg=RunConfig(dataset='synthetic',num_clients=5,stages=2,rounds_per_stage=1,
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=5,stages=2,rounds_per_stage=1,
                   scenario='non_iid',dirichlet_alpha=.01)
     x=compile_scenario(bank,cfg)
     counts=[len(a.indices) for a in x.arrivals if a.labels==(0,)]
@@ -123,7 +123,7 @@ def test_dirichlet_allocator_is_not_uniform():
 
 def test_recurrence_policy_same_vs_different_client():
     bank=get_data_bank('synthetic','unused')
-    base=RunConfig(dataset='synthetic',num_clients=5,stages=2,rounds_per_stage=1,
+    base=RunConfig(dataset='synthetic',model='test_linear',num_clients=5,stages=2,rounds_per_stage=1,
                    scenario='recurrence')
     same=compile_scenario(bank,replace(base,recurrence_client_policy='same'))
     diff=compile_scenario(bank,replace(base,recurrence_client_policy='different'))
@@ -134,8 +134,8 @@ def test_recurrence_policy_same_vs_different_client():
 
 def test_gem_full_simulation(tmp_path):
     # First stage creates local memory; second stage can activate GEM constraints.
-    cfg=RunConfig(dataset='synthetic',num_clients=2,stages=2,rounds_per_stage=1,
-                  participation=1.,model='linear',batch_size=512,method='gem',
+    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,stages=2,rounds_per_stage=1,
+                  participation=1.,batch_size=512,method='gem',
                   job_id='gem_integration')
     run_experiment(cfg,str(tmp_path),str(tmp_path/'data'),verbose=False)
     h=json.loads((tmp_path/'gem_integration'/'metrics.json').read_text())

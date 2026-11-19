@@ -169,11 +169,16 @@ def _example_loader(dataset,indices,batch_size,seed,shuffle=True):
 
 def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,active_pair_classes=None):
     model.zero_grad(set_to_none=True)
-    batch=next(iter(_example_loader(dataset,indices,batch_size,seed)))
-    x,y=batch
-    x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
-    loss=F.cross_entropy(model(x),y)
-    loss.backward()
+    # Logical reference gradient: weighted accumulation over bounded physical
+    # batches, without materializing 512 images/ViT activations on the GPU.
+    total=min(len(indices),batch_size)
+    micro=min(batch_size,16)  # same objective, bounded ViT reference memory
+    # Sample uniformly across all historical examples, not just the prefix.
+    order=torch.randperm(len(indices),generator=torch.Generator().manual_seed(seed))[:total]
+    selected=[indices[int(i)] for i in order]
+    for x,y in _example_loader(dataset,selected,micro,seed,shuffle=False):
+        x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
+        (F.cross_entropy(model(x),y)*(len(y)/total)).backward()
     if active_pair_classes is not None:
         from .class_indexed import freeze_other_class_rows
         freeze_other_class_rows(model,active_pair_classes)
@@ -265,7 +270,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         was_train=model.training
         model.eval()
         with torch.no_grad():
-            subset=oldmemory[:min(64,len(oldmemory))]
+            subset=oldmemory[:min(cfg.micro_batch_size,len(oldmemory))]
             batch=torch.stack([training_data[i][0] for i in subset]).to(device)
             labels=torch.tensor([bank.train.targets[i] for i in subset],device=device)
             value=float(F.cross_entropy(model(batch),labels).item())
@@ -282,89 +287,93 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
             batch_indices=indices
         for x,y in _example_loader(training_data,batch_indices,cfg.batch_size,
                                    cfg.seed+round_id*100_003+client.client_id*127+epoch):
-            x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
             optimizer.zero_grad(set_to_none=True)
-            logits=model(x)
-            if active_pair_classes is not None:
-                loss=canonical_active_loss(logits,y,active_pair_classes)
-            elif cfg.learning_setting=='task_il':
-                if task_classes is None or not set(y.tolist()).issubset(set(task_classes)):
-                    raise RuntimeError('Task-IL labels do not match the known local task')
-                task_mask=torch.ones(logits.shape[1],dtype=torch.bool,device=device)
-                task_mask[torch.as_tensor(task_classes,dtype=torch.long,device=device)]=False
-                logits=logits.masked_fill(task_mask.unsqueeze(0),-1e9)
-            if active_pair_classes is None and cfg.method=='er_ace':
-                # ER-ACE stream loss: mask historical classes absent from the
-                # *current* minibatch, but retain future/unseen output columns.
-                mask=torch.zeros(logits.shape[1],dtype=torch.bool,device=device)
-                current_labels=set(int(v) for v in y.unique().tolist())
-                for past_cls in client.observed_classes:
-                    if past_cls not in current_labels and past_cls < logits.shape[1]:
-                        mask[past_cls]=True
-                stream_logits=logits.masked_fill(mask.unsqueeze(0),-1e9)
-                loss=F.cross_entropy(stream_logits,y)
-            elif active_pair_classes is None:
-                loss=F.cross_entropy(logits,y)
-            if cfg.method=='replay' and oldmemory and active_pair_classes is not None:
-                ref_count=min(len(oldmemory),max(1,int(round(len(y)*cfg.replay_ratio))))
-                chosen=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
-                rx,ry=next(iter(_example_loader(training_data,chosen,ref_count,
-                    cfg.seed+round_id+client.client_id,shuffle=False)))
-                loss=loss+F.cross_entropy(model(rx.to(device)),ry.to(device))
-            if cfg.method in {'er_ace','der','derpp'} and oldmemory:
-                ref_count=min(len(oldmemory),max(1,int(round(len(y)*cfg.replay_ratio))))
-                chosen=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
-                rx,ry=next(iter(_example_loader(training_data,chosen,ref_count,
-                                               cfg.seed+round_id+client.client_id,shuffle=False)))
-                rx,ry=rx.to(device,non_blocking=True),ry.to(device,non_blocking=True)
-                replay_logits=model(rx)
-                if cfg.method=='er_ace':
-                    loss=loss+cfg.der_beta*F.cross_entropy(replay_logits,ry)
-                else:
-                    missing=[int(i) for i in chosen if int(i) not in client.memory_logits]
-                    if missing:
-                        raise RuntimeError(f'DER memory logits missing for {missing[:3]}')
-                    old_logits=torch.stack([client.memory_logits[int(i)] for i in chosen]).to(device)
-                    if old_logits.shape!=replay_logits.shape:
-                        raise RuntimeError('DER logits incompatible with classifier schema')
-                    loss=loss+cfg.der_alpha*F.mse_loss(replay_logits,old_logits)
-                    if cfg.method=='derpp':
+            logical_size=len(y)
+            macro_loss=0.
+            for x,y in zip(x.split(cfg.micro_batch_size), y.split(cfg.micro_batch_size)):
+                x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
+                logits=model(x)
+                if active_pair_classes is not None:
+                    loss=canonical_active_loss(logits,y,active_pair_classes)
+                elif cfg.learning_setting=='task_il':
+                    if task_classes is None or not set(y.tolist()).issubset(set(task_classes)):
+                        raise RuntimeError('Task-IL labels do not match the known local task')
+                    task_mask=torch.ones(logits.shape[1],dtype=torch.bool,device=device)
+                    task_mask[torch.as_tensor(task_classes,dtype=torch.long,device=device)]=False
+                    logits=logits.masked_fill(task_mask.unsqueeze(0),-1e9)
+                if active_pair_classes is None and cfg.method=='er_ace':
+                    # ER-ACE stream loss: mask historical classes absent from the
+                    # *current* minibatch, but retain future/unseen output columns.
+                    mask=torch.zeros(logits.shape[1],dtype=torch.bool,device=device)
+                    current_labels=set(int(v) for v in y.unique().tolist())
+                    for past_cls in client.observed_classes:
+                        if past_cls not in current_labels and past_cls < logits.shape[1]:
+                            mask[past_cls]=True
+                    stream_logits=logits.masked_fill(mask.unsqueeze(0),-1e9)
+                    loss=F.cross_entropy(stream_logits,y)
+                elif active_pair_classes is None:
+                    loss=F.cross_entropy(logits,y)
+                if cfg.method=='replay' and oldmemory and active_pair_classes is not None:
+                    ref_count=min(len(oldmemory),cfg.micro_batch_size,max(1,int(round(len(y)*cfg.replay_ratio))))
+                    chosen=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
+                    rx,ry=next(iter(_example_loader(training_data,chosen,ref_count,
+                        cfg.seed+round_id+client.client_id,shuffle=False)))
+                    loss=loss+F.cross_entropy(model(rx.to(device)),ry.to(device))
+                if cfg.method in {'er_ace','der','derpp'} and oldmemory:
+                    ref_count=min(len(oldmemory),cfg.micro_batch_size,max(1,int(round(len(y)*cfg.replay_ratio))))
+                    chosen=rng.choice(oldmemory,size=ref_count,replace=False).tolist()
+                    rx,ry=next(iter(_example_loader(training_data,chosen,ref_count,
+                                                   cfg.seed+round_id+client.client_id,shuffle=False)))
+                    rx,ry=rx.to(device,non_blocking=True),ry.to(device,non_blocking=True)
+                    replay_logits=model(rx)
+                    if cfg.method=='er_ace':
                         loss=loss+cfg.der_beta*F.cross_entropy(replay_logits,ry)
-            if cfg.method=='lwf' and teacher is not None:
-                with torch.no_grad():t_logits=teacher(x)
-                old_labels=sorted(c for c,s in client.first_seen_local_experience.items()
-                                  if s < client.local_experience)
-                if old_labels:
-                    ids=torch.tensor(old_labels,dtype=torch.long,device=device)
-                    temperature=2.0
-                    student=F.log_softmax(logits.index_select(1,ids)/temperature,dim=1)
-                    past=F.softmax(t_logits.index_select(1,ids)/temperature,dim=1)
-                    loss=loss+cfg.der_alpha*temperature**2*F.kl_div(student,past,reduction='batchmean')
-            if cfg.method=='si' and client.si_anchor is not None:
-                penalty=torch.zeros((),device=device)
-                for name,p in model.named_parameters():
-                    penalty=penalty+(client.si_omega[name].to(device)*
-                                     (p-client.si_anchor[name].to(device)).square()).sum()
-                loss=loss+.5*cfg.regularization_strength*penalty
-            if cfg.method=='mas' and client.mas_anchor is not None:
-                penalty=torch.zeros((),device=device)
-                for name,p in model.named_parameters():
-                    if name in client.mas_anchor:
-                        penalty=penalty+(client.mas_omega[name].to(device)*
-                                         (p-client.mas_anchor[name].to(device)).square()).sum()
-                loss=loss+.5*cfg.regularization_strength*penalty
-            if cfg.fedprox_mu>0:
-                proximal=sum((p-anchor[name]).square().sum() for name,p in model.named_parameters())
-                loss=loss+.5*cfg.fedprox_mu*proximal
-            if cfg.method=='ewc' and client.ewc_anchor is not None:
-                pen=torch.zeros((),device=device)
-                for name,p in model.named_parameters():
-                    if name in client.ewc_anchor:
-                        ewc_reference=client.ewc_anchor[name].to(device)
-                        fisher=client.ewc_fisher[name].to(device)
-                        pen=pen+(fisher*(p-ewc_reference).square()).sum()
-                loss=loss+.5*cfg.regularization_strength*pen
-            loss.backward()
+                    else:
+                        missing=[int(i) for i in chosen if int(i) not in client.memory_logits]
+                        if missing:
+                            raise RuntimeError(f'DER memory logits missing for {missing[:3]}')
+                        old_logits=torch.stack([client.memory_logits[int(i)] for i in chosen]).to(device)
+                        if old_logits.shape!=replay_logits.shape:
+                            raise RuntimeError('DER logits incompatible with classifier schema')
+                        loss=loss+cfg.der_alpha*F.mse_loss(replay_logits,old_logits)
+                        if cfg.method=='derpp':
+                            loss=loss+cfg.der_beta*F.cross_entropy(replay_logits,ry)
+                if cfg.method=='lwf' and teacher is not None:
+                    with torch.no_grad():t_logits=teacher(x)
+                    old_labels=sorted(c for c,s in client.first_seen_local_experience.items()
+                                      if s < client.local_experience)
+                    if old_labels:
+                        ids=torch.tensor(old_labels,dtype=torch.long,device=device)
+                        temperature=2.0
+                        student=F.log_softmax(logits.index_select(1,ids)/temperature,dim=1)
+                        past=F.softmax(t_logits.index_select(1,ids)/temperature,dim=1)
+                        loss=loss+cfg.der_alpha*temperature**2*F.kl_div(student,past,reduction='batchmean')
+                if cfg.method=='si' and client.si_anchor is not None:
+                    penalty=torch.zeros((),device=device)
+                    for name,p in model.named_parameters():
+                        penalty=penalty+(client.si_omega[name].to(device)*
+                                         (p-client.si_anchor[name].to(device)).square()).sum()
+                    loss=loss+.5*cfg.regularization_strength*penalty
+                if cfg.method=='mas' and client.mas_anchor is not None:
+                    penalty=torch.zeros((),device=device)
+                    for name,p in model.named_parameters():
+                        if name in client.mas_anchor:
+                            penalty=penalty+(client.mas_omega[name].to(device)*
+                                             (p-client.mas_anchor[name].to(device)).square()).sum()
+                    loss=loss+.5*cfg.regularization_strength*penalty
+                if cfg.fedprox_mu>0:
+                    proximal=sum((p-anchor[name]).square().sum() for name,p in model.named_parameters())
+                    loss=loss+.5*cfg.fedprox_mu*proximal
+                if cfg.method=='ewc' and client.ewc_anchor is not None:
+                    pen=torch.zeros((),device=device)
+                    for name,p in model.named_parameters():
+                        if name in client.ewc_anchor:
+                            ewc_reference=client.ewc_anchor[name].to(device)
+                            fisher=client.ewc_fisher[name].to(device)
+                            pen=pen+(fisher*(p-ewc_reference).square()).sum()
+                    loss=loss+.5*cfg.regularization_strength*pen
+                macro_loss+=float(loss.detach().item())*(len(y)/logical_size)
+                (loss*(len(y)/logical_size)).backward()
             if cfg.method in {'gem','agem'} and oldmemory:
                 if active_pair_classes is not None:
                     freeze_other_class_rows(model,active_pair_classes)
@@ -416,12 +425,12 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     client.si_path[n]+=-applied_grad[n]*displacement
                     client.si_displacement[n]+=displacement
             step_count+=1
-            loss_total+=float(loss.detach().item())
+            loss_total+=macro_loss
     # Diagonal Fisher approximation for EWC, consolidated at each stage transition.
     if cfg.method=='ewc' and (experience_end or (round_id+1)%cfg.rounds_per_stage==0):
         if client.ewc_anchor is None or client.local_experience > client.ewc_stage:
             # Use a bounded local batch; this is an approximation, recorded in diagnostics.
-            x,y=next(iter(_example_loader(training_data,indices,min(cfg.batch_size,128),
+            x,y=next(iter(_example_loader(training_data,indices,min(cfg.micro_batch_size,128),
                                           cfg.seed+round_id+client.client_id)))
             optimizer.zero_grad(set_to_none=True)
             F.cross_entropy(model(x.to(device)),y.to(device)).backward()
@@ -431,7 +440,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     if (cfg.method=='mas' and (experience_end or (round_id+1)%cfg.rounds_per_stage==0)
             and client.local_experience > client.mas_stage):
         # MAS surrogate importance uses output sensitivity, independent of labels.
-        xm,_=next(iter(_example_loader(training_data,indices,min(cfg.batch_size,128),
+        xm,_=next(iter(_example_loader(training_data,indices,min(cfg.micro_batch_size,128),
                                       cfg.seed+round_id+client.client_id)))
         model.zero_grad(set_to_none=True)
         squared_output=model(xm.to(device)).square().sum(dim=1).mean()
@@ -455,8 +464,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         if unseen:
             model.eval()
             with torch.no_grad():
-                for batch_start in range(0,len(unseen),cfg.batch_size):
-                    batch_ids=unseen[batch_start:batch_start+cfg.batch_size]
+                for batch_start in range(0,len(unseen),cfg.micro_batch_size):
+                    batch_ids=unseen[batch_start:batch_start+cfg.micro_batch_size]
                     x=torch.stack([training_data[i][0] for i in batch_ids]).to(device)
                     logits=model(x).detach().cpu()
                     for i,z in zip(batch_ids,logits):

@@ -31,6 +31,7 @@ def base(seed=0):
         learning_setting='class_il',classes_per_local_task=2,local_tasks_per_round=2,
         stream_overlap_kind='none',stream_overlap_fraction=0,
         num_clients=10,participation=.8,selector='random',seed=seed,
+        model='deit_tiny_patch16_224.fb_in1k',micro_batch_size=16,
         stages=1,rounds_per_stage=1,batch_size=512)
 
 
@@ -169,7 +170,7 @@ def main(argv=None):
     if len(seeds)!=len(set(seeds)):p.error('Seed values must be distinct')
     families=['balanced'] if args.suite=='balanced' else args.families
     plan=manifest(seeds=seeds,families=families)
-    root=Path(args.output_dir)/'cifar100_stream_v3';root.mkdir(parents=True,exist_ok=True)
+    root=Path(args.output_dir)/'cifar100_deit_v4';root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'stream_manifest.json',plan)
     print(json.dumps(plan,indent=2),flush=True)
     if args.export_plan:

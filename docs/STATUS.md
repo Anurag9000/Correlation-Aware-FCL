@@ -24,4 +24,9 @@
 
 ## Regeneration
 
-Run `python scripts/validate_factorial_plans.py` to validate the source-generated plan and the design's SHA256. The production runner writes `results/cifar100_stream_v3/stream_manifest.json`, independent per-job artifacts, durable full-state checkpoints, and protocol-specific success markers. Never count checkpoints from earlier protocols as completed new jobs.
+Run `python scripts/validate_factorial_plans.py` to validate the source-generated plan and the design's SHA256. The production runner writes `results/cifar100_deit_v4/stream_manifest.json`, independent per-job artifacts, durable full-state checkpoints, and protocol-specific success markers. Never count checkpoints from earlier protocols as completed new jobs.
+
+
+## ViT-only production migration (v4)
+
+The active CIFAR-100 experiment configurations are locked to `deit_tiny_patch16_224.fb_in1k` (DeiT-Tiny/16; 224×224; ImageNet-1K pretrained) using `timm==1.0.31`. Real pretrained weights and actual CIFAR-100 GPU accuracy have **not** been downloaded/verified within the offline development environment; integration tests use a clearly named tiny stub. The production factory fails on missing weights instead of substituting a random model or CNN. All local CL methods and nine server methods share this model contract. A physical batch of 16 accumulates gradients to an effective 512 before optimizer/GEM/A-GEM step. Train-only and test preprocessing is bicubic resize to 224 and ImageNet normalize; legacy CIFAR32 results are not comparable. See `docs/VIT_BACKBONE.md`.

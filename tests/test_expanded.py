@@ -17,8 +17,8 @@ from cafcl.causal import aggregation_subset_report
 
 
 def conf(**kwargs):
-    return replace(RunConfig(dataset='synthetic',num_clients=5,stages=2,
-                             rounds_per_stage=2,model='linear'),**kwargs)
+    return replace(RunConfig(dataset='synthetic',model='test_linear',num_clients=5,stages=2,
+                             rounds_per_stage=2),**kwargs)
 
 
 def test_manual_participation_exact_budget():
@@ -124,7 +124,7 @@ def test_conflict_projection_and_retention_aggregate():
 def test_subset_counterfactual_evaluates_all_combinations():
     bank=DataBank(TinySynthetic(),TinySynthetic(False),10,{i:i//2 for i in range(10)})
     from cafcl.models import create_model,copy_cpu_state
-    model=create_model('linear',10)
+    model=create_model('test_linear',10,allow_test_model=True)
     base=copy_cpu_state(model)
     ups=[]
     for cid in range(3):
