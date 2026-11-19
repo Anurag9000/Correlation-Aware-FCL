@@ -55,6 +55,18 @@ def lagged_binary_arrival_correlation(scenario,class_a,class_b,lag=0):
     return float(np.corrcoef(a,b)[0,1])
 
 
+def _physical64_inputs(images,device):
+    """Forward 64 training inputs; padding is excluded from statistics."""
+    if not images:raise ValueError('No eligible TRAIN images')
+    x=torch.stack(images).to(device)
+    valid=len(x)
+    if valid>64:raise ValueError('Diagnostic sampling exceeds physical batch 64')
+    if valid<64:
+        repeat=torch.arange(64-valid,device=device)%valid
+        x=torch.cat((x,x[repeat]),dim=0)
+    return x,valid
+
+
 def feature_class_means(model, bank, class_ids, device, samples_per_class=32):
     """Compute means from training samples with deterministic sample selection."""
     if samples_per_class<=0:raise ValueError('samples_per_class must be positive')
@@ -64,11 +76,11 @@ def feature_class_means(model, bank, class_ids, device, samples_per_class=32):
         for cls in sorted(set(map(int,class_ids))):
             ids=[i for i,c in enumerate(bank.train.targets) if int(c)==cls][:samples_per_class]
             if not ids:continue
-            x=torch.stack([bank.train[i][0] for i in ids]).to(device)
+            x,valid=_physical64_inputs([bank.train[i][0] for i in ids],device)
             if hasattr(model,'features'):
-                features=model.features(x)
+                features=model.features(x)[:valid]
             else:
-                features=model(x)
+                features=model(x)[:valid]
             means[cls]=features.float().mean(0).detach().cpu()
     return means
 
@@ -96,10 +108,10 @@ def diagnostic_gradient_relationships(model,bank,class_ids,device,samples_per_cl
     for cls in sorted(set(map(int,class_ids))):
         ids=[i for i,y in enumerate(bank.train.targets) if int(y)==cls][:samples_per_class]
         if not ids:continue
-        x=torch.stack([bank.train[i][0] for i in ids]).to(device)
+        x,valid=_physical64_inputs([bank.train[i][0] for i in ids],device)
         y=torch.tensor([cls]*len(ids),device=device)
         model.zero_grad(set_to_none=True)
-        F.cross_entropy(model(x),y).backward()
+        F.cross_entropy(model(x)[:valid],y).backward()
         vectors[cls]=torch.cat([(p.grad.detach() if p.grad is not None
                                 else torch.zeros_like(p)).reshape(-1).cpu()
                                for p in params])
@@ -124,10 +136,10 @@ def class_gradient_representations(model,bank,class_ids,device,*,allowed_indices
         ids=[i for i,y in enumerate(bank.train.targets)
              if i in allowed and int(y)==cls][:samples_per_class]
         if not ids:continue
-        x=torch.stack([bank.train[i][0] for i in ids]).to(device)
+        x,valid=_physical64_inputs([bank.train[i][0] for i in ids],device)
         y=torch.tensor([cls]*len(ids),device=device)
         model.zero_grad(set_to_none=True)
-        F.cross_entropy(model(x),y).backward()
+        F.cross_entropy(model(x)[:valid],y).backward()
         vectors[cls]=torch.cat([(p.grad.detach().reshape(-1).cpu() if p.grad is not None
                                   else torch.zeros_like(p).reshape(-1).cpu()) for p in params])
     model.zero_grad(set_to_none=True)
@@ -146,8 +158,8 @@ def arrived_feature_means(model,bank,class_ids,device,*,allowed_indices,samples_
             ids=[i for i,y in enumerate(bank.train.targets)
                  if i in allowed and int(y)==cls][:samples_per_class]
             if not ids:continue
-            x=torch.stack([bank.train[i][0] for i in ids]).to(device)
-            embeddings=model.features(x) if hasattr(model,'features') else model(x)
+            x,valid=_physical64_inputs([bank.train[i][0] for i in ids],device)
+            embeddings=(model.features(x) if hasattr(model,'features') else model(x))[:valid]
             means[cls]=embeddings.detach().float().mean(dim=0).cpu()
     model.train(previous_training)
     return means
