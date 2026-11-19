@@ -92,8 +92,8 @@ def test_task_oracle_masks_other_task_logit():
         def forward(self,x):
             return torch.tensor([[3.,2.,4.,0.],[5.,0.,3.,2.]],device=x.device)[:len(x)]
     bank=DataBank(Tiny(),Tiny(),4,{})
-    ordinary,_=evaluate(Fixed(),bank,{0,2},batch_size=1024,device='cpu')
-    masked,_=evaluate(Fixed(),bank,{0,2},batch_size=1024,device='cpu',
+    ordinary,_=evaluate(Fixed(),bank,{0,2},batch_size=64,device='cpu')
+    masked,_=evaluate(Fixed(),bank,{0,2},batch_size=64,device='cpu',
                       task_class_groups=[[0,1],[2,3]])
     assert masked['accuracy']>ordinary['accuracy']
     assert masked['task_id_at_inference'] is True

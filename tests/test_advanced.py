@@ -17,7 +17,7 @@ from cafcl.models import create_model
 @pytest.mark.parametrize('method',['er_ace','der','derpp','mas','lwf','replay','ewc'])
 def test_extended_local_methods_execute(tmp_path,method):
     cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,stages=2,rounds_per_stage=1,
-                  participation=1.,batch_size=1024,method=method,
+                  participation=1.,batch_size=64,method=method,
                   job_id=f'local_{method}')
     run_experiment(cfg,str(tmp_path),verbose=False)
     h=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
