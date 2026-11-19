@@ -62,3 +62,8 @@ nohup bash scripts/run_primary_probe_cifar100.sh \
 \`\`\`
 
 The \`0.10\` value gives **45 TRAIN images/class** in the repository's 450-example/class split. To require **50 retained images/class** (the previously requested 10% of the original unsplit CIFAR-100 500), use \`--replay-fraction 0.11111111\` explicitly. This retains the split and does not touch validation data.
+
+
+## Frozen registry counts and scientific evidence
+
+The v13 full-factorial registry, audited by the GitHub Actions CPU runner, contains **32,133 feasible jobs for ViT and 32,133 for CNN**. Exactly 53,805 historical candidate configurations per backbone were checked; 21,672 are rejected. Of those, **8,910** deliberately requested a now-retired task-length protocol and are not executable; remaining rejections cover infeasible overlaps, unsupported exact-duration offline cohorts, and other non-identifiable ablations. All **99/99** local-learner × server-algorithm combinations are still represented. The reference manifests and SHA-256 checksums are frozen in `configs/designs/stream_v13_first4_then2.json`.

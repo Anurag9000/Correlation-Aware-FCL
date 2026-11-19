@@ -69,3 +69,6 @@ bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0
 
 
 **v13 factorial geometry change:** Only 2 classes per local task and 2 local tasks at round 0 are supported; later rounds always run 1 local task. Prior task-length ablation candidates requesting other dimensions are pruned. The active stream manifest, feasible-count and checksum live in a separately frozen v13 design (the v6 ledger remains historical). All 11 client modes × all nine server algorithms share this single schedule. See `FIRST4_THEN2_FULL_CL_V13.md`.
+
+
+**v13 frozen counts (superseding the older v6/v12 numbers in historical sections):** 53,805 candidates; 32,133 valid jobs per backbone; 21,672 pruned. Nine training intervals for the 5-client pilot, with two initial local tasks followed by one per round. 99/99 client-method/server-method combinations retained. See `configs/designs/stream_v13_first4_then2.json` for exact family counts/checksums.

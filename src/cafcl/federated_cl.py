@@ -216,10 +216,20 @@ class FederatedCLState:
                 raise RuntimeError(f'Client missing server replay evidence for class {cls}')
         if set(client.received_example_payloads)!=set(self.exemplar_payloads):
             raise RuntimeError('Client missing raw exemplar payloads')
+        for idx,(raw,label) in self.exemplar_payloads.items():
+            x,y=client.received_example_payloads[idx]
+            if int(y)!=int(label) or not torch.equal(x,raw):
+                raise RuntimeError(f'Client received corrupt exemplar bytes for sample {idx}')
         if set(client.received_memory_logits)!=set(self.memory_logits):
             raise RuntimeError('Client missing historical DER trajectory logits')
+        for idx,logits in self.memory_logits.items():
+            if not torch.equal(client.received_memory_logits[idx],logits):
+                raise RuntimeError(f'Client received wrong DER target for sample {idx}')
         if set(client.received_gradient_supports)!=set(self.memory):
             raise RuntimeError('Client missing GEM/A-GEM historical gradient supports')
+        for cls,ids in self.memory.items():
+            if tuple(client.received_gradient_supports[cls])!=tuple(ids):
+                raise RuntimeError(f'Client GEM/A-GEM historical support mismatch: {cls}')
         if set(client.received_importance)!=set(self.importance):
             raise RuntimeError('Client missing some EWC/SI/MAS importance methods')
         for kind,table in self.importance.items():
@@ -235,6 +245,9 @@ class FederatedCLState:
         if self.teacher is not None:
             if client.lwf_teacher is None or set(client.lwf_teacher)!=set(self.teacher):
                 raise RuntimeError('Client missing complete global teacher')
+            for name,param in self.teacher.items():
+                if not torch.equal(client.lwf_teacher[name],param):
+                    raise RuntimeError(f'Client LwF teacher mismatch: {name}')
         if client.received_server_class_sample_exposure!=self.class_sample_exposure:
             raise RuntimeError('Client historical class exposure table is incomplete')
         if not set(self.integrated_classes).issubset(client.observed_classes):

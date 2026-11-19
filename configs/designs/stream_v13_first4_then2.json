@@ -1,0 +1,128 @@
+{
+  "feasibility_audit": {
+    "accepted_by_family": {
+      "balanced": 5346,
+      "class_imbalance": 891,
+      "client_count": 594,
+      "client_quantity": 594,
+      "distillation": 243,
+      "fedprox": 891,
+      "gem_grouping": 54,
+      "local_optimization": 3267,
+      "memory": 648,
+      "offline_duration": 8118,
+      "overlap_strength": 2475,
+      "raw_sample_overlap": 1188,
+      "recurrent_rounds": 1782,
+      "regularization": 243,
+      "replay_beta": 162,
+      "replay_ratio": 324,
+      "selection": 4158,
+      "semantic_order": 594,
+      "server_optimization": 264,
+      "terminal_flush": 297
+    },
+    "accepted_jobs": 32133,
+    "cached_stream_structures": 276,
+    "examples": {
+      "memory:lwf-memory-capacity-unused": "ST_memory_15dba449b7422f8dbeb0",
+      "offline_duration:truncated-or-extended-offline-duration": "ST_offline_duration_f65af10f68f5d5e6bb46",
+      "overlap_strength:Stream scheduler made no progress": "ST_overlap_strength_ea9958b772553db261fc",
+      "overlap_strength:combined-does-not-realize-all-four-overlap-geometries": "ST_overlap_strength_6411e01cdc4a7918dba9",
+      "regularization:lwf-regularization-strength-unused": "ST_regularization_503c3ac1e301a4200ce5",
+      "selection:overlap-selector-has-no-overlap-signal": "ST_selection_2d16f4071e2dcc4bba20",
+      "selection:recurrence-selector-has-no-recurrence-signal": "ST_selection_d223da48ad24cd6f8411",
+      "selection:selection-policy-exact-alias": "ST_selection_ae96f593a55794e3ae75",
+      "selection:selection-policy-inert-at-full-participation": "ST_selection_270c54445644985d7f06",
+      "task_length:retired-variable-task-length-protocol": "ST_task_length_2f765b26f02e484ad24c"
+    },
+    "input_jobs": 53805,
+    "rejected_by_family_reason": {
+      "memory:lwf-memory-capacity-unused": 108,
+      "offline_duration:truncated-or-extended-offline-duration": 5544,
+      "overlap_strength:Stream scheduler made no progress": 297,
+      "overlap_strength:combined-does-not-realize-all-four-overlap-geometries": 198,
+      "regularization:lwf-regularization-strength-unused": 81,
+      "selection:overlap-selector-has-no-overlap-signal": 594,
+      "selection:recurrence-selector-has-no-recurrence-signal": 594,
+      "selection:selection-policy-exact-alias": 2673,
+      "selection:selection-policy-inert-at-full-participation": 2673,
+      "task_length:retired-variable-task-length-protocol": 8910
+    },
+    "rejected_jobs": 21672
+  },
+  "models": {
+    "cnn": {
+      "backbone": "resnet18_cifar32",
+      "batch_size": 1024,
+      "dataset": "cifar100",
+      "families": {
+        "balanced": 5346,
+        "class_imbalance": 891,
+        "client_count": 594,
+        "client_quantity": 594,
+        "distillation": 243,
+        "fedprox": 891,
+        "gem_grouping": 54,
+        "local_optimization": 3267,
+        "memory": 648,
+        "offline_duration": 8118,
+        "overlap_strength": 2475,
+        "raw_sample_overlap": 1188,
+        "recurrent_rounds": 1782,
+        "regularization": 243,
+        "replay_beta": 162,
+        "replay_ratio": 324,
+        "selection": 4158,
+        "semantic_order": 594,
+        "server_optimization": 264,
+        "terminal_flush": 297
+      },
+      "job_count": 32133,
+      "method_aggregator_pairs": 99,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "sha256": "8ce0f90c209308fbac56600d578fdf06fc7b68d385aeb05023a9a9dc0392a63a",
+      "warning": "These are planned runs, not trained CIFAR-100 results."
+    },
+    "vit": {
+      "backbone": "vit_tiny_patch16_32",
+      "batch_size": 1024,
+      "dataset": "cifar100",
+      "families": {
+        "balanced": 5346,
+        "class_imbalance": 891,
+        "client_count": 594,
+        "client_quantity": 594,
+        "distillation": 243,
+        "fedprox": 891,
+        "gem_grouping": 54,
+        "local_optimization": 3267,
+        "memory": 648,
+        "offline_duration": 8118,
+        "overlap_strength": 2475,
+        "raw_sample_overlap": 1188,
+        "recurrent_rounds": 1782,
+        "regularization": 243,
+        "replay_beta": 162,
+        "replay_ratio": 324,
+        "selection": 4158,
+        "semantic_order": 594,
+        "server_optimization": 264,
+        "terminal_flush": 297
+      },
+      "job_count": 32133,
+      "method_aggregator_pairs": 99,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "sha256": "98dfc4bad2fff9507ff8f9c42c9ca5f255b7bb7198c24469c933ce27ef770b56",
+      "warning": "These are planned runs, not trained CIFAR-100 results."
+    }
+  }
+}

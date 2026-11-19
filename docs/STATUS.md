@@ -70,3 +70,6 @@ Current source contains 11 CL/local-learning modes. EWC Fisher (model-predictive
 ## v13 CL-state-every-sync change
 
 The unique current stream is first 4 new classes/client in two tasks, then only 2 new classes/client in **each subsequent single task**, one server sync between. All accepted cumulative replay examples, historical DER raw logits, GEM/A-GEM reference evidence, EWC/SI/MAS precision tables, accepted class exposure, and the latest versioned LwF global teacher are broadcast to every online client irrespective of its present method. Runtime validation of every received archive happens after every model update. The primary 5-client pilot now has 9 train intervals + final flush, not 5+flush. The rotating offline client is cyclic so all clients eventually reconnect. New v13 checkpoints are required. See `FIRST4_THEN2_FULL_CL_V13.md`.
+
+
+**v13 accepted registry:** 32,133 runnable jobs per backbone; 99 method/server pairs remain. This supersedes the v12 38,370-per-backbone planning count. Frozen design file: `configs/designs/stream_v13_first4_then2.json`. The first complete v13 suite passed 215 tests, one CUDA test skipped. Further runtime state-byte integrity assertions were added afterward and must pass the final CI check.

@@ -190,3 +190,26 @@ def test_first4_then2_is_fixed_across_every_method_server_pair():
             assert len(groups)==45
             assert all(groups[r,cid]==(2 if r==0 else 1)
                        for r in range(9) for cid in range(5))
+
+
+def test_synced_state_integrity_rejects_corrupted_exemplars_and_teacher():
+    a=client(0)
+    a.last_learning_method='replay'
+    a.private_memory={0:[0]}
+    a.pending_upload_classes={0}
+    a.seen_indices={0}
+    weights={'w':torch.tensor([2.,3.])}
+    server=FederatedCLState()
+    server.merge_clients([a],TinyBank(),'replay',weights,1)
+    b=client(1)
+    b.receive(weights,1)
+    server.broadcast_to(b,'sgd')
+    server.assert_complete_download(b)
+    px,y=b.received_example_payloads[0]
+    b.received_example_payloads[0]=(torch.full_like(px,255),y)
+    with pytest.raises(RuntimeError,match='corrupt exemplar'):
+        server.assert_complete_download(b)
+    b.received_example_payloads[0]=(px,y)
+    b.lwf_teacher['w'][0]+=1.
+    with pytest.raises(RuntimeError,match='LwF teacher mismatch'):
+        server.assert_complete_download(b)
