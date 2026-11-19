@@ -27,7 +27,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_deit_tiny_v4'
+PROTOCOL_VERSION = 'cifar100_native32_v5'
 
 
 def anchored_upload(client, global_state):
@@ -136,6 +136,12 @@ def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None):
     for key,baseval in base.items():
         values=[u['weights'][key] for u in updates]
         if not baseval.is_floating_point():
+            if key.endswith('num_batches_tracked'):
+                # ResNet BatchNorm counters legitimately differ across independently
+                # training and intermittently disconnected clients. Keep a
+                # monotone counter rather than rejecting valid updates.
+                out[key]=torch.stack([v.to(torch.int64) for v in values]).max(dim=0).values.to(baseval.dtype)
+                continue
             if not all(torch.equal(v,values[0]) for v in values):
                 raise RuntimeError(f'Nonfloating buffer disagrees: {key}')
             out[key]=values[0].clone()
@@ -262,10 +268,10 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         if cfg.dataset=='cifar100':
             # Every job in a sequential research campaign must start from
             # the identical published pretrained feature extractor.
-            reference=Path(output_root)/'deit_tiny_pretrained_reference.json'
+            reference=Path(output_root)/(cfg.model+'_architecture_reference.json')
             if reference.exists():
                 if json.loads(reference.read_text())!=backbone_description:
-                    raise RuntimeError('Pretrained ViT reference differs from prior jobs; use a new experiment root')
+                    raise RuntimeError('Backbone definition differs from prior jobs; use a new experiment root')
             else:
                 atomic_json(reference,backbone_description)
         global_state=copy_cpu_state(model)
@@ -612,9 +618,19 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         old_update_alignment={str(cid):vector_cosine(mean_old_grad,delta)
                             for cid,delta in deltas.items()}
                     model.load_state_dict(global_state)
-            result,peak=evaluate(model,evaluation_bank,observed,cfg.batch_size,device,peak,
-                                 integrated=integrated,old=old,new=new,
-                                 task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None)
+            if cfg.evaluate_final_only and round_id!=total_rounds-1:
+                # The pilot's official test split is read exactly ONCE, after
+                # the terminal flush. Earlier rounds store communication and
+                # client-state diagnostics but never evaluate held-out labels.
+                result={'accuracy':None,'macro_accuracy':None,'forgetting':None,
+                        'per_class':{},'cross_entropy_loss':None,'evaluation_deferred':True,
+                        'observed_classes':sorted(observed),
+                        'globally_integrated_classes':sorted(integrated)}
+            else:
+                result,peak=evaluate(model,evaluation_bank,observed,cfg.batch_size,device,peak,
+                                     integrated=integrated,old=old,new=new,
+                                     task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None)
+                result['evaluation_deferred']=False
             if cfg.spurious_ood_eval and cfg.spurious_strength:
                 from .data import DataBank
                 from .domains import SpuriousTest
@@ -676,8 +692,10 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 save_checkpoint(run_dir/f'model_stage_{current_stage+1:02d}.pt',global_state,
                                 cfg,version,clients,full_state=True)
             if verbose:
-                print(f'[{job}] round {round_id+1}/{total_rounds} acc={result["accuracy"]:.4f} '
-                      f'forgetting={result["forgetting"]:.4f} clients={len(selected)}',flush=True)
+                acc=('deferred' if result['accuracy'] is None else f'{result["accuracy"]:.4f}')
+                forgetting=('deferred' if result['forgetting'] is None else f'{result["forgetting"]:.4f}')
+                print(f'[{job}] round {round_id+1}/{total_rounds} acc={acc} '
+                      f'forgetting={forgetting} clients={len(selected)}',flush=True)
         save_checkpoint(run_dir/'model_final.pt',global_state,cfg,version,clients,full_state=True)
         atomic_json(run_dir/'summary.json',{'job_id':job,'dataset':cfg.dataset,
                     'fork_source':str(fork_from_checkpoint) if fork_from_checkpoint else None,

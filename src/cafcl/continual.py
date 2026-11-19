@@ -170,7 +170,7 @@ def _example_loader(dataset,indices,batch_size,seed,shuffle=True):
 def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,active_pair_classes=None):
     model.zero_grad(set_to_none=True)
     # Logical reference gradient: weighted accumulation over bounded physical
-    # batches, without materializing 512 images/ViT activations on the GPU.
+    # batches, without materializing 1024 images/backbone activations on the GPU.
     total=min(len(indices),batch_size)
     micro=min(batch_size,16)  # same objective, bounded ViT reference memory
     # Sample uniformly across all historical examples, not just the prefix.

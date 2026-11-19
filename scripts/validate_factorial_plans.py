@@ -1,19 +1,34 @@
-"""One-pass verification of the source-generated CIFAR-100-only registry."""
+"""Validate both 32x32 backbones, complete 100-class math, and the two-job pilot."""
 from pathlib import Path
 import json
 from cafcl.full_matrix import manifest
+from cafcl.primary_probe import make_jobs,audited_plan
+from cafcl.stream_audit import audit
+from cafcl.full_matrix import expand
 
 
 def main():
-    expected=json.loads((Path(__file__).resolve().parents[1]/
-                         'configs/designs/stream_v4_deit.json').read_text())
-    actual=manifest()
-    assert actual==expected, 'Active stream design differs from committed manifest'
-    assert actual['dataset']=='cifar100'
-    assert actual['batch_size']==512
-    assert actual['method_aggregator_pairs']==99
-    assert actual['job_count']==53805
-    print(f"CIFAR-100: {actual['job_count']} source jobs, 99/99 pairs, batch 512; sha256 {actual['sha256']}")
-
+    root=Path(__file__).resolve().parents[1]
+    frozen=json.loads((root/'configs/designs/stream_v5_native32.json').read_text())
+    for backbone in ('vit','cnn'):
+        actual=manifest(model=backbone)
+        expected=frozen['models'][backbone]
+        assert actual==expected, f'{backbone}: planned jobs or hash drifted; regenerate only after audit'
+        assert actual['dataset']=='cifar100' and actual['batch_size']==1024
+        assert actual['method_aggregator_pairs']==99
+        assert actual['job_count']==51627
+        probe=audited_plan(make_jobs(backbone=backbone))
+        assert probe==frozen['primary_probe_'+backbone]
+        assert probe['total_jobs']==2 and probe['training_intervals']==5
+        assert all(len(x['offline_classes'])==4 for x in probe['offline_schedule'])
+        print(f'{backbone}: {actual["job_count"]} feasible jobs, batch 1024, 99/99 method pairs, '
+              f'100 unique classes, sha256={actual["sha256"]}')
+    audit_result=audit(expand(include_invalid=True,model='vit'))
+    assert audit_result==frozen['feasibility_audit']
+    assert audit_result['input_jobs']==53805
+    assert audit_result['rejected_jobs']==2178
+    assert audit_result['accepted_jobs']==51627
+    print('Mathematical audit: 53,805 old jobs -> 51,627 feasible; 2,178 explicitly pruned')
+    print('Primary pilot: exactly two jobs, single seed, one complete 100-class curriculum')
 
 if __name__=='__main__':main()

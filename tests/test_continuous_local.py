@@ -16,7 +16,7 @@ def config(method='agem',**kw):
     selection={'0':(1,2,3,4),'1':(1,2,3,4),
                '2':(1,2,3,4),'3':(0,1,2,3)}
     return RunConfig(dataset='synthetic',model='test_linear',num_clients=5,stages=2,
-        rounds_per_stage=2,participation=.8,batch_size=512,
+        rounds_per_stage=2,participation=.8,batch_size=1024,
         scenario='disjoint',method=method,aggregator='fedavg',
         holders_override=holders,participation_overrides=selection,
         memory_per_class=8,checkpoint_every=1,**kw)

@@ -138,7 +138,7 @@ def test_synthetic_entire_reconnect_and_final_flush(tmp_path):
     c=RunConfig(dataset='synthetic',model='test_linear',stream_protocol=True,class_pair_protocol='strict',
          num_clients=2,classes_per_local_task=2,local_tasks_per_round=2,
          stages=1,rounds_per_stage=1,participation=.5,offline_duration_rounds=1,
-         method='agem',aggregator='fedavg',batch_size=512,
+         method='agem',aggregator='fedavg',batch_size=1024,
          memory_per_class=2,job_id='stream_smoke',seed=6)
     run_experiment(c,str(tmp_path),verbose=False)
     h=json.loads((tmp_path/'stream_smoke'/'metrics.json').read_text())
@@ -164,7 +164,7 @@ def test_full_suite_retired_cifar10_and_20_class_and_cover_all_methods():
                c.class_pair_protocol=='strict' for _,c in configs)
     assert len({(c.method,c.aggregator) for _,c in configs})==99
     assert {c.stream_overlap_kind for _,c in configs}==set(OVERLAP_KINDS)
-    assert all(c.batch_size==512 for _,c in configs)
+    assert all(c.batch_size==1024 for _,c in configs)
 
 @pytest.mark.parametrize('method',('sgd','gem','agem','replay','ewc','si',
                                     'er_ace','der','derpp','mas','lwf'))
@@ -172,7 +172,7 @@ def test_every_client_learning_method_streams_offline_and_reconnects(tmp_path,me
     c=RunConfig(dataset='synthetic',model='test_linear',stream_protocol=True,class_pair_protocol='strict',
          num_clients=2,classes_per_local_task=2,local_tasks_per_round=2,
          stages=1,rounds_per_stage=1,participation=.5,offline_duration_rounds=1,
-         method=method,aggregator='fedavg',batch_size=512,
+         method=method,aggregator='fedavg',batch_size=1024,
          memory_per_class=2,job_id='stream_'+method,seed=5)
     result=run_experiment(c,str(tmp_path),verbose=False)
     assert result['status']=='completed'

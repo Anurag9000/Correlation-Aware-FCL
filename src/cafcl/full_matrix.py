@@ -14,6 +14,8 @@ from pathlib import Path
 from .config import RunConfig
 from .simulator import run_experiment,atomic_json
 from .streaming import OVERLAP_KINDS,make_task_schedule
+from .models import BACKBONES,resolve_backbone
+from .stream_audit import check_stream
 
 METHODS=('sgd','gem','agem','replay','ewc','si','er_ace','der','derpp','mas','lwf')
 AGGS=('fedavg','uniform','fedavgm','fedadam','class_balanced','inverse_participation',
@@ -26,13 +28,14 @@ def fingerprint(cfg):
     return sha256(json.dumps(x,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 
-def base(seed=0):
+def base(seed=0,model=None):
     return RunConfig(dataset='cifar100',stream_protocol=True,class_pair_protocol='strict',
         learning_setting='class_il',classes_per_local_task=2,local_tasks_per_round=2,
         stream_overlap_kind='none',stream_overlap_fraction=0,
         num_clients=10,participation=.8,selector='random',seed=seed,
-        model='deit_tiny_patch16_224.fb_in1k',micro_batch_size=16,
-        stages=1,rounds_per_stage=1,batch_size=512)
+        micro_batch_size=16,
+        stages=1,rounds_per_stage=1,batch_size=1024,
+        model=resolve_backbone(model or 'vit'))
 
 
 def raw_design(seeds=SEEDS):
@@ -119,10 +122,10 @@ def raw_design(seeds=SEEDS):
                 stream_overlap_fraction=.5,stream_recurrence_rounds=repeats)
 
 
-def expand(dataset='cifar100',seeds=SEEDS,families=None):
+def expand(dataset='cifar100',seeds=SEEDS,families=None,model='vit',include_invalid=False):
     if dataset!='cifar100':raise ValueError('CIFAR-10 and 20-class experiments have been retired')
     included=set(families) if families else None
-    unique=set();bases={seed:base(seed) for seed in seeds}
+    unique=set();bases={seed:base(seed,model=model) for seed in seeds}
     for family,seed,changed in raw_design(seeds):
         if included is not None and family not in included:continue
         # Subset selectors may rely on simulator-privileged metadata; retain
@@ -131,6 +134,13 @@ def expand(dataset='cifar100',seeds=SEEDS,families=None):
             changed={**changed,'server_lr':.001}
         cfg=replace(bases[seed],**changed)
         cfg.validate()
+        if not include_invalid:
+            reason=check_stream(cfg.seed,cfg.num_clients,cfg.classes_per_local_task,
+                cfg.local_tasks_per_round,cfg.stream_overlap_kind,cfg.stream_overlap_fraction,
+                cfg.stream_recurrence_rounds,cfg.participation,cfg.offline_duration_rounds,
+                cfg.stream_terminal_flush,cfg.class_imbalance_power,cfg.client_sample_skew,
+                cfg.sample_overlap_fraction)
+            if reason:continue
         signature=fingerprint(cfg)
         if signature in unique:continue
         unique.add(signature)
@@ -138,12 +148,12 @@ def expand(dataset='cifar100',seeds=SEEDS,families=None):
         yield family,cfg
 
 
-def manifest(seeds=SEEDS,families=None):
+def manifest(seeds=SEEDS,families=None,model='vit'):
     counts=Counter();pairs=set();digest=sha256()
-    for family,cfg in expand(seeds=seeds,families=families):
+    for family,cfg in expand(seeds=seeds,families=families,model=model):
         counts[family]+=1;pairs.add((cfg.method,cfg.aggregator))
         digest.update((cfg.job_id+':'+fingerprint(cfg)+'\n').encode())
-    return dict(dataset='cifar100',batch_size=512,job_count=sum(counts.values()),
+    return dict(dataset='cifar100',batch_size=1024,backbone=resolve_backbone(model),job_count=sum(counts.values()),
                 families=dict(sorted(counts.items())),method_aggregator_pairs=len(pairs),
                 sha256=digest.hexdigest(),seeds=list(seeds),
                 warning='These are planned runs, not trained CIFAR-100 results.')
@@ -152,6 +162,7 @@ def manifest(seeds=SEEDS,families=None):
 def main(argv=None):
     p=argparse.ArgumentParser(description='CIFAR-100 continuous local-task communication experiments')
     p.add_argument('--dataset',choices=['cifar100'],default='cifar100')
+    p.add_argument('--backbone',choices=['vit','cnn'],default='vit')
     p.add_argument('--suite',choices=['full','balanced'],default='full')
     p.add_argument('--families',nargs='*',default=None)
     p.add_argument('--seeds',nargs='+',type=int,default=[0,1,2])
@@ -169,22 +180,22 @@ def main(argv=None):
     seeds=[args.seed] if args.seed is not None else args.seeds
     if len(seeds)!=len(set(seeds)):p.error('Seed values must be distinct')
     families=['balanced'] if args.suite=='balanced' else args.families
-    plan=manifest(seeds=seeds,families=families)
-    root=Path(args.output_dir)/'cifar100_deit_v4';root.mkdir(parents=True,exist_ok=True)
+    plan=manifest(seeds=seeds,families=families,model=args.backbone)
+    root=Path(args.output_dir)/('cifar100_native32_v5_'+args.backbone);root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'stream_manifest.json',plan)
     print(json.dumps(plan,indent=2),flush=True)
     if args.export_plan:
         destination=Path(args.export_plan);destination.parent.mkdir(parents=True,exist_ok=True)
         opener=gzip.open if str(destination).endswith('.gz') else open
         with opener(destination,'wt') as fp:
-            for _,cfg in expand(seeds=seeds,families=families):
+            for _,cfg in expand(seeds=seeds,families=families,model=args.backbone):
                 fp.write(json.dumps(cfg.to_dict(),sort_keys=True)+'\n')
     if args.plan_only:return
     import torch
     if not args.allow_cpu and not torch.cuda.is_available():
         raise RuntimeError('GPU production requires CUDA; --allow-cpu is test-only')
     attempted=0;failed=[];completed=0
-    for index,(family,cfg) in enumerate(expand(seeds=seeds,families=families)):
+    for index,(family,cfg) in enumerate(expand(seeds=seeds,families=families,model=args.backbone)):
         if index<args.start:continue
         if args.limit and attempted>=args.limit:break
         attempted+=1

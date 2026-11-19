@@ -1,32 +1,33 @@
-# CIFAR-100 continuous local-task status (v3)
+# CIFAR-100 v5 implementation and validation status
 
-## Implemented and offline verified
+## Completed in source
 
-- A single canonical class-indexed 100-output classifier; no task-head creation or inference task IDs in the new CIFAR-100 registry.
-- Local episode cross-entropy restricted to currently active class IDs; other classifier rows frozen (including against optimizer momentum).
-- Configurable `classes_per_local_task` and `local_tasks_per_round`; default two consecutive binary tasks before each server update.
-- Continuous learning and durable private CL state for SGD, GEM, A-GEM, replay, EWC, SI, ER-ACE, DER, DER++, MAS, LwF, even when not selected to communicate.
-- Class-label overlaps within and across clients, in the same and different intervals, and combined; distinct raw training samples by default and explicit raw overlap where requested.
-- Exactly count-weighted canonical class-row fusion at the server, accumulated offline stale-delta upload, post-aggregation active-client replacement, and no inactive-client sync.
-- Independent per-round random participation, exact-D controlled offline cohorts, and an optional communication-only final integration step.
-- CIFAR-100-only experiment registry covering 53,805 distinct configurations and all 99 local/server method pairs; old CIFAR-10 and 20-class suites retired from active launch paths.
-- Synthetic integration tests and pure 100-class scenario tests validate the user's specific class-to-client schedule, all overlap types, no unrequested raw-sample reuse, offline recovery, and method-specific local history.
+- **Exactly two switchable native production architectures**, both CIFAR-100 at 32×32: ViT-Tiny/16 (`vit_tiny_patch16_32`), CIFAR-stem ResNet-18 (`resnet18_cifar32`). No silent fallback to DeiT-224, SmallCNN or other CNN/ViT architectures; future model variants use the single registry in `models.py`.
+- **Mandatory effective batch 1024** across research jobs, configurable physical microbatch 16 for memory; GEM/A-GEM projected gradients operate on logical batches.
+- **Two-job primary A-GEM + FedAvg study:** five clients, two sequential two-class tasks per client each interval, five training intervals giving exactly 100 different classes. Full-participation baseline and an independently running arm with a different one-of-five client offline in each interval. One seed, one partial participation rate (80%), no overlap, final communication-only flush, same official 100-class test once at the end, per-class paired comparison.
+- No raw data or historical memory uploaded. Offline clients continue on persistent private weights and CL histories. On reconnection, pending changes are rebased to the current server model; participating clients get the newly merged global weights; disconnected clients remain untouched.
+- Canonical 100-class output mapping with a locally active task softmax; noncurrent classifier rows protected; representation backbone remains trainable.
+- ResNet-18 BatchNorm running counters are handled as monotone integer buffers, rather than causing aggregation to fail when disconnected clients have different counts.
+- **Mathematical audit:** of 53,805 existing per-backbone registrations, 51,627 remain feasible and 2,178 are excluded with recorded failure reasons. Both choices cover all 99 local CL/server method combinations and the complete 5,346 balanced core.
+- Dedicated offline tests cover model shapes, active classifier rows, complete 100-class task schedule, exact once-only client exclusion, paired report, model switch, and math-audit pruning.
 
 ## Not established
 
-- **No full official CIFAR-100 GPU sweep** has been run, and no official test accuracy or research comparison is claimed.
-- The registered suite is exhaustive only for its declared *finite* experiment axes, not every possible combination of independent continuous hyperparameters.
-- The global model has allocated but inactive class rows from initialization rather than dynamically growing tensor shapes; class-wise merging is an experimental weighting heuristic and must be empirically calibrated.
-- Freezing nonactive classifier rows does not freeze hidden/backbone representation learning, so interference and forgetting remain possible.
-- Regularization, GEM projection, replay/distillation variants, and class-specific server weighting are not independently verified as exact paper reimplementations; GEM's CPU SciPy dual solver is still used even if neural-network training executes on CUDA.
-- Some selection policies are privileged simulation/oracle controls. Training on official CIFAR validation/test feedback must be separated before publication claims.
-- The old 152-block archival method catalogue is not proof that every previously imagined research block exists in the new stream. Removed old job manifests were scientifically incompatible with the current task-stream requirements.
+- **No GPU server connection or real CIFAR-100 training was performed from this chat.** The script for concurrent launch on `mtechdeserver` is ready, but must be started on the machine or through an authorized remote execution connection.
+- The official final accuracy and statistical validity of the FCL research hypothesis are unknown. Two runs with one seed are explicitly a preliminary probe, not an uncertainty-calibrated result.
+- ViT-Tiny/16 has only four patch tokens at 32×32; this is an important architecture limitation. Both models now initialize randomly from the controlled seed; transfer-pretrained DeiT-224 has been retired, not silently reused at native 32×32.
+- ResNet BatchNorm running-statistics over microbatches are not mathematically equivalent to a physical batch of 1024. This limitation is reported.
+- Standard FedAvg is not identical to the code's stale-anchor accumulated-delta and class-wise classifier merge variant. The latter needs separate scientific validation.
+- The generator audits declared geometric/class-budget feasibility, but actual GPU numerical stability, training accuracy, paper fidelity of each CL algorithm, and some data/selector privacy issues are still to be established.
 
-## Regeneration
+## Reproducibility
 
-Run `python scripts/validate_factorial_plans.py` to validate the source-generated plan and the design's SHA256. The production runner writes `results/cifar100_deit_v4/stream_manifest.json`, independent per-job artifacts, durable full-state checkpoints, and protocol-specific success markers. Never count checkpoints from earlier protocols as completed new jobs.
+```bash
+python -m pytest -q
+python scripts/validate_factorial_plans.py
+python scripts/audit_stream_math.py
+bash scripts/run_primary_probe_cifar100.sh --plan-only
+bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,1
+```
 
-
-## ViT-only production migration (v4)
-
-The active CIFAR-100 experiment configurations are locked to `deit_tiny_patch16_224.fb_in1k` (DeiT-Tiny/16; 224×224; ImageNet-1K pretrained) using `timm==1.0.31`. Real pretrained weights and actual CIFAR-100 GPU accuracy have **not** been downloaded/verified within the offline development environment; integration tests use a clearly named tiny stub. The production factory fails on missing weights instead of substituting a random model or CNN. All local CL methods and nine server methods share this model contract. A physical batch of 16 accumulates gradients to an effective 512 before optimizer/GEM/A-GEM step. Train-only and test preprocessing is bicubic resize to 224 and ImageNet normalize; legacy CIFAR32 results are not comparable. See `docs/VIT_BACKBONE.md`.
+Checkpoint protocol `cifar100_native32_v5`; distinct model-specific results roots. Never count old `cifar100_deit_v4` checkpoints as native v5 results.

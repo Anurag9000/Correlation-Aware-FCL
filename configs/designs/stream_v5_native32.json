@@ -1,0 +1,316 @@
+{
+  "feasibility_audit": {
+    "accepted_by_family": {
+      "balanced": 5346,
+      "class_imbalance": 891,
+      "client_count": 594,
+      "client_quantity": 594,
+      "distillation": 243,
+      "fedprox": 891,
+      "gem_grouping": 54,
+      "local_optimization": 3267,
+      "memory": 756,
+      "offline_duration": 13662,
+      "overlap_strength": 2970,
+      "raw_sample_overlap": 1188,
+      "recurrent_rounds": 1782,
+      "regularization": 324,
+      "replay_beta": 162,
+      "replay_ratio": 324,
+      "selection": 10692,
+      "semantic_order": 594,
+      "server_optimization": 264,
+      "task_length": 6732,
+      "terminal_flush": 297
+    },
+    "accepted_jobs": 51627,
+    "cached_stream_structures": 366,
+    "examples": {
+      "task_length:combined-does-not-realize-all-four-overlap-geometries": "ST_task_length_f894e5bf9830cda6301c",
+      "task_length:overlap-geometry-never-occurs": "ST_task_length_23b30d434d8e593c1869"
+    },
+    "input_jobs": 53805,
+    "rejected_by_family_reason": {
+      "task_length:combined-does-not-realize-all-four-overlap-geometries": 990,
+      "task_length:overlap-geometry-never-occurs": 1188
+    },
+    "rejected_jobs": 2178
+  },
+  "models": {
+    "cnn": {
+      "backbone": "resnet18_cifar32",
+      "batch_size": 1024,
+      "dataset": "cifar100",
+      "families": {
+        "balanced": 5346,
+        "class_imbalance": 891,
+        "client_count": 594,
+        "client_quantity": 594,
+        "distillation": 243,
+        "fedprox": 891,
+        "gem_grouping": 54,
+        "local_optimization": 3267,
+        "memory": 756,
+        "offline_duration": 13662,
+        "overlap_strength": 2970,
+        "raw_sample_overlap": 1188,
+        "recurrent_rounds": 1782,
+        "regularization": 324,
+        "replay_beta": 162,
+        "replay_ratio": 324,
+        "selection": 10692,
+        "semantic_order": 594,
+        "server_optimization": 264,
+        "task_length": 6732,
+        "terminal_flush": 297
+      },
+      "job_count": 51627,
+      "method_aggregator_pairs": 99,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "sha256": "f94d4aabf67d43e683fcd76e1e7c8282e5535917982450b72beab97fb6e23769",
+      "warning": "These are planned runs, not trained CIFAR-100 results."
+    },
+    "vit": {
+      "backbone": "vit_tiny_patch16_32",
+      "batch_size": 1024,
+      "dataset": "cifar100",
+      "families": {
+        "balanced": 5346,
+        "class_imbalance": 891,
+        "client_count": 594,
+        "client_quantity": 594,
+        "distillation": 243,
+        "fedprox": 891,
+        "gem_grouping": 54,
+        "local_optimization": 3267,
+        "memory": 756,
+        "offline_duration": 13662,
+        "overlap_strength": 2970,
+        "raw_sample_overlap": 1188,
+        "recurrent_rounds": 1782,
+        "regularization": 324,
+        "replay_beta": 162,
+        "replay_ratio": 324,
+        "selection": 10692,
+        "semantic_order": 594,
+        "server_optimization": 264,
+        "task_length": 6732,
+        "terminal_flush": 297
+      },
+      "job_count": 51627,
+      "method_aggregator_pairs": 99,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "sha256": "8c641efdc545390f67908245818e05cfe783ce0dbbe7088844394049d0eaf8f7",
+      "warning": "These are planned runs, not trained CIFAR-100 results."
+    }
+  },
+  "primary_probe_cnn": {
+    "all_classes_once": true,
+    "backbone": "resnet18_cifar32",
+    "batch_size": 1024,
+    "classes_per_local_task": 2,
+    "clients": 5,
+    "dataset": "cifar100",
+    "job_ids": [
+      "PRIMARY_FULL_resnet18_cifar32",
+      "PRIMARY_ROTATING_OFFLINE_resnet18_cifar32"
+    ],
+    "local_tasks_per_round": 2,
+    "offline_schedule": [
+      {
+        "offline_classes": [
+          2,
+          3,
+          12,
+          13
+        ],
+        "offline_client": 1,
+        "online_clients": [
+          0,
+          2,
+          3,
+          4
+        ],
+        "round": 1
+      },
+      {
+        "offline_classes": [
+          28,
+          29,
+          38,
+          39
+        ],
+        "offline_client": 4,
+        "online_clients": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "round": 2
+      },
+      {
+        "offline_classes": [
+          44,
+          45,
+          54,
+          55
+        ],
+        "offline_client": 2,
+        "online_clients": [
+          0,
+          1,
+          3,
+          4
+        ],
+        "round": 3
+      },
+      {
+        "offline_classes": [
+          66,
+          67,
+          76,
+          77
+        ],
+        "offline_client": 3,
+        "online_clients": [
+          0,
+          1,
+          2,
+          4
+        ],
+        "round": 4
+      },
+      {
+        "offline_classes": [
+          80,
+          81,
+          90,
+          91
+        ],
+        "offline_client": 0,
+        "online_clients": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "round": 5
+      }
+    ],
+    "offline_unique_once": true,
+    "seed": 0,
+    "terminal_communication_only_flush": true,
+    "total_jobs": 2,
+    "training_intervals": 5
+  },
+  "primary_probe_vit": {
+    "all_classes_once": true,
+    "backbone": "vit_tiny_patch16_32",
+    "batch_size": 1024,
+    "classes_per_local_task": 2,
+    "clients": 5,
+    "dataset": "cifar100",
+    "job_ids": [
+      "PRIMARY_FULL_vit_tiny_patch16_32",
+      "PRIMARY_ROTATING_OFFLINE_vit_tiny_patch16_32"
+    ],
+    "local_tasks_per_round": 2,
+    "offline_schedule": [
+      {
+        "offline_classes": [
+          2,
+          3,
+          12,
+          13
+        ],
+        "offline_client": 1,
+        "online_clients": [
+          0,
+          2,
+          3,
+          4
+        ],
+        "round": 1
+      },
+      {
+        "offline_classes": [
+          28,
+          29,
+          38,
+          39
+        ],
+        "offline_client": 4,
+        "online_clients": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "round": 2
+      },
+      {
+        "offline_classes": [
+          44,
+          45,
+          54,
+          55
+        ],
+        "offline_client": 2,
+        "online_clients": [
+          0,
+          1,
+          3,
+          4
+        ],
+        "round": 3
+      },
+      {
+        "offline_classes": [
+          66,
+          67,
+          76,
+          77
+        ],
+        "offline_client": 3,
+        "online_clients": [
+          0,
+          1,
+          2,
+          4
+        ],
+        "round": 4
+      },
+      {
+        "offline_classes": [
+          80,
+          81,
+          90,
+          91
+        ],
+        "offline_client": 0,
+        "online_clients": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "round": 5
+      }
+    ],
+    "offline_unique_once": true,
+    "seed": 0,
+    "terminal_communication_only_flush": true,
+    "total_jobs": 2,
+    "training_intervals": 5
+  },
+  "version": "native32_v5"
+}

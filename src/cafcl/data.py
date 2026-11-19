@@ -62,11 +62,10 @@ def get_data_bank(name: str, data_root: str, *, download=True, seed=0, class_sub
         return DataBank(TinySynthetic(True, seed), TinySynthetic(False, seed), 10, {x:x//2 for x in range(10)})
     cls = datasets.CIFAR10 if name == "cifar10" else datasets.CIFAR100
     mean, std = (CIFAR10_MEAN, CIFAR10_STD) if name == "cifar10" else (CIFAR100_MEAN, CIFAR100_STD)
-    # Official DeiT input contract, shared by all production training and test
-    # datasets. Synthetic fixtures bypass this path and remain 32x32.
+    # Native CIFAR-100 resolution for both ViT-Tiny/16 and CIFAR-stem ResNet-18.
+    # Both use identical preprocessing; synthetic fixtures remain 32x32.
     from .models import INPUT_SIZE,NORMALIZATION_MEAN,NORMALIZATION_STD
     transform = transforms.Compose([
-        transforms.Resize((INPUT_SIZE,INPUT_SIZE),interpolation=transforms.InterpolationMode.BICUBIC),
         transforms.ToTensor(), transforms.Normalize(NORMALIZATION_MEAN,NORMALIZATION_STD)])
     train = cls(root=data_root, train=True, transform=transform, download=download)
     test = cls(root=data_root, train=False, transform=transform, download=download)

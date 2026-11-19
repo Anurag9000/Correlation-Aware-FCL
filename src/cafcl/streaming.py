@@ -69,8 +69,12 @@ def make_task_schedule(num_classes, cfg):
                 if available<take:
                     if cfg.stream_overlap_kind=='none':
                         raise ValueError('Insufficient distinct classes to make final task')
-                    # Finish a partial last event with already observed labels,
-                    # while retaining >=2 distinct labels for meaningful CE.
+                    # The terminal partial event is permitted only at a client
+                    # whose declared overlap source can supply all remaining
+                    # contrasting labels. Otherwise skip this *client slot*
+                    # (do not consume fresh labels) and try the next slot.
+                    if available+len(set(eligible))<C:
+                        continue
                     take=available
                 fresh=order[current:current+take]
                 current+=take
@@ -79,7 +83,13 @@ def make_task_schedule(num_classes, cfg):
                     reuse=next((v for v in eligible if v not in labels),None)
                     if reuse is not None:labels.insert(0,reuse)
                 if len(labels)<C:
-                    candidates=[v for v in reversed(sorted(seen)) if v not in labels]
+                    # Tail completion must NOT silently introduce an unrelated
+                    # label from another client/round. Use only labels that
+                    # satisfy the configured overlap geometry; otherwise this
+                    # trial is mathematically infeasible and is pruned.
+                    candidates=[v for v in eligible if v not in labels]
+                    if len(candidates)<C-len(labels):
+                        raise ValueError(f'Incomplete final task cannot be filled within declared overlap geometry (seed={cfg.seed},kind={kind},rnd={rnd},cid={cid},task={task},eligible={eligible},labels={labels},available={available})')
                     labels+=candidates[:C-len(labels)]
                 if len(labels)<2 or len(set(labels))!=len(labels):
                     raise ValueError('Not enough distinct labels for contrastive episode')
@@ -182,6 +192,19 @@ def select_offline_cohort(cfg,round_id,total_rounds,standard_selected):
     consecutive communication rounds and then a different cohort is offline.
     This is a deliberate scheduling intervention superseding the selector.
     """
+    if cfg.stream_offline_policy == 'rotate_once':
+        # Exactly one distinct client remains offline in each *training* interval.
+        # A final communication-only flush is required for the last excluded client.
+        training_rounds=total_rounds-int(cfg.stream_terminal_flush)
+        if training_rounds!=cfg.num_clients:
+            raise ValueError('rotate_once requires one training interval per client')
+        if cfg.stream_overlap_kind!='none' or cfg.stream_recurrence_rounds:
+            raise ValueError('rotate_once pilot requires disjoint, nonrecurrent classes')
+        if len(standard_selected)!=cfg.num_clients-1:
+            raise ValueError('rotate_once requires exactly one offline client')
+        if round_id>=training_rounds:return list(range(cfg.num_clients))
+        order=np.random.default_rng(cfg.seed+771721).permutation(cfg.num_clients).tolist()
+        return [c for c in range(cfg.num_clients) if c!=order[round_id]]
     if not cfg.offline_duration_rounds:return standard_selected
     if cfg.selector!='random':
         raise ValueError('Controlled outage cohort currently requires random selector')

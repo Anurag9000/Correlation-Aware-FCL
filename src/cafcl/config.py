@@ -7,7 +7,7 @@ import json
 @dataclass(frozen=True)
 class RunConfig:
     dataset: str = "cifar100"
-    batch_size: int = 512
+    batch_size: int = 1024
     num_clients: int = 10
     rounds_per_stage: int = 20
     epochs: int = 1
@@ -17,10 +17,10 @@ class RunConfig:
     aggregator: str = "fedavg"
     scenario: str = "disjoint"
     stages: int = 2
-    micro_batch_size: int = 16  # physical batch; effective SGD step remains batch_size=512
+    micro_batch_size: int = 16  # physical batch; effective SGD step remains batch_size=1024
     memory_per_class: int = 20
     lr: float = 0.03
-    model: str = "deit_tiny_patch16_224.fb_in1k"
+    model: str = "vit_tiny_patch16_32"
     seed: int = 0
     full_sync: bool = False
     relation: str = "natural"
@@ -105,16 +105,22 @@ class RunConfig:
     stream_recurrence_rounds: int = 0
     offline_duration_rounds: int = 0
     stream_terminal_flush: bool = True
+    stream_offline_policy: str = "random"  # random or rotate_once (pilot only)
+    evaluate_final_only: bool = False
 
     def validate(self):
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
-        assert self.batch_size == 512 or self.dataset == "synthetic", "CIFAR run batch size must remain 512"
+        assert self.batch_size == 1024 or self.dataset == "synthetic", "All CIFAR production jobs require batch size 1024"
         assert 1 <= self.micro_batch_size <= self.batch_size, "Invalid physical microbatch size"
         assert self.num_clients >= 2
         assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
         assert self.stream_overlap_kind in {'none','intra_same_round','intra_cross_round','inter_same_round','inter_cross_round','combined'}
         assert 0 <= self.stream_overlap_fraction <= 1
         assert self.stream_recurrence_rounds >= 0 and self.offline_duration_rounds >= 0
+        assert self.stream_offline_policy in {'random','rotate_once'}
+        if self.evaluate_final_only:
+            assert self.selector in {'random','fixed','round_robin'}, 'Test split cannot guide online client selection'
+            assert not self.prepost_diagnostics and not self.gradient_diagnostics
         if self.stream_protocol:
             assert self.dataset in {'cifar100','synthetic'}
             assert self.learning_setting == 'class_il', 'No task ID or task-specific heads'
@@ -126,6 +132,11 @@ class RunConfig:
             assert not self.stage_participation and not self.participation_overrides
             assert not self.fork_source_job, 'Legacy fork checkpoints cannot be used with new streams'
             if self.offline_duration_rounds:assert self.selector == 'random'
+            if self.stream_offline_policy == 'rotate_once':
+                assert self.offline_duration_rounds == 0 and self.selector == 'random'
+                assert self.stream_overlap_kind == 'none' and self.stream_recurrence_rounds == 0
+                assert self.participation == 1 - 1/self.num_clients
+                assert self.stream_terminal_flush
         assert self.class_pair_protocol in {'compatible','strict'}
         assert self.rounds_per_stage >= 1 and self.stages >= 1
         assert self.epochs >= 1 and self.lr > 0
@@ -135,9 +146,9 @@ class RunConfig:
         assert self.aggregator in {"class_balanced", "inverse_participation", "conflict_aware", "retention_aware", "conflict_projection", "fedavg", "uniform", "fedadam", "fedavgm"}
         assert self.scenario in {"stationary", "gradual_drift", "shifted_recurrence", "task_incremental", "disjoint", "iid", "overlap", "related", "recurrence", "asynchronous", "mixed", "domain", "non_iid"}
         if self.dataset == 'synthetic':
-            assert self.model in {'test_linear','test_mlp','test_smallcnn','deit_tiny_patch16_224.fb_in1k'}
+            assert self.model in {'test_linear','test_mlp','test_smallcnn','vit_tiny_patch16_32','resnet18_cifar32'}
         else:
-            assert self.model == 'deit_tiny_patch16_224.fb_in1k', 'Research requires paper-standard DeiT-Tiny/16'
+            assert self.model in {'vit_tiny_patch16_32','resnet18_cifar32'}, 'Research requires native ViT-Tiny/16 or CIFAR-stem ResNet-18'
         assert self.memory_per_class >= 0
         assert self.causal_max_clients >= 1 and self.checkpoint_every >= 0
         assert self.participation_schedule in {"feedback", "stage", "constant", "increasing", "decreasing", "alternating"}

@@ -22,7 +22,7 @@ def test_only_cifar100_stream_registry_active():
     assert plan['method_aggregator_pairs']==99
     assert plan['job_count']==11*9*6*3
     jobs=list(expand(seeds=(0,),families=('balanced',)))
-    assert all(c.dataset=='cifar100' and c.batch_size==512 and c.stream_protocol for _,c in jobs)
+    assert all(c.dataset=='cifar100' and c.batch_size==1024 and c.stream_protocol for _,c in jobs)
 
 
 def test_synthetic_data_complete_unique_allocations():
@@ -74,7 +74,7 @@ def test_fedavg_weights_and_uniform():
 
 def test_post_sync_and_all_observed_inactive(tmp_path):
     cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=3,stages=2,rounds_per_stage=1,
-                  participation=1/3,batch_size=512,job_id='test_sync')
+                  participation=1/3,batch_size=1024,job_id='test_sync')
     result=run_experiment(cfg,str(tmp_path/'runs'),str(tmp_path/'data'),verbose=False)
     assert result['status']=='completed'
     rd=tmp_path/'runs'/'test_sync'
@@ -135,7 +135,7 @@ def test_recurrence_policy_same_vs_different_client():
 def test_gem_full_simulation(tmp_path):
     # First stage creates local memory; second stage can activate GEM constraints.
     cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,stages=2,rounds_per_stage=1,
-                  participation=1.,batch_size=512,method='gem',
+                  participation=1.,batch_size=1024,method='gem',
                   job_id='gem_integration')
     run_experiment(cfg,str(tmp_path),str(tmp_path/'data'),verbose=False)
     h=json.loads((tmp_path/'gem_integration'/'metrics.json').read_text())

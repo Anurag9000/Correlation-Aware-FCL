@@ -1,73 +1,63 @@
-# Correlation-Aware FCL — CIFAR-100 continuous local-task protocol (v4, DeiT-Tiny/16)
+# Correlation-Aware Federated Continual Learning — CIFAR-100, native 32×32 (v5)
 
-**Active research dataset: CIFAR-100 (100 classes).** The old CIFAR-10 and CIFAR-100/20 **job suites, plans, launchers and documentation are retired and removed**. The CIFAR-10 dataset loader and some synthetic compatibility tests may remain as reusable components; **they are not active experiments**. Earlier stage-based CIFAR-100 jobs are also retired, because they do not implement the specified client task stream.
+**Primary goal: run exactly TWO initial investigation jobs**, not the ~50K-job factorial sweep. This project simulates independent continuous client learning under partial server participation. Every client sees consecutive supervised tasks, continues training even when disconnected, and eventually uploads accumulated parameter changes since its last synchronization. Every connected client receives the newly aggregated server model after the upload; the disconnected clients receive nothing. Private A-GEM/GEM/replay/EWC/SI/DER/etc. memories persist through normal sync.
 
-The current active finite-grid registry contains **53,805 independent planned CIFAR-100 job configurations** across 3 seeds (0, 1, 2); **5,346 form the matched core**, covering all 11 local methods × all 9 server update methods × all six overlap patterns × three participation levels × three seeds. **These are registered jobs, not trained results.** All configured effective training batch sizes are **512** (physical ViT microbatch 16).
+## Selected architectures — identical native 32×32 image data and effective batch 1024
 
-## Mandatory research backbone
+| Choice | `--backbone` | Production model ID | Initialization |
+|---|---|---|---|
+| **Default ViT** | `vit` | `vit_tiny_patch16_32` | Native PyTorch ViT-Tiny/16, seeded random |
+| **Default CNN** | `cnn` | `resnet18_cifar32` | Native PyTorch ResNet-18 with CIFAR 3×3/stride-1 stem, seeded random |
 
-**Every active CIFAR-100 experiment uses one published ImageNet-1K pretrained DeiT-Tiny/16 (224×224) from `timm==1.0.31`, with a new 100-class canonical head.** The previous CNN/MLP/linear options are removed from production validation; tiny linear/CNN models are retained solely as synthetic offline test doubles. Model initialization fails if timm or pretrained weights are unavailable. Dataset preprocessing uses bicubic resize and ImageNet mean/std; the model backbone is fully trainable. The checkpoint/output protocol is versioned `cifar100_deit_tiny_v4` and every production job records a pretrained-backbone SHA-256; mismatched backbone weights in a shared results root are rejected. See [`docs/VIT_BACKBONE.md`](docs/VIT_BACKBONE.md).
+Both are fully implemented directly in `src/cafcl/models.py`; no 224×224 resize, mandatory DeiT pretrained weights, standard CNN, or silent fallback. The 100-output classifier uses canonical global label IDs. A two-class task trains the active two-label softmax while other class rows remain frozen; the shared feature extractor remains trainable. ViT-Tiny/16 has only **2×2 = four image patches** at 32×32, an important accuracy limitation. See [BACKBONES.md](docs/BACKBONES.md).
 
-## Core semantics
+Every CIFAR production job uses effective **batch size 1024** and physical microbatch 16 by default for gradient accumulation. For ResNet-18, BatchNorm running statistics reflect microbatches, not an actual physical 1024 batch; see methodology caveats.
 
-At *each communication interval*, all clients train locally, irrespective of whether they are selected to upload. **Default: two sequential local tasks, each comparing two class IDs; four new classes per client before the server update in the disjoint setting.** The first local task trains the client model; the second continues from its weights with the chosen local CL method (SGD, GEM, A-GEM, replay, EWC, SI, ER-ACE, DER, DER++, MAS, or LwF). Every task uses a local softmax over its own active labels; other classifier rows are frozen. The server uses one canonical classifier row per global class, *never task-specific heads or inference task IDs*.
+## First: two-job primary investigation
 
-The default stream has **10 clients**, **20% random clients hidden** at each update, and the exact novel-class allocation:
+Five clients each learn **four new distinct classes per server interval**, organized as **two sequential two-class tasks**. This lasts exactly five intervals: `5 clients × 4 classes × 5 intervals = 100 unique CIFAR-100 classes`. Compare:
 
-- Communication interval 0: client 0 `(0,1)` → `(20,21)`, client 1 `(2,3)` → `(22,23)`, ... client 9 `(18,19)` → `(38,39)`.
-- Interval 1: client 0 `(40,41)` → `(60,61)`, ... client 9 `(58,59)` → `(78,79)`.
-- Interval 2: client 0 `(80,81)`, ... client 9 `(98,99)`; fewer tasks in the final interval because no additional labels exist.
-- A **separately flagged, communication-only terminal flush** connects every client with pending updates, so all 100 globally encountered classes may be integrated before final evaluation. Set `stream_terminal_flush=false` for an explicit no-flush ablation.
+1. **Full baseline:** all five clients upload and synchronize each interval.
+2. **Rotating-offline intervention:** exactly one different client is offline during each of the five intervals, so each client is withheld once, with its continuing local model/memory preserved.
 
-A disconnected client never uploads or downloads global weights. It continues local learning, retains memories, and eventually uploads the accumulated parameter changes since its *last* download. Participating clients upload before receiving the newly aggregated server model; server synchronization replaces their local model weights but preserves their private CL state.
-
-## Controls
-
-| Configuration knob | Default | Purpose |
-|---|---:|---|
-| `classes_per_local_task` | 2 | Number of distinct labels contrasted in one local softmax |
-| `local_tasks_per_round` | 2 | Number of sequential local tasks before one server update |
-| `stream_overlap_kind` | `none` | None, intra-client same/other interval, inter-client same/other interval, or combined |
-| `stream_overlap_fraction` | 0 | Probability of reusing a *seen class* in a local episode |
-| `sample_overlap_fraction` | 0 | Intentional raw-image duplication when a class appears more than once |
-| `participation` | 0.8 | Active fraction at each communication update (8 of 10 by default) |
-| `offline_duration_rounds` | 0 | 0 = independent per-round random selection; positive = deterministic seeded offline cohort held out for exactly D communication rounds |
-| `stream_recurrence_rounds` | 0 | Explicit additional local recurrence rounds using distinct training examples |
-| `stream_terminal_flush` | true | Final communication-only step: integrate all outstanding client updates |
-| `method` / `aggregator` | `sgd` / `fedavg` | Local learner / server integration algorithm |
-
-**Terminology:** The local stream consists of sequential supervised tasks; global prediction is *class-incremental*, with no task ID or task-specific head. This should not be called conventional task-ID-assisted task-incremental inference.
-
-## Installation and validation
+Both arms use **A-GEM locally, FedAvg + class-aware row fusion at the server, the same class stream, same seed 0, no label overlap, batch 1024**, and a final communication-only flush. Official test accuracy is evaluated **only once at the end**, after verifying all 100 labels reached the server. The pilot produces paired overall and per-class accuracy comparisons. This is **two jobs total**, not one per backbone; select which model the two jobs use.
 
 ```bash
 python -m pip install -e '.[test]'
-pytest -q
+python -m pytest -q
 python scripts/validate_factorial_plans.py
-bash scripts/run_all_cifar100.sh --plan-only
+bash scripts/run_primary_probe_cifar100.sh --plan-only
+
+# Two simultaneous CUDA processes on mtechdeserver, assigned one GPU each:
+bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,1
+# Or ResNet-18, still just two jobs:
+bash scripts/run_primary_probe_cifar100.sh --backbone cnn --gpus 0,1
+# If only one GPU is available, both can share it if memory permits:
+bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpus 0,0
 ```
 
-## Execution
+The launch tool prepares two independent processes, logs, resumable checkpoints, and a final paired report. **This repository has not been connected to `mtechdeserver` from this chat: no real-GPU training is claimed here.** See [PRIMARY_PROBE.md](docs/PRIMARY_PROBE.md).
+
+## Revised full factorial registry (do not launch until pilot review)
+
+The **source-generated, mathematically audited CIFAR-100 ledger contains 51,627 feasible configurations per selected backbone** (not 53,805). The audit rejected **2,178** original combinations that could not actually realize their declared temporal/within-client overlap geometry. The **5,346-job balanced core remains complete** across all 11 local CL methods, all nine server methods, six overlap geometries, three participation rates, and three seeds. The user-requested two-job probe uses one seed and a single rotating 80% participation policy; it is **not** the balanced core.
 
 ```bash
-# Small subset of the balanced methodology cross, GPU required by default:
-CUDA_VISIBLE_DEVICES=0 bash scripts/run_all_cifar100.sh --suite balanced --seeds 0 --limit 2
-
-# Inspect or export the entire exact registry without running training:
-bash scripts/run_all_cifar100.sh --plan-only --export-plan outputs/cifar100_deit_v4.jsonl.gz
-
-# Full sequential suite (very large GPU commitment):
-CUDA_VISIBLE_DEVICES=0 bash scripts/run_all_cifar100.sh
+python scripts/audit_stream_math.py
+bash scripts/run_all_cifar100.sh --backbone vit --plan-only
+bash scripts/run_all_cifar100.sh --backbone cnn --plan-only
+# Later, after successful pilots and method-specific training checks:
+CUDA_VISIBLE_DEVICES=0 bash scripts/run_all_cifar100.sh --backbone vit --suite balanced --seed 0 --limit 2
 ```
 
-Use `--families balanced`, `--seed 0`, `--start N`, `--limit N`, `--data-root`, and `--output-dir` for smaller controlled runs. `--allow-cpu` is test/debug only. The production runner fails without CUDA and saves separate configuration, metrics, stage and resumable checkpoints, client state, and a final model for each job. Results are under `results/cifar100_deit_v4/` by default; completed jobs are skipped only when the protocol and configuration match.
+Supported research backbones are switchable by the model registry, with distinct job configuration hashes and separate results directories. Add further model variants through `models.BACKBONES` after scientific review.
 
-**Do not reuse earlier CIFAR-100 results roots.** All old checkpoints and performance claims belong to the old protocol and must not be counted as new results.
+## Scientific notes
 
-## Documentation
+- Training is sequential **task-structured**, with known local labels, but the server inference uses **one class-incremental head** over all observed classes and **no task IDs**.
+- Offline clients keep training and later contribute all unsynchronized local learning; FedAvg operates on *rebased accumulated deltas*, so these runs are not conventional synchronous FedAvg.
+- The class-specific server merge uses optimizer-step counts, a heuristic that requires empirical validation.
+- Five communication intervals plus a final flush is mathematically valid for 5 clients and 100 distinct classes; extending this to 10 clients for five full intervals without overlap is invalid.
+- Only official CIFAR-100 GPU results can establish model performance. The tests are software/mathematical validations, not research accuracy results.
 
-- [`docs/CLASS_INDEXED_PAIR_PROTOCOL.md`](docs/CLASS_INDEXED_PAIR_PROTOCOL.md): server/client sequence, class-wise aggregation and offline learning details.
-- [`docs/OVERLAP_CASES.md`](docs/OVERLAP_CASES.md): disjoint, same-client and cross-client same/different-time overlaps.
-- [`docs/FACTORIAL_SUITE.md`](docs/FACTORIAL_SUITE.md): exact 53,805-job finite-grid catalogue and families.
-- [`docs/STATUS.md`](docs/STATUS.md): verified tests, limitations, and remaining GPU/learning validation.
-- [`configs/designs/stream_v4_deit.json`](configs/designs/stream_v4_deit.json): immutable planned job count and digest.
+[Factorial families](docs/FACTORIAL_SUITE.md) · [Primary probe protocol](docs/PRIMARY_PROBE.md) · [Overlap specification](docs/OVERLAP_CASES.md) · [Exact design and feasibility audit](configs/designs/stream_v5_native32.json) · [Status and caveats](docs/STATUS.md)
