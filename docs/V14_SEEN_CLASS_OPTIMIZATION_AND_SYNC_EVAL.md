@@ -250,3 +250,11 @@ trained historical seen-class softmax rows. This is a VALID FedAvg
 consequence, not defective arithmetic: do not silently reweight it
 away in the FedAvg baseline. Compare custom class-aware aggregation
 arms independently if the dilution is unacceptable.
+
+## Completed-run report integrity
+Before writing a completed status and when reusing a completed run, every server
+synchronization must have nonempty JSON, CSV, Markdown and PNG evidence.
+The saved JSON's round, model version, arrived classes, server-accepted classes,
+test-only/no-feedback flag and TEST accuracy are checked against immutable
+per-round metrics. Missing or inconsistent files raise an explicit error;
+completed runs with absent tables no longer silently pass.

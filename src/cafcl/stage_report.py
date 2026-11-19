@@ -164,3 +164,35 @@ def render_sync_report(run_dir, *, round_number, model_version, num_clients,
     return {'stem':stem,'relative_dir':'per_sync_accuracy',
             'test_accuracy':accuracy,'seen_class_count':len(seen),
             'never_predicted_classes':len(zero_labels)}
+
+
+def assert_sync_reports_complete(run_dir, round_metrics):
+    """Reject incomplete/corrupt per-sync evidence before accepting a run."""
+    root=Path(run_dir)/'per_sync_accuracy'
+    if not round_metrics:
+        raise RuntimeError('No committed server-sync metrics to validate')
+    for stage,metrics in enumerate(round_metrics,1):
+        stem=f'sync_{stage:03d}'
+        for ext in ('.json','.csv','.md','.png'):
+            artifact=root/(stem+ext)
+            if not artifact.is_file() or artifact.stat().st_size==0:
+                raise RuntimeError(f'Missing or empty server-sync artifact: {artifact}')
+        try:
+            saved=json.loads((root/(stem+'.json')).read_text())
+        except (ValueError,OSError) as exc:
+            raise RuntimeError(f'Invalid per-sync JSON: {stem}') from exc
+        if int(saved.get('round',-1))!=stage:
+            raise RuntimeError(f'Per-sync report round mismatch: {stem}')
+        if int(saved.get('version',-1))!=int(metrics['model_version']):
+            raise RuntimeError(f'Per-sync model version mismatch: {stem}')
+        for report_key,metric_key in (
+                ('observed_classes','observed_classes'),
+                ('server_integrated_classes','globally_integrated_classes')):
+            if sorted(map(int,saved.get(report_key,())))!=sorted(map(int,metrics[metric_key])):
+                raise RuntimeError(f'Per-sync class coverage mismatch: {stem}/{report_key}')
+        if saved.get('test_only_no_feedback') is not True:
+            raise RuntimeError(f'Per-sync TEST feedback invariant violated: {stem}')
+        if saved.get('test_accuracy')!=metrics.get('per_sync_test_accuracy'):
+            raise RuntimeError(f'Per-sync accuracy mismatch: {stem}')
+    return len(round_metrics)
+

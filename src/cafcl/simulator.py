@@ -334,8 +334,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             if not config_file.exists() or json.loads(config_file.read_text())!=normalized_config:
                 raise RuntimeError(f'Completed job ID collision: {job}')
             if any(not (run_dir/name).exists() for name in
-                   ('model_final.pt','summary.json','metrics.json')):
+                    ('model_final.pt','summary.json','metrics.json')):
                 raise RuntimeError('Completion marker exists but output artifacts are missing')
+            if cfg.stream_protocol:
+                from .stage_report import assert_sync_reports_complete
+                assert_sync_reports_complete(
+                    run_dir,json.loads((run_dir/'metrics.json').read_text()))
             return {'status':'already_completed','run_dir':str(run_dir)}
     atomic_json(config_file,cfg.to_dict())
     atomic_json(status_file,{'status':'running','protocol_version':PROTOCOL_VERSION,'started_at':time.time()})
@@ -859,6 +863,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 print(f'[{job}] round {round_id+1}/{total_rounds} acc={acc} '
                       f'forgetting={forgetting} clients={len(selected)}',flush=True)
         client_executor.shutdown(wait=True)
+        if cfg.stream_protocol:
+            from .stage_report import assert_sync_reports_complete
+            assert_sync_reports_complete(run_dir,history)
         save_checkpoint(run_dir/'model_final.pt',global_state,cfg,version,clients,full_state=True,server_cl_state=server_cl_state)
         atomic_json(run_dir/'summary.json',{'job_id':job,'dataset':cfg.dataset,
                     'fork_source':str(fork_from_checkpoint) if fork_from_checkpoint else None,
