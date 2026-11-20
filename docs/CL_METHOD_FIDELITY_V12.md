@@ -1,5 +1,7 @@
 > **Post-audit v14 update:** The original-paper descriptions below are historical v12 mechanisms. The active class-IL implementation now uses seen-class supervised CE for non-ER-ACE methods and allows all *known* classifier rows to update. Only future rows remain frozen, and ER-ACE retains asymmetric incoming CE. See [v14 correction ledger](V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md).
 
+> **Current primary stream:** The stream and federation statements in this dated v12 audit describe the prior method audit. The active primary paired experiment uses the V23 adjacent-chain schedule in [PRIMARY_PROBE.md](PRIMARY_PROBE.md).
+
 # v12: Whole-repository continual-learning method fidelity ledger
 
 **Scope:** the actual local CL methods registered under \`RunConfig.method\`, their paper-derived mathematical objectives and states, their training-time memory/importance mechanics, client-private to server-synchronized CL histories, and objective-preserving projection. This audit deliberately **does not modify** the original CIFAR-100 federated task stream, its 2-class tasks, class-incremental global evaluation, five client/task barriers, full versus rotating-offline participation, single shared GPU, common 100-class output layer, frozen inactive classifier rows, shared image archive, or canonical v11 server aggregation.

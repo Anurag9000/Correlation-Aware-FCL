@@ -4,6 +4,8 @@
 
 The *communication interval* is the outer loop. Within each interval there are `local_tasks_per_round` **sequential** local learning events per client. Each event has `classes_per_local_task` distinct labeled classes. Default is `(two-class task A) → (two-class task B) → (optional server communication)`. Every client runs these events even if it will be offline at the upcoming server aggregation.
 
+This document describes the generic class-indexed pair protocol used by the factorial and compatibility runners. The current five-client primary experiment uses the adjacent-chain schedule documented in [PRIMARY_PROBE.md](PRIMARY_PROBE.md), not the geometry below.
+
 For default **10 clients / 2 classes per task / 2 tasks per interval**, the first interval teaches classes 0–39, the second 40–79, and the third 80–99. No class is fabricated to fill the last interval. Clients that exhaust their scheduled events simply do not perform extra local updates. Training and communication are separate: a client may still upload previously accumulated updates even in an interval with no fresh training.
 
 Local-method state (replay indices/logits, GEM/A-GEM memory, SI/MAS/EWC parameter importance, LwF teacher, etc.) is owned by the client and maintained across disconnections. **No client ever uploads raw replay samples to the server.** These clients continue updating their own model, and later upload accumulated *parameter deltas*.

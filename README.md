@@ -1,38 +1,40 @@
 # Correlation-Aware Federated Continual Learning
 
-This research repository studies continual learning across clients that may continue training while disconnected, then upload accumulated updates. It includes several local continual-learning methods and separate server aggregation research baselines.
+This research repository studies continual learning across clients that may train while disconnected, then upload accumulated updates. It includes local continual-learning methods, server aggregation studies, and source-fidelity adapters.
 
-## The canonical primary FedAvg recipe
+## Current CIFAR-100 paired experiment
 
-The primary CIFAR-100 comparison has one fixed recipe for both participation arms:
+The primary ResNet-18 Replay/FedAvg experiment compares full participation with a randomly selected one-client outage. Its active configuration is:
 
-- CIFAR-stem ResNet-18 at native 32×32, randomly initialized
-- Standard CIFAR random crop with four-pixel zero padding and horizontal flip on every training read, including Replay reads
-- Replay with a 50-example-per-class Algorithm R reservoir
-- Sample-weighted whole-model FedAvg, including every classifier row; no classwise head fusion
-- SGD with learning rate 0.03, momentum 0.9, weight decay 0.0005; batch size 64; 10 epochs per task; persistent client momentum
-- Five clients, nine learning syncs, then one communication-only flush
-- Full participation versus rotating 4-of-5 participation, seed 0
+- CIFAR-100 at native 32×32 resolution, with 450 training examples per class.
+- Five independent clients and one server model in each experiment process.
+- One two-class learning task per client at every learning sync, starting immediately at sync 1.
+- Adjacent class pairs overlap across clients and carry into the next sync: `(0,1),(1,2),(2,3),(3,4),(4,5)`, then `(5,6),(6,7),...`.
+- Twenty learning syncs cover all 100 classes. The final pair `(98,99)` is assigned to the last two client slots so all five clients train at sync 20; class 98 consequently has three owners.
+- Each client retains up to 50 examples per class. The expected deduplicated server archive after the terminal flush contains 10,000 examples: 50 for class 0, 150 for class 98, and 100 for every other class.
+- In the hidden arm, one client is selected randomly for no model upload at each learning sync. All five clients continue training; the offline client retains its model trajectory and receives the complete replay archive.
+- Replay training includes each incoming batch and every currently available replay example in every optimizer update. Replay examples are read in batch-64 chunks and their gradients are accumulated before that update.
+- Five independent client models train concurrently per process on separate CUDA streams. The two arms launch as separate concurrent processes on the same GPU, for ten client models training concurrently and two separate server models.
+- Each local task uses batch 64, 10 epochs, crop/flip train augmentation, and persistent client SGD momentum. A communication-only terminal flush follows the 20 learning syncs.
 
-The completed paired run reached **38.58%** with full participation and **30.58%** with rotating offline participation. Both models integrated all 100 classes. This is a one-seed result, not a statistical estimate. The rotating arm uses the repository's marked stale-update adapter because offline clients continue training from an older model; it is not synchronous textbook FedAvg. See [the fixed protocol and result](docs/PRIMARY_PROBE.md).
-
-Run this exact comparison on one GPU:
+Run the current two-arm plan or launch it on GPU 0:
 
 ```bash
 bash scripts/run_primary_probe_cifar100.sh --plan-only
 bash scripts/run_primary_probe_cifar100.sh --gpu 0
 ```
 
-The primary runner fixes its model, training views, optimizer policy, replay budget, task stream, and seed so candidate variants cannot be mistaken for this result. Other local learners and server methods remain separate research experiments. Their method-specific aggregation paths are separate suite implementations and do not define another primary Replay/FedAvg recipe. See the [method source fidelity audit](docs/ORIGINAL_SOURCE_FIDELITY_AUDIT.md) for their scope and current limits.
+The completed 38.58% full / 30.58% rotating-offline results came from an earlier nine-sync, disjoint-class run with sampled-minibatch replay. They are historical and do not validate this current 20-sync adjacent-chain, exhaustive-replay configuration. The current protocol is one seed and requires a new run for empirical results. See [the current protocol](docs/PRIMARY_PROBE.md) and [project status](docs/STATUS.md).
 
 ## Code and documentation
 
-- `src/cafcl/primary_probe.py`: fixed paired Replay/FedAvg experiment
-- `src/cafcl/simulator.py`: simulation and the shared canonical FedAvg equation
-- `src/cafcl/continual.py`: client-local learning and train-view augmentation
-- `docs/PRIMARY_PROBE.md`: primary protocol, empirical result, and limitations
-- `docs/STATUS.md`: current project status
-- `docs/SERVER_ALGORITHM_FIDELITY_V11.md`: server-method fidelity audit
-- `docs/ORIGINAL_SOURCE_FIDELITY_AUDIT.md`: separate upstream method-source provenance
+- `src/cafcl/primary_probe.py`: fixed paired Replay/FedAvg experiment.
+- `src/cafcl/streaming.py`: adjacent-chain and research stream schedulers.
+- `src/cafcl/parallel_clients.py`: concurrent client training and task barriers.
+- `src/cafcl/continual.py`: local learning, replay, and train-view augmentation.
+- `src/cafcl/simulator.py`: simulation and server synchronization.
+- `docs/PRIMARY_PROBE.md`: active primary protocol and historical-result boundary.
+- `docs/STATUS.md`: current project status.
+- `docs/ORIGINAL_SOURCE_FIDELITY_AUDIT.md`: separate upstream method-source provenance.
 
 Replay shares raw training examples with connected clients. This simulator is not a privacy-preserving federated-learning system.

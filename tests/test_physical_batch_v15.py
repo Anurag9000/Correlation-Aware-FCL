@@ -13,11 +13,11 @@ def test_pilot_uses_64_cropflip_and_persistent_sgd():
         assert cfg.optimizer_state_policy=='persist'
         assert cfg.training_augmentation=='cifar_crop_flip'
         assert cfg.momentum==.9 and cfg.weight_decay==.0005
-        assert '_V21_CROP_FLIP_' in cfg.job_id
+        assert '_V23_CHAIN20_' in cfg.job_id
     plan=audited_plan(jobs)
     assert plan['batch_size']==64
-    assert plan['training_intervals']==9 and plan['terminal_communication_only_flush']
-    assert jobs[1].stream_offline_policy=='rotate_once'
+    assert plan['training_intervals']==20 and plan['terminal_communication_only_flush']
+    assert jobs[1].stream_offline_policy=='random'
 
 def test_no_production_batch_1024():
     with pytest.raises(AssertionError,match='64'):

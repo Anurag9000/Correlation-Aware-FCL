@@ -207,6 +207,7 @@ class FederatedCLState:
         # of the active method. A method only *uses* the compatible entries.
         client.received_memory=_clone_memory(self.memory)
         client.memory=combined_memory(client.private_memory,client.received_memory)
+        client.received_replay_version=self.version
         client.received_sample_origins=dict(self.memory_origins)
         # Every selected client receives the entire acknowledged class table,
         # not any classes still held privately by disconnected clients.
@@ -261,6 +262,54 @@ class FederatedCLState:
             client.native_teacher=_cpu_dict(self.teacher)
             client.native_teacher_classes=set(self.integrated_classes)
         client.federated_cl_version=self.version
+
+    def broadcast_replay_archive_to(self,client,method='replay'):
+        """Deliver the committed replay archive without syncing model weights.
+
+        Offline clients keep their stale model and local optimizer trajectory,
+        but under the shared-buffer protocol they still receive the complete
+        aggregate exemplar archive and associated replay metadata each sync.
+        """
+        if method in MEMORY_METHODS:
+            for cls in self.memory:
+                client.observed_classes.add(int(cls))
+                client.first_seen_local_experience.setdefault(int(cls),client.local_experience)
+                client.first_seen_stage.setdefault(int(cls),int(self.version))
+        client.received_memory=_clone_memory(self.memory)
+        client.memory=combined_memory(client.private_memory,client.received_memory)
+        client.received_sample_origins=dict(self.memory_origins)
+        client.received_gradient_supports={int(c):tuple(map(int,ids))
+            for c,ids in self.memory.items()}
+        client.received_memory_logits={int(i):v.detach().cpu().clone()
+            for i,v in self.memory_logits.items()}
+        client.received_example_payloads={int(i):(x.clone(),int(y))
+            for i,(x,y) in self.exemplar_payloads.items()}
+        private_only={int(i):v.detach().cpu().clone()
+            for i,v in client.memory_logits.items() if int(i) not in self.memory_logits}
+        client.memory_logits={**private_only,**{int(i):v.detach().cpu().clone()
+                              for i,v in self.memory_logits.items()}}
+        client.received_replay_version=self.version
+
+    def assert_replay_archive_complete(self,client):
+        """Verify an archive-only delivery without requiring model sync."""
+        if client.received_replay_version!=self.version:
+            raise RuntimeError('Client replay archive version is stale')
+        if set(client.received_memory)!=set(self.memory):
+            raise RuntimeError('Client missing a globally integrated replay class')
+        for cls,ids in self.memory.items():
+            if set(client.received_memory[cls])!=set(ids):
+                raise RuntimeError(f'Client replay archive differs for class {cls}')
+        if set(client.received_example_payloads)!=set(self.exemplar_payloads):
+            raise RuntimeError('Client replay image payload table is incomplete')
+        for idx,(pixels,label) in self.exemplar_payloads.items():
+            received,received_label=client.received_example_payloads[idx]
+            if int(received_label)!=int(label) or not torch.equal(received,pixels):
+                raise RuntimeError(f'Client replay payload mismatch at sample {idx}')
+        if set(client.received_memory_logits)!=set(self.memory_logits):
+            raise RuntimeError('Client DER replay target table is incomplete')
+        for idx,logits in self.memory_logits.items():
+            if not torch.equal(client.received_memory_logits[idx],logits):
+                raise RuntimeError(f'Client DER replay target mismatch at sample {idx}')
 
     def assert_complete_download(self,client):
         """Validate ALL CL artifacts after every selected-client server sync.

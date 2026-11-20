@@ -10,14 +10,17 @@
 
 The launchers are `GLFC/pilot/run.sh`, `LGA/pilot/run.sh`, and
 `FEAT/pilot/run.sh`. `--plan-only` is safe and available without GPU.
-Both FULL and rotating-OFFLINE arms launch in separate CUDA:0 processes.
-Five local clients learn in both arms. The only experimental intervention
-is a client temporarily unable to upload or download. The nine training
-intervals and communication-only tenth flush cover the prescribed
-independent CIFAR-100 two-class local streams. Model input batch64 is
-mandatory. Source fidelity is recorded separately from class-stream
-protocol adaptation. No GPU training has been launched as a newly
-certified faithful study.
+Both FULL and random-OFFLINE arms launch in separate CUDA:0 processes.
+Five local clients learn in both arms. At each of 20 learning syncs, the
+hidden arm randomly omits one client model upload; all clients continue
+training, and every client receives the complete committed replay archive.
+Only selected clients receive updated model weights. A communication-only
+terminal flush follows the 20 learning syncs. The class stream is the
+adjacent two-class chain documented in [PRIMARY_PROBE.md](PRIMARY_PROBE.md).
+Each process runs all five clients concurrently (ten client workers across
+the two arms), and model input batch64 is mandatory. Source fidelity is
+recorded separately from the shared stream protocol. No GPU training has
+been launched as a newly certified faithful study.
 
 ## Mechanism execution as presently implemented
 
@@ -40,7 +43,7 @@ hidden-client artifacts remain private until reconnection.
 ## Explicit experimental adaptations
 
 Original authors do not train this particular disjoint, five-client,
-two-class, rotating-offline protocol. Dataset indexing and visible-class
+two-class, randomly offline protocol. Dataset indexing and visible-class
 head mapping, per-client persistent state, 64-input physical batch
 constraint, terminal flush, and off-schedule delayed model fusion
 are documented changes. Our delayed update uses a noncanonical

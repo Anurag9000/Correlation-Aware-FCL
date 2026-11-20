@@ -8,33 +8,50 @@ from cafcl.full_matrix import expand
 from cafcl.stream_audit import check_stream
 
 def test_probe_is_the_fixed_two_job_100_label_recipe():
-    full,rotating=make_jobs()
-    assert full.model==rotating.model==CNN_ID
-    assert full.batch_size==rotating.batch_size==64
-    assert full.method==rotating.method=='replay'
-    assert full.momentum==rotating.momentum==0.9
-    assert full.weight_decay==rotating.weight_decay==0.0005
-    assert full.memory_per_class==rotating.memory_per_class==50
-    assert full.share_continual_state and rotating.share_continual_state
-    assert full.aggregator==rotating.aggregator=='fedavg'
-    assert full.seed==rotating.seed==0
-    assert full.optimizer_state_policy==rotating.optimizer_state_policy=='persist'
-    assert full.training_augmentation==rotating.training_augmentation=='cifar_crop_flip'
-    assert full.client_training_concurrency==rotating.client_training_concurrency==1
-    assert 'V21_CROP_FLIP' in full.job_id and 'V21_CROP_FLIP' in rotating.job_id
-    assert full.evaluate_final_only and rotating.evaluate_final_only
-    assert full.participation==1. and rotating.participation==.8
-    plan=audited_plan((full,rotating))
-    assert plan['training_intervals']==9
-    assert plan['initial_local_tasks']==2 and plan['subsequent_local_tasks']==1
+    full,random_offline=make_jobs()
+    assert full.model==random_offline.model==CNN_ID
+    assert full.batch_size==random_offline.batch_size==64
+    assert full.method==random_offline.method=='replay'
+    assert full.momentum==random_offline.momentum==0.9
+    assert full.weight_decay==random_offline.weight_decay==0.0005
+    assert full.memory_per_class==random_offline.memory_per_class==50
+    assert full.share_continual_state and random_offline.share_continual_state
+    assert full.aggregator==random_offline.aggregator=='fedavg'
+    assert full.seed==random_offline.seed==0
+    assert full.optimizer_state_policy==random_offline.optimizer_state_policy=='persist'
+    assert full.training_augmentation==random_offline.training_augmentation=='cifar_crop_flip'
+    assert full.client_training_concurrency==random_offline.client_training_concurrency==5
+    assert full.stream_client_chain and random_offline.stream_client_chain
+    assert full.local_tasks_per_round==random_offline.local_tasks_per_round==1
+    assert 'V23_CHAIN20' in full.job_id and 'V23_CHAIN20' in random_offline.job_id
+    assert full.evaluate_final_only and random_offline.evaluate_final_only
+    assert full.participation==1. and random_offline.participation==.8
+    plan=audited_plan((full,random_offline))
+    assert plan['training_intervals']==20
+    assert plan['initial_local_tasks']==1 and plan['subsequent_local_tasks']==1
+    assert plan['new_unique_classes_first_sync']==6
+    assert plan['new_unique_classes_syncs_2_to_19']==5
+    assert plan['new_unique_classes_final_sync']==4
+    assert plan['all_classes_covered'] and 'all_classes_once' not in plan
     assert plan['total_jobs']==2
-    assert set(x['offline_client'] for x in plan['offline_schedule'])==set(range(5))
-    assert len(plan['offline_schedule'])==9
-    assert len(set(c for x in plan['offline_schedule'] for c in x['offline_classes']))==20
-    assert [len(x['offline_classes']) for x in plan['offline_schedule']]==[4]+[2]*8
+    assert len(plan['offline_schedule'])==20
+    assert all(len(x['online_clients'])==4 and len(x['offline_classes'])==2
+               for x in plan['offline_schedule'])
+    assert plan['all_clients_train_each_sync']
+    assert plan['client_training_concurrency']==5
+    assert plan['models_per_run']==6 and plan['server_models_across_both_arms']==2
+    assert plan['client_models_across_both_arms']==10
+    assert 'five-client learning barrier' in plan['server_model_updates']
+    assert plan['concurrently_training_client_models_across_both_arms']==10
+    assert plan['expected_server_exemplars_after_flush']==10000
+    assert plan['expected_server_exemplars_per_class']['0']==50
+    assert plan['expected_server_exemplars_per_class']['98']==150
+    assert plan['expected_server_exemplars_per_class']['99']==100
+    assert plan['class_occurrence_counts']['0']==1
+    assert all(plan['class_occurrence_counts'][str(c)]==2 for c in range(1,100) if c!=98)
 
 
-def test_pilot_incompatible_rotation_rejected():
+def test_pilot_incompatible_random_offline_plan_rejected():
     full,partial=make_jobs()
     with pytest.raises(AssertionError):replace(partial,num_clients=10).validate()
     with pytest.raises(AssertionError):replace(partial,stream_terminal_flush=False).validate()

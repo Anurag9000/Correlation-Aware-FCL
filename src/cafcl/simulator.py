@@ -30,7 +30,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v21_primary_crop_flip'
+PROTOCOL_VERSION = 'cifar100_native32_v23_chain20_random_offline_parallel5'
 
 
 def _classwise_fedavg_contribution(uploads):
@@ -676,6 +676,15 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
                         server_cl_state.assert_complete_download(clients[cid])
+            if cfg.share_continual_state:
+                # Shared replay archives reach every client at each sync, even
+                # when its model stays offline/stale. Only selected clients
+                # receive the committed model and optimizer acknowledgement.
+                for cid,client in clients.items():
+                    if cid not in selected:
+                        server_cl_state.broadcast_replay_archive_to(
+                            client,client.last_learning_method or cfg.method)
+                        server_cl_state.assert_replay_archive_complete(client)
             # Capture server-level backbone/head compatibility diagnostics
             # after the commit, without changing any global or local weights.
             aggregation_norm_diagnostics=_normalization_aggregation_diagnostics(

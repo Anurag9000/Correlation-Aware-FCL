@@ -76,7 +76,7 @@ def test_all_memory_methods_start_post_sync_with_global_history(monkeypatch):
         if method in {'der','derpp'}:
             assert len(client.memory_logits)==4
         result=train_first_after_sync(model,client,method,**({'gem_grouping':'stage'} if method=='gem' else {}))
-        assert result['steps']==(2 if method=='replay' else 1)
+        assert result['steps']==1
         assert result['memory_samples']>=4
         if method in {'gem','agem'}:
             assert gradient_calls, f'{method} did not consult remotely synced constraints'
@@ -151,6 +151,27 @@ def test_disconnected_retains_private_later_receives_all():
     assert set(b.memory)=={0,2,3}
     assert b.private_memory=={2:[4],3:[6]}
     assert b.federated_cl_version==2
+
+
+def test_offline_clients_receive_latest_replay_archive_without_model_sync():
+    model,a=synced_client(0)
+    _,b=synced_client(1)
+    a.private_memory={0:[0]}
+    b.private_memory={2:[4]}
+    a.last_learning_method='agem'
+    server=FederatedCLState()
+    server.merge_clients([a],TinyBank(),'agem',model.state_dict(),1)
+    server.broadcast_to(a,'agem')
+    stale={k:v.clone() for k,v in b.shared_weights.items()}
+    stale_version=b.model_version
+    server.broadcast_replay_archive_to(b)
+    assert set(b.received_memory)=={0}
+    assert set(b.memory)=={0,2}
+    assert b.received_replay_version==1
+    assert b.model_version==stale_version and b.federated_cl_version==0
+    assert all(torch.equal(b.shared_weights[k],v) for k,v in stale.items())
+    assert b.observed_classes=={0}
+    server.assert_replay_archive_complete(b)
 
 
 def test_server_echo_does_not_double_importance_or_archive():

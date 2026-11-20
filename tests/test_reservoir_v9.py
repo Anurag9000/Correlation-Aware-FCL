@@ -72,13 +72,15 @@ def test_paired_probe_both_use_reservoir_and_share_state():
     for c in (full,partial):
         assert c.method=='replay' and c.share_continual_state
         assert c.replay_reservoir_fraction==pytest.approx(1/9)
-        assert c.batch_size==64 and 'RESERVOIR11p1111_V21_CROP_FLIP' in c.job_id
+        assert c.batch_size==64 and 'RESERVOIR11p1111_V23_CHAIN20' in c.job_id
         assert c.optimizer_state_policy=='persist'
         assert c.training_augmentation=='cifar_crop_flip'
     plan=audited_plan((full,partial))
     assert plan['total_jobs']==2
     assert plan['private_reservoir_per_class']==50
-    assert plan['expected_server_exemplars_after_flush']==5000
+    assert plan['expected_server_exemplars_after_flush']==10000
+    assert plan['expected_server_exemplars_per_class']['0']==50
+    assert plan['expected_server_exemplars_per_class']['98']==150
 
 def test_reservoir_guardrails():
     with pytest.raises(AssertionError):

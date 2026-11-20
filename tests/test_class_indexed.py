@@ -66,7 +66,9 @@ def test_all_methods_two_binary_episodes_same_round_while_offline(method,tmp_pat
     assert c['pending_upload_steps']>0 and c['model_version']==0
     assert set(c['pending_class_update_steps'])=={0,1,2,3}
     if method in {'gem','agem','replay','der','derpp','er_ace'}:
-        assert set(c['memory'])=={0,1,2,3}
+        # Offline clients receive the committed full replay archive without
+        # receiving the model checkpoint, so it can include every server class.
+        assert set(c['memory'])==set(range(10))
     assert set(check['clients'][1]['activated_labels'])=={4,5,6,7,8,9}
 
 

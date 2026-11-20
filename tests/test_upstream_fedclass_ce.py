@@ -79,3 +79,38 @@ def test_original_ce_direct_training_uses_known_class_competition_and_batch64():
     assert client.private_memory=={0:[0,1],1:[5,6]}
     assert result['optimizer_state_policy']=='source_reset_each_task'
     assert all(torch.isfinite(v.float()).all() for v in result['weights'].values())
+
+
+def test_fedclass_replay_reads_the_complete_archive_for_each_current_step():
+    from collections import Counter
+    from cafcl.continual import LocalState
+    from cafcl.config import RunConfig
+    class Tiny(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.features=nn.Sequential(nn.Flatten(),nn.Linear(3*4*4,4),nn.ReLU())
+            self.classifier=nn.Linear(4,100)
+        def forward(self,x):return self.classifier(self.features(x))
+    class Train:
+        targets=[0]*6+[1]*6
+        def __init__(self):self.reads=Counter()
+        def __len__(self):return len(self.targets)
+        def __getitem__(self,index):
+            self.reads[int(index)]+=1
+            return torch.full((3,4,4),float(index)/12.),self.targets[index]
+    class Bank:pass
+    bank=Bank();bank.train=Train()
+    model=Tiny();client=LocalState(client_id=0)
+    client.receive(model.state_dict(),0)
+    client.observed_classes={0,1}
+    client.seen_indices={0,3,4,6,7}
+    client.current_indices=[6,7]
+    client.memory={0:[0,3,4]}
+    client.local_experience=1
+    cfg=RunConfig(dataset='synthetic',model='fedclass_resnet8',method='replay',
+        batch_size=64,epochs=1,lr=.03,momentum=.9,weight_decay=.0005,
+        memory_per_class=2,replay_ratio=1.,share_continual_state=True)
+    result=train_original_ce(model,client,bank,cfg,torch.device('cpu'),1,
+        experience_end=False,active_pair_classes=(0,1))
+    assert result['steps']==1
+    assert {i:bank.train.reads[i] for i in (0,3,4)}=={0:1,3:1,4:1}

@@ -1,9 +1,9 @@
 """Client learning with hard barriers between task ordinals.
 
-Five independent client models persist on the GPU. By default they submit work
-simultaneously on independent CUDA streams. A bounded concurrency setting runs
+Five independent client models persist on the GPU. With concurrency set to
+five, they submit work simultaneously on independent CUDA streams. A bounded concurrency setting runs
 clients in waves; concurrency one shares a CUDA stream to reuse allocator pools.
-CUDA decides whether kernels from the eight experiment processes overlap
+CUDA decides how kernels from concurrent experiment processes overlap
 physically; the campaign contract is simultaneous live workers and intact
 per-client batch, optimizer, and synchronization semantics.
 
@@ -91,11 +91,9 @@ def _train_one(runtime, client, bank, cfg, device, round_id, event,
 def _prepare_events(cfg, client, cid, raw_events, current_stage):
     if cfg.stream_protocol:
         events = list(raw_events)
-        expected=(2 if current_stage==0 else 1)
+        expected=cfg.local_tasks_per_round
         if len(events)>expected:
-            raise AssertionError('Only two initial tasks or one subsequent task allowed')
-        if current_stage>0 and len(events)>1:
-            raise AssertionError('Only one post-sync task is permitted')
+            raise AssertionError('More client tasks arrived than configured for this sync')
         if any(len(set(e['class_ids'])) < 2 for e in events):
             raise AssertionError('Singleton local task in strict stream')
     else:

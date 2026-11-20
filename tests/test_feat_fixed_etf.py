@@ -43,3 +43,7 @@ def test_native_feat_pilot_now_selects_etf_not_trainable_linear():
     full,offline=make_native_jobs('feat')
     assert full.model==offline.model=='native_feat_etf'
     assert 'SOURCE_CORE_V5' in full.job_id and 'SOURCE_CORE_V5' in offline.job_id
+    assert full.stream_client_chain and offline.stream_client_chain
+    assert (full.client_training_concurrency or full.num_clients)==5
+    assert (offline.client_training_concurrency or offline.num_clients)==5
+    assert offline.stream_offline_policy=='random'

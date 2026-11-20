@@ -11,7 +11,7 @@ def test_all_three_paired_pilot_schedules():
         assert (full.method,full.model)==(method,model)
         assert (hidden.method,hidden.model)==(method,model)
         assert full.participation==1 and hidden.participation==.8
-        assert hidden.stream_offline_policy=='rotate_once'
+        assert hidden.stream_offline_policy=='random'
         assert full.classwise_head_merge is False
         assert full.batch_size==hidden.batch_size==64
         assert full.memory_per_class==hidden.memory_per_class==50
@@ -19,12 +19,13 @@ def test_all_three_paired_pilot_schedules():
         assert full.momentum==hidden.momentum==.9
         assert full.weight_decay==hidden.weight_decay==.0005
         plan=audited_plan((full,hidden))
-        assert plan['training_intervals']==9
+        assert plan['training_intervals']==20
         assert plan['total_jobs']==2
-        assert plan['expected_server_exemplars_after_flush']==5000
-        assert len(plan['offline_schedule'])==9
-        assert set(x['offline_client'] for x in plan['offline_schedule'])==set(range(5))
+        assert plan['expected_server_exemplars_after_flush']==10000
+        assert len(plan['offline_schedule'])==20
         assert all(len(x['online_clients'])==4 for x in plan['offline_schedule'])
+        assert plan['client_training_concurrency']==5
+        assert plan['concurrently_training_client_models_across_both_arms']==10
         assert set(map(int,range(100)))==set(range(100))
 
 
@@ -184,7 +185,9 @@ def test_all_three_pilot_entrypoints_write_audited_plans(tmp_path):
         native_primary.main(['--suite',name,'--seed','0',
                              '--output-dir',str(tmp_path),'--plan-only'])
         design=json.loads((tmp_path/name/'seed0'/('source_v5' if name=='feat' else 'source_v4')/'design.json').read_text())
-        assert design['training_intervals']==9
+        assert design['training_intervals']==20
+        assert design['expected_server_exemplars_after_flush'] is None
+        assert design['expected_server_exemplars_per_class'] is None
         assert design['terminal_communication_only_flush'] is True
         assert design['full_and_offline_same_gpu']==0
         assert design['concurrent_processes']==2
@@ -198,7 +201,7 @@ def test_pilot_dispatch_spawns_both_arms_concurrently_on_gpu_zero(monkeypatch,tm
     def fake_build_report(root,jobs):
         result=root/'comparison'/'comparison.md'
         result.parent.mkdir(parents=True,exist_ok=True)
-        result.write_text('Two matched Replay/FedAvg runs,')
+        result.write_text('Two matched runs,')
         return {'mock_only':True}
     monkeypatch.setattr(n,'build_report',fake_build_report)
     launched=[]

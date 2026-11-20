@@ -109,6 +109,7 @@ class RunConfig:
     stream_protocol: bool = False
     classes_per_local_task: int = 2
     local_tasks_per_round: int = 2
+    stream_client_chain: bool = False
     stream_overlap_kind: str = 'none'
     stream_overlap_fraction: float = 0.0
     stream_recurrence_rounds: int = 0
@@ -126,6 +127,13 @@ class RunConfig:
         if self.training_augmentation != 'none':
             assert self.dataset == 'cifar100' and self.stream_protocol and self.scenario == 'disjoint'
         assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
+        if self.stream_client_chain:
+            assert self.stream_protocol and self.class_pair_protocol == 'strict'
+            assert self.num_clients == 5 and self.classes_per_local_task == 2
+            assert self.local_tasks_per_round == 1 and self.stream_recurrence_rounds == 0
+            assert self.stream_overlap_kind == 'none' and self.stream_overlap_fraction == 0
+            assert self.sample_overlap_fraction == 0
+            assert self.stream_terminal_flush, 'Client-chain streams require a final archive/model flush'
         assert self.stream_overlap_kind in {'none','intra_same_round','intra_cross_round','inter_same_round','inter_cross_round','combined'}
         assert 0 <= self.stream_overlap_fraction <= 1
         assert self.stream_recurrence_rounds >= 0 and self.offline_duration_rounds >= 0
@@ -137,7 +145,7 @@ class RunConfig:
             assert self.dataset in {'cifar100','synthetic'}
             assert self.learning_setting == 'class_il', 'No task ID or task-specific heads'
             assert self.class_pair_protocol == 'strict'
-            assert not self.full_sync and not self.reset_memory_on_sync, 'Offline clients must never receive server broadcasts or lose memory'
+            assert not self.full_sync and not self.reset_memory_on_sync, 'Offline clients must not receive server model weights or lose memory'
             # Canonical methods update all classifier rows with the same
             # aggregation rule. Classwise fusion is only for custom methods.
             assert not self.class_subset, 'CIFAR-100 subset is insufficient for default 10-client curriculum'
@@ -147,7 +155,8 @@ class RunConfig:
             if self.offline_duration_rounds:assert self.selector == 'random'
             if self.stream_offline_policy == 'rotate_once':
                 assert self.offline_duration_rounds == 0 and self.selector == 'random'
-                assert self.stream_overlap_kind == 'none' and self.stream_recurrence_rounds == 0
+                assert (self.stream_overlap_kind == 'none' and not self.stream_client_chain
+                        and self.stream_recurrence_rounds == 0)
                 assert self.participation == 1 - 1/self.num_clients
                 assert self.stream_terminal_flush
         assert self.class_pair_protocol in {'compatible','strict'}
@@ -169,7 +178,7 @@ class RunConfig:
             assert self.method in {'replay','native_glfc','native_lga','native_feat'}, 'Per-class reservoir fraction applies to replay-capable methods only'
         if self.dataset=='cifar100':
             assert self.stream_protocol and self.class_pair_protocol=='strict', (
-                'Every active CIFAR-100 job must use the unique first4-then2 class-pair stream')
+                'Every active CIFAR-100 job must use the strict class-pair stream')
             assert self.share_continual_state, 'All CIFAR-100 jobs require synchronized CL state'
             assert not self.reset_memory_on_sync, 'Synchronized history must remain available'
             assert not (self.full_sync and self.participation<1), 'Hidden clients cannot receive server broadcasts'

@@ -1,4 +1,4 @@
-"""FedCLASS CE/FedAvg first-four-then-two offline pilot regression suite."""
+"""FedCLASS CE/FedAvg adjacent-chain offline pilot regression suite."""
 from __future__ import annotations
 
 import json
@@ -27,7 +27,7 @@ def test_paired_fedclass_configs_and_schedule(mode,method,count):
     assert not full.classwise_head_merge and not hidden.classwise_head_merge
     assert full.num_clients==hidden.num_clients==5
     assert full.participation==1. and hidden.participation==.8
-    assert hidden.stream_offline_policy=="rotate_once"
+    assert hidden.stream_offline_policy=="random"
     assert full.batch_size==hidden.batch_size==64
     assert full.epochs==hidden.epochs==10
     assert full.momentum==hidden.momentum==.9
@@ -41,34 +41,29 @@ def test_paired_fedclass_configs_and_schedule(mode,method,count):
     assert full.client_training_concurrency==hidden.client_training_concurrency==2
     assert set(full.to_dict())==set(hidden.to_dict())
     diff={k for k in full.to_dict() if full.to_dict()[k]!=hidden.to_dict()[k]}
-    assert diff=={"job_id","participation","stream_offline_policy"}
+    assert diff=={"job_id","participation"}
 
     stream=make_task_schedule(100,full)
-    assert len(stream)==50
-    assert sorted(c for *_,labels,recur in stream for c in labels)==list(range(100))
+    assert len(stream)==100
+    assert set(c for *_,labels,recur in stream for c in labels)==set(range(100))
     assert all(len(labels)==2 for _,_,_,labels,_ in stream)
     for cid in range(5):
-        assert [labels for rnd,c,_,labels,_ in stream if rnd==0 and c==cid]==[
-            (4*cid,4*cid+1),(4*cid+2,4*cid+3)]
-        for rnd in range(1,9):
-            assert [labels for r,c,_,labels,_ in stream if r==rnd and c==cid]==[
-                (20+10*(rnd-1)+cid*2,21+10*(rnd-1)+cid*2)]
+        assert [labels for rnd,c,_,labels,_ in stream if rnd==0 and c==cid]==[(cid,cid+1)]
+        for rnd in range(1,20):
+            expected=(98,99) if rnd==19 and cid==4 else (rnd*5+cid,rnd*5+cid+1)
+            assert [labels for r,c,_,labels,_ in stream if r==rnd and c==cid]==[expected]
     plan=audited_plan((full,hidden))
-    assert plan["training_intervals"]==9
+    assert plan["training_intervals"]==20
     assert plan["terminal_communication_only_flush"]
     assert plan["total_jobs"]==2
     assert plan["private_reservoir_per_class"]==count
-    assert plan["expected_server_exemplars_after_flush"]==100*count
+    assert plan["expected_server_exemplars_after_flush"]==200*count
     missing=[]
-    for rnd in range(9):
+    for rnd in range(20):
         online=set(select_offline_cohort(hidden,rnd,10,list(range(4))))
         assert len(online)==4
         missing.append(next(iter(set(range(5))-online)))
-    assert set(missing[:5])==set(range(5))
-    assert missing[5:]==missing[:4]
-    # The selector validates an initial four-client cohort even for U10.
-    # The simulator itself bypasses the selector on the terminal flush.
-    assert set(select_offline_cohort(hidden,9,10,list(range(4))))==set(range(5))
+    assert len(missing)==20
     meta=make_design((full,hidden),mode=mode,replay_ratio=1.)
     assert meta["upstream_commit"]==SOURCE_COMMIT
     assert meta["test_oracle_task_id"] is False
@@ -101,13 +96,13 @@ def test_original_fedclass_modules_exact_feature_head_forward():
 def test_fedclass_cli_generates_both_plans_without_cuda(tmp_path,capsys):
     for mode in ("authors_exemplars","none"):
         main(["--memory-mode",mode,"--plan-only","--output-dir",str(tmp_path)])
-        location=tmp_path/mode/"seed0_lr0.03_epochs10_source_v2"
+        location=tmp_path/mode/"seed0_lr0.03_epochs10_source_v3"
         data=json.loads((location/"design.json").read_text())
         assert data["suite"]=="FedCLASS"
         assert data["concurrent_processes"]==2
         assert data["full_and_offline_same_gpu"]==0
         assert data["total_jobs"]==2
-        assert data["training_intervals"]==9
+        assert data["training_intervals"]==20
         assert data["original_first_k_per_class"]==(50 if mode=="authors_exemplars" else 0)
     with pytest.raises(SystemExit):
         main(["--gpu","1","--plan-only","--output-dir",str(tmp_path)])
@@ -146,7 +141,7 @@ def test_fedclass_launcher_starts_two_workers_before_wait_and_both_gpu0(
     assert all(kwargs["env"]["CUDA_VISIBLE_DEVICES"]=="0" for _,kwargs in created)
     assert all(kwargs["stderr"]==runner.subprocess.STDOUT for _,kwargs in created)
     assert "FedCLASS source CE + authors original first-50/class exemplars" in (
-        tmp_path/"authors_exemplars"/"seed0_lr0.03_epochs10_source_v2"/
+        tmp_path/"authors_exemplars"/"seed0_lr0.03_epochs10_source_v3"/
         "comparison"/"comparison.md").read_text()
 
 

@@ -71,6 +71,7 @@ class LocalState:
     received_gradient_supports:dict[int,tuple[int,...]]=field(default_factory=dict)
     pending_importance:dict[str,dict]=field(default_factory=dict)
     federated_cl_version:int=0
+    received_replay_version:int=-1
     lwf_teacher_from_server:bool=False
     # Class/experience provenance makes GEM's historical constraint groups
     # unambiguous even when tasks originate on different clients.
@@ -328,23 +329,28 @@ def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,acti
             bn_snapshots.append((layer,layer.running_mean.detach().clone(),
                 layer.running_var.detach().clone(),layer.num_batches_tracked.detach().clone()))
     try:
-        # One true physical reference batch; scarce history is drawn with replacement.
-        count=len(indices)
+        # Compute the reference direction over the complete stored buffer.
+        # Mini-batches bound activation memory; the weighted gradient sum is
+        # the same mean as one logical full-buffer batch.
+        selected=list(indices)
+        count=len(selected)
         if not count:raise ValueError('No historical constraint samples')
-        gen=torch.Generator().manual_seed(seed)
-        draw=(torch.randperm(count,generator=gen)[:batch_size] if count>=batch_size
-              else torch.randint(count,(batch_size,),generator=gen))
-        selected=[indices[int(i)] for i in draw]
         total=len(selected)
         for x,y in _example_loader(dataset,selected,batch_size,seed,shuffle=False):
+            valid=len(y)
+            if valid<batch_size:
+                pad=torch.arange(batch_size-valid)%valid
+                x=torch.cat((x,x[pad]),dim=0)
+                y=torch.cat((y,y[pad]),dim=0)
             x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
-            reference_logits=model(x)
+            reference_logits=model(x)[:valid]
+            y=y[:valid]
             if reference_classes is not None:
                 # GEM explicit original-experience constraints retain their
                 # own historical label universe (stage grouping).
                 from .class_indexed import canonical_active_loss
                 ref_loss=canonical_active_loss(reference_logits,y,reference_classes)
-            elif active_pair_classes is not None:
+            elif active_pair_classes is not None and len(set(active_pair_classes))>=2:
                 # All/class grouping and A-GEM must use the SAME known-class
                 # competitor set as the current class-IL objective, rather
                 # than penalizing outputs for unknown future classes.
@@ -498,23 +504,24 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
             for name,p in model.named_parameters()}
     # FedProx is a local objective, not a different aggregation formula.
 
-    # Rehearsal and constraint memory are built only from previous locally trained examples.
+    # Build the local private + synchronized archive used by replay learners.
     eligible_history={cls:inds for cls,inds in client.memory.items()
                       if (cls in client.trained_classes if cfg.boundary_mode=='hidden'
                           else client.first_seen_local_experience.get(cls,client.local_experience)<client.local_experience)}
+    if cfg.method in ({'replay','er_ace','der','derpp','gem','agem'}|NATIVE_METHODS):
+        # The client's synchronized aggregate archive is its available
+        # rehearsal buffer, including classes first received this experience.
+        eligible_history=dict(client.memory)
     oldmemory=[]
     for cls,group in eligible_history.items():
-        # Source FEAT FLDataSelector samples WITH replacement. Preserve its
-        # actual retained tickets during local rehearsal, instead of the
-        # communication archive's legitimate unique-image normalization.
+        # Read FEAT's selected image IDs from its ticket table; duplicate
+        # tickets are deduplicated below so each stored image contributes once.
         tickets=(client.feat_selection_tickets.get(cls) if cfg.method=='native_feat'
                  else None)
         oldmemory.extend(tickets if tickets is not None else group)
-    if cfg.method in {'der','derpp'}:
-        # A heterogeneous remote replay archive can contain images from
-        # clients running other methods that never stored trajectory logits.
-        # Do not hallucinate model-logit targets or crash on missing targets.
-        oldmemory=[idx for idx in oldmemory if idx in client.memory_logits]
+    # Replay each retained image once even if a source selector recorded the
+    # same image through repeated tickets or duplicate class-table entries.
+    oldmemory=list(dict.fromkeys(map(int,oldmemory)))
     def local_old_loss():
         if not oldmemory:return None
         was_train=model.training
@@ -534,30 +541,20 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         return value
     old_loss_before=local_old_loss() if cfg.prepost_diagnostics else None
     step_count=0; loss_total=0.; last_projection=0.; num_violations=0;qp_calls=0
-    def draw_history(n,tag):
-        """CPU retrieval for assembly into a single physical model input of 64."""
-        chosen=rng.choice(oldmemory,size=n,replace=len(oldmemory)<n).tolist()
-        x,y=next(iter(_example_loader(training_data,chosen,n,
-                     cfg.seed+round_id+client.client_id+tag,shuffle=False)))
-        return x,y,chosen
+    def load_memory_microbatch(ids,tag):
+        x,y=next(iter(_example_loader(training_data,ids,cfg.batch_size,
+            cfg.seed+round_id+client.client_id+tag,shuffle=False)))
+        valid=len(y)
+        if valid<cfg.batch_size:
+            pad=torch.arange(cfg.batch_size-valid)%valid
+            x=torch.cat((x,x[pad]),dim=0)
+            y=torch.cat((y,y[pad]),dim=0)
+        return x,y,valid
 
     def full_training_batches(loaded):
         x,y=loaded[:2]
         original_ids=loaded[2] if len(loaded)>2 else None
-        if cfg.method not in ({'replay'}|NATIVE_METHODS) or not oldmemory or cfg.replay_ratio<=0:
-            yield x,y,original_ids
-            return
-        # One supervised CE over a MIXED current/history physical batch of 64.
-        # This eliminates doubled separately averaged Replay gradients.
-        fresh=max(1,min(cfg.batch_size-1,int(round(cfg.batch_size/(1+cfg.replay_ratio)))))
-        for offset in range(0,len(y),fresh):
-            nx,ny=x[offset:offset+fresh],y[offset:offset+fresh]
-            if len(ny)<fresh:
-                fill=torch.as_tensor(rng.integers(0,len(y),size=fresh-len(ny)),dtype=torch.long)
-                nx=torch.cat((nx,x[fill]),dim=0)
-                ny=torch.cat((ny,y[fill]),dim=0)
-            hx,hy,_=draw_history(cfg.batch_size-fresh,offset)
-            yield torch.cat((nx,hx),dim=0),torch.cat((ny,hy),dim=0),None
+        yield x,y,original_ids
 
     for epoch in range(cfg.epochs):
         online_der=cfg.method in {'der','derpp'}
@@ -632,33 +629,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     for j,(parameter,grad) in enumerate(zip(params,task_grad)):
                         if grad is not None:
                             si_task_grads[j]+=grad.detach().cpu()*(len(y)/logical_size)
-                if cfg.method in {'er_ace','der','derpp'} and oldmemory:
-                    ref_count=cfg.batch_size
-                    rx,ry,chosen=draw_history(ref_count,1000)
-                    rx,ry=rx.to(device,non_blocking=True),ry.to(device,non_blocking=True)
-                    replay_logits=model(rx)
-                    if cfg.method=='er_ace':
-                        loss=loss+cfg.replay_ratio*cfg.der_beta*(
-                            canonical_active_loss(replay_logits,ry,seen_classes)
-                            if active_pair_classes is not None else F.cross_entropy(replay_logits,ry))
-                    else:
-                        missing=[int(i) for i in chosen if int(i) not in client.memory_logits]
-                        if missing:
-                            raise RuntimeError(f'DER memory logits missing for {missing[:3]}')
-                        old_logits=torch.stack([client.memory_logits[int(i)] for i in chosen]).to(device)
-                        if old_logits.shape!=replay_logits.shape:
-                            raise RuntimeError('DER logits incompatible with classifier schema')
-                        loss=loss+cfg.replay_ratio*cfg.der_alpha*F.mse_loss(replay_logits,old_logits)
-                        if cfg.method=='derpp':
-                            # DER++ draws TWO independent full-size historical batches:
-                            # one for old trajectory-logit MSE, one independently
-                            # for supervised old-label CE. Sharing a single draw
-                            # couples their gradient estimators unnecessarily.
-                            bx,by,cls_idx=draw_history(ref_count,1913)
-                            supervised_logits=model(bx.to(device))
-                            loss=loss+cfg.replay_ratio*cfg.der_beta*(
-                                canonical_active_loss(supervised_logits,by.to(device),seen_classes)
-                                if active_pair_classes is not None else F.cross_entropy(supervised_logits,by.to(device)))
+                exhaustive_method_replay=(cfg.method in {'er_ace','der','derpp'}
+                                          and bool(oldmemory))
                 if cfg.method=='lwf' and teacher is not None:
                     with torch.no_grad():t_logits=teacher(x)
                     old_labels=sorted(c for c,s in client.first_seen_local_experience.items()
@@ -693,14 +665,75 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                             fisher=client.ewc_fisher[name].to(device)
                             pen=pen+(fisher*(p-ewc_reference).square()).sum()
                     loss=loss+.5*cfg.regularization_strength*pen
+                exhaustive_replay=(cfg.method in ({'replay'}|NATIVE_METHODS)
+                                   and bool(oldmemory) and cfg.replay_ratio>0)
+                if exhaustive_replay:
+                    # Mix the mean incoming-batch objective and the mean over
+                    # every stored exemplar. Chunk scaling makes this exactly
+                    # the full-buffer mean while keeping accelerator memory
+                    # bounded by cfg.batch_size.
+                    loss=loss/(1.+cfg.replay_ratio)
                 macro_loss+=float(loss.detach().item())*(len(y)/logical_size)
                 (loss*(len(y)/logical_size)).backward()
+                if exhaustive_method_replay:
+                    for start in range(0,len(oldmemory),cfg.batch_size):
+                        ids=oldmemory[start:start+cfg.batch_size]
+                        hx,hy,valid=load_memory_microbatch(ids,step_count+start)
+                        hx,hy=hx.to(device,non_blocking=True),hy.to(device,non_blocking=True)
+                        scale=cfg.replay_ratio*valid/len(oldmemory)
+                        replay_logits=model(hx)[:valid]
+                        hy=hy[:valid]
+                        if cfg.method=='er_ace':
+                            replay_loss=(canonical_active_loss(replay_logits,hy,seen_classes)
+                                if active_pair_classes is not None
+                                else F.cross_entropy(replay_logits,hy))
+                            replay_loss=cfg.der_beta*replay_loss
+                        else:
+                            terms=[]
+                            positions=[j for j,i in enumerate(ids) if i in client.memory_logits]
+                            if positions:
+                                old_logits=torch.stack([client.memory_logits[ids[j]]
+                                                        for j in positions]).to(device)
+                                if old_logits.shape!=replay_logits[positions].shape:
+                                    raise RuntimeError('DER logits incompatible with classifier schema')
+                                terms.append(cfg.der_alpha*F.mse_loss(
+                                    replay_logits[positions],old_logits))
+                            if cfg.method=='derpp':
+                                supervised=(canonical_active_loss(replay_logits,hy,seen_classes)
+                                    if active_pair_classes is not None
+                                    else F.cross_entropy(replay_logits,hy))
+                                terms.append(cfg.der_beta*supervised)
+                            elif len(positions)<valid:
+                                missing=[j for j in range(valid) if j not in set(positions)]
+                                terms.append(F.cross_entropy(replay_logits[missing],hy[missing]))
+                            replay_loss=sum(terms,torch.zeros((),device=device))
+                        (replay_loss*scale).backward()
+                if exhaustive_replay:
+                    memory_scale=cfg.replay_ratio/(1.+cfg.replay_ratio)
+                    for start in range(0,len(oldmemory),cfg.batch_size):
+                        ids=oldmemory[start:start+cfg.batch_size]
+                        hx,hy,valid=load_memory_microbatch(ids,step_count+start)
+                        hx,hy=hx.to(device,non_blocking=True),hy.to(device,non_blocking=True)
+                        if cfg.method in NATIVE_METHODS:
+                            history_loss,_=native_loss(cfg.method,model,hx[:valid],hy[:valid],seen_classes,
+                                teacher=native_teacher,old_classes=native_old_classes)
+                        else:
+                            history_logits=model(hx)[:valid]
+                            history_loss=(canonical_active_loss(history_logits,hy[:valid],seen_classes)
+                                if active_pair_classes is not None
+                                else F.cross_entropy(history_logits,hy[:valid]))
+                        chunk_weight=memory_scale*valid/len(oldmemory)
+                        (history_loss*chunk_weight).backward()
+                        macro_loss+=float(history_loss.detach().item())*chunk_weight
                 if cfg.method in {'gem','agem'} and oldmemory:
                     if active_pair_classes is not None:
                         freeze_other_class_rows(model,seen_classes)
                     g=_flatten_grads(params)
                     if cfg.method=='agem':
-                        refidx=rng.choice(oldmemory,size=min(cfg.batch_size,len(oldmemory)),replace=False).tolist()
+                        # A-GEM's reference direction is the mean gradient of
+                        # the complete retained buffer, evaluated in bounded
+                        # batches rather than sampled from it.
+                        refidx=oldmemory
                         ref=_reference_gradient(model,params,training_data,refidx,cfg.batch_size,device,
                                                 cfg.seed+round_id+client.client_id,seen_classes)
                         z,last_projection,v=agem_project(g,ref)
@@ -845,6 +878,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         client.optimizer_state=None
     client.train_steps+=step_count
     client.trained_classes.update(int(bank.train.targets[i]) for i in indices)
+    if cfg.method in ({'replay','er_ace','der','derpp','gem','agem'}|NATIVE_METHODS):
+        client.trained_classes.update(int(bank.train.targets[i]) for i in oldmemory)
     class_counts=dict(Counter(int(bank.train.targets[i]) for i in indices))
     if active_pair_classes is not None:
         # All seen classifier rows are trainable under v14 class-IL CE.

@@ -6,8 +6,10 @@ ResNet-8 + SimpleLinear, `CE._train`, original first-k exemplar selection and
 original sample-size FedAvg source are now invoked in the pilot.
 
 `src/cafcl/upstream_fedclass_ce.py` adapts the original source to the
-**five-client / first-four-then-two / 9+U10** curriculum, full batch64,
-and cumulative delayed offline updates. It currently retains the canonical
+**five-client / adjacent two-class chain / 20 syncs plus terminal flush**
+curriculum, batch64, and cumulative delayed offline updates. For Replay, each
+incoming minibatch update accumulates gradients over the complete available
+archive in bounded batch64 chunks. It currently retains the canonical
 fixed 100-row output head and a separate experimental server protocol;
 `FlTrainer.fl_train` is not executed. It is **not yet certified as a
 complete original-author trainer reproduction**.
@@ -29,8 +31,8 @@ source FedCLASS parameter controlling this ratio.
 
 All original source files are byte-identical to pinned upstream commit
 `e03e30653165b76ddf980393794f395f838ee967`.
-New source-runner experiment identity is `SOURCE_V2`; results reside under
-`results/fedclass_pilot/authors_exemplars/seed0_lr0.03_epochs10_source_v2`
+New source-runner experiment identity is `SOURCE_V3`; results reside under
+`results/fedclass_pilot/authors_exemplars/seed0_lr0.03_epochs10_source_v3`
 or the corresponding `none` path. Previous ER50/Algorithm-R V1 artifacts
 are distinct and are not silently reused.
 

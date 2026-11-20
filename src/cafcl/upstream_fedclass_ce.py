@@ -1,6 +1,7 @@
-"""Direct source execution of FedCLASS's ORIGINAL CE + exemplar methods.
+"""FedCLASS exemplar selection plus source CE and exhaustive adapted replay.
 
-The copied authors' CE._train body is compiled verbatim from models/ce.py.
+The authors' CE._train body is compiled verbatim for no-replay. Replay uses
+an adapted trainer so every available exemplar contributes to each update.
 The copied authors' BaseLearner._construct_exemplar_unified memory-selection
 body is compiled verbatim from models/base.py.
 
@@ -8,14 +9,15 @@ Protocol adapters change only:
 - label coordinates (global sparse class IDs to visible compact head);
 - data source (CIFAR-100 per-client incremental task + received archives);
 - physical input batches (64, tail padded to 64);
+- exhaustive replay gradient accumulation for each incoming batch update;
 - memory budget (50/class user setting) and timing (per local task);
 - five independent persistent clients, offline communication and delayed
   synchronization, NOT the published original trainer's client schedule.
 
-The original CE body RESETS SGD and AMP scaler at each task. No new-model
-self-distillation is part of the selected CE baseline. Original CIFAR100
-protocol reproduction is not yet verified; this module is one mechanism
-repair, NOT a full-paper-fidelity certification.
+The original CE body RESETS SGD and AMP scaler at each task. The replay
+adaptation uses SGD without the source AMP loop. No new-model self-distillation
+is part of the selected CE baseline. Original CIFAR100 protocol reproduction
+is not yet verified; this is NOT a full-paper-fidelity certification.
 """
 from __future__ import annotations
 
@@ -163,7 +165,7 @@ def train_original_ce(model,client,bank,cfg,device,round_id,
     train_data=(ClientArchiveDataset(bank.train,client.received_example_payloads)
                 if cfg.share_continual_state and client.received_example_payloads
                 else bank.train)
-    history=[int(i) for group in client.memory.values() for i in group]
+    history=list(dict.fromkeys(int(i) for group in client.memory.values() for i in group))
     allowed_ids=list(dict.fromkeys(new_indices+history))
     for index in history:
         if index not in client.seen_indices and index not in client.received_example_payloads:
@@ -175,17 +177,45 @@ def train_original_ce(model,client,bank,cfg,device,round_id,
     loader=DataLoader(dataset,batch_sampler=batches,num_workers=0,
                       pin_memory=(device.type=='cuda'))
     wrapped=_KnownHead(model,known)
-    # No persistent optimizer is loaded: original CE._train recreates SGD
-    # and GradScaler every invocation. This corrects the previous generic
-    # persistent-SGD deviation from the authors' selected CE baseline.
     obj=SimpleNamespace(
         network=wrapped,device=device,train_loader=loader,
         epochs=cfg.epochs,epoches=cfg.epochs,lr=cfg.lr,
         momentum=cfg.momentum,weight_decay=cfg.weight_decay,
         client_id=client.client_id,cur_task=client.local_experience,
         cur_round=round_id,optimizer=None)
-    original_class_method('FedCLASS/models/ce.py','CE','_train')(obj)
-    steps=int(cfg.epochs)*len(loader)
+    if cfg.method=='replay' and history:
+        # Every incoming physical minibatch defines one update. Accumulate its
+        # gradient with the mean gradient of the complete local+server archive,
+        # reading at most cfg.batch_size replay examples at once.
+        optimizer=optim.SGD(filter(lambda p:p.requires_grad,wrapped.parameters()),
+            momentum=cfg.momentum,lr=cfg.lr,weight_decay=cfg.weight_decay)
+        current=_IndicesWithLabels(train_data,new_indices,known,bank.train.targets)
+        current_sampler=_FixedBatchSampler(len(current),cfg.batch_size,
+            cfg.seed+round_id*100003+client.client_id*127,shuffle=True)
+        current_loader=DataLoader(current,batch_sampler=current_sampler,
+                                  num_workers=0,pin_memory=(device.type=='cuda'))
+        steps=int(cfg.epochs)*len(current_loader)
+        history_dataset=_IndicesWithLabels(train_data,history,known,bank.train.targets)
+        history_loader=DataLoader(history_dataset,batch_size=cfg.batch_size,
+                                  shuffle=False,num_workers=0,
+                                  pin_memory=(device.type=='cuda'))
+        current_scale=1./(1.+cfg.replay_ratio)
+        history_scale=cfg.replay_ratio/(1.+cfg.replay_ratio)
+        for _epoch in range(cfg.epochs):
+            for _ids,inputs,targets in current_loader:
+                optimizer.zero_grad(set_to_none=True)
+                inputs,targets=inputs.to(device),targets.to(device)
+                (F.cross_entropy(wrapped(inputs),targets)*current_scale).backward()
+                for _hids,hinputs,htargets in history_loader:
+                    hinputs,htargets=hinputs.to(device),htargets.to(device)
+                    weight=history_scale*len(htargets)/len(history_dataset)
+                    (F.cross_entropy(wrapped(hinputs),htargets)*weight).backward()
+                optimizer.step()
+    else:
+        # No persistent optimizer is loaded: original CE._train recreates SGD
+        # and GradScaler every invocation.
+        original_class_method('FedCLASS/models/ce.py','CE','_train')(obj)
+        steps=int(cfg.epochs)*len(loader)
     if steps<=0:
         raise RuntimeError('FedCLASS original CE performed zero optimizer steps')
     if experience_end and cfg.method=='replay':

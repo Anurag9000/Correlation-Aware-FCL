@@ -1,7 +1,7 @@
-"""FedCLASS cross-entropy/FedAvg pilot: fully connected versus rotating offline.
+"""FedCLASS cross-entropy/FedAvg pilot: full versus random-offline.
 
 Uses the exact vendored FedCLASS ResNet8 and SimpleLinear, plus the audited
-CIFAR-100 v16 class stream and federation engine. Two independent experiments
+CIFAR-100 adjacent-chain class stream and federation engine. Two independent experiments
 launch CONCURRENTLY on physical CUDA device 0 (one process per arm).
 This is a deliberately documented class-incremental adaptation, not the
 upstream FedCLASS script's different task allocation and client scheduling.
@@ -29,7 +29,7 @@ MEMORY_MODES=("authors_exemplars","none")
 
 
 def make_fedclass_jobs(*,seed=0,lr=.03,epochs=10,memory_mode="authors_exemplars",
-                       replay_ratio=1.,client_training_concurrency=0):
+                       replay_ratio=1.,client_training_concurrency=5):
     """Build matched FedCLASS CE/FedAvg class-IL jobs.
 
     authors_exemplars: execute original FedCLASS BaseLearner first-k selection;
@@ -55,26 +55,26 @@ def make_fedclass_jobs(*,seed=0,lr=.03,epochs=10,memory_mode="authors_exemplars"
         method=("replay" if has_replay else "sgd"),
         memory_per_class=(50 if has_replay else 0),
         replay_reservoir_fraction=0.,
-        replay_ratio=0., # Source CE uses concatenation, not 50/50 mixed replay.
+        replay_ratio=replay_ratio, # Experimental exhaustive, equal-mean replay objective.
         optimizer_state_policy="reset", # Original CE._train recreates SGD.
         aggregator="fedavg",classwise_head_merge=False,
         client_training_concurrency=client_training_concurrency,
-        job_id=f"FEDCLASS_CE_{tag}_SOURCE_V2_FULL_SEED{seed}")
-    rotating=replace(baseline,participation=.8,
-                     stream_offline_policy="rotate_once",
-                     job_id=f"FEDCLASS_CE_{tag}_SOURCE_V2_ROTATING_OFFLINE_SEED{seed}")
-    for cfg in (baseline,rotating):cfg.validate()
+        job_id=f"FEDCLASS_CE_{tag}_SOURCE_V3_FULL_SEED{seed}")
+    random_offline=replace(baseline,participation=.8,
+                     stream_offline_policy="random",
+                     job_id=f"FEDCLASS_CE_{tag}_SOURCE_V3_RANDOM_OFFLINE_SEED{seed}")
+    for cfg in (baseline,random_offline):cfg.validate()
     # The treatment cannot silently change anything beyond participation.
-    a,b=baseline.to_dict(),rotating.to_dict()
+    a,b=baseline.to_dict(),random_offline.to_dict()
     different={k for k in a if a[k]!=b[k]}
-    if different!={"participation","stream_offline_policy","job_id"}:
+    if different!={"participation","job_id"}:
         raise RuntimeError(f"Unmatched experimental settings: {different}")
-    return baseline,rotating
+    return baseline,random_offline
 
 
 def _output_root(args):
     tag=(f"seed{args.seed}_lr{args.lr:g}_epochs{args.epochs}"
-         +"_source_v2")
+         +"_source_v3")
     return Path(args.output_dir)/args.memory_mode/tag
 
 
@@ -88,35 +88,35 @@ def make_design(jobs,*,mode,replay_ratio):
         original_backbone="FedCLASS/convs/resnet_client.py:resnet8",
         original_classifier="FedCLASS/convs/linears.py:SimpleLinear",
         adapted_model="fedclass_resnet8",
-        local_loss="original FedCLASS/models/ce.py:CE._train, compact all-locally-known CE",
-        client_class_history="last-synchronized global classes plus privately acquired classes",
+        local_loss="source CE for no-replay; replay mode accumulates full-buffer gradients per incoming batch",
+        client_class_history="all server archive labels plus privately acquired labels; model sync remains participation-gated",
         memory_mode=mode,
         replay_ratio=None, # Not an original-source hyperparameter.
         original_first_k_per_class=(50 if mode=="authors_exemplars" else 0),
         per_class_reservoir_capacity=0,
-        replay_policy=("AUTHORS original BaseLearner._construct_exemplar_unified first-k per class; archives synchronized under experimental protocol"
+        replay_policy=("AUTHORS original first-k exemplar selection; every currently available archive example contributes to each local update via bounded gradient accumulation"
                        if mode=="authors_exemplars" else "disabled"),
         upstream_fidelity="FedCLASS original ResNet8 + SimpleLinear + CE/FedAvg; v16 asynchronous class-IL adaptation",
         aggregation_on_return="v18 noncanonical G+alpha*(local-anchor), alpha=1/(1+version lag), BN-safe, single-stale terminal-flush cap 1/num_clients",
         fully_connected="5/5 clients upload and receive every synchronization",
-        round_robin="4/5 clients upload and receive, one excluded but still trains",
+        random_offline="4/5 clients upload model weights each learning sync; all five clients train, and every client receives the complete replay archive",
         full_and_offline_same_gpu=0,
         concurrent_processes=2,
         five_clients_learning_concurrently_per_arm=True,
         test_oracle_task_id=False,
         native_source_unmodified=True,
-        paper_algorithm_warning="Now executes original CE._train, original first-k exemplar selection, and original FedAvg.update, but class mapping, fixed physical batch64, 5 persistent independent client streams, shared memory and delayed upload are protocol adaptations; not original full fl_trainer orchestration.")
+        paper_algorithm_warning="Uses original first-k exemplar selection and FedAvg.update, but replay training uses a protocol adaptation: every incoming minibatch update accumulates the mean gradient over the complete available exemplar archive. Class mapping, fixed physical batch64, 5 persistent independent client streams, shared memory and delayed upload are also adaptations; not original full fl_trainer orchestration.")
     return plan
 
 
 def main(argv=None):
     p=argparse.ArgumentParser(
-        description="FedCLASS CE/FedAvg: concurrent all-seen-updates versus offline round-robin CIFAR-100 pilots")
+        description="FedCLASS CE/FedAvg: two concurrent 20-sync adjacent-chain CIFAR-100 pilots")
     p.add_argument("--seed",type=int,default=0)
     p.add_argument("--lr",type=float,default=.03)
     p.add_argument("--epochs",type=int,default=10)
-    p.add_argument("--client-training-concurrency",type=int,default=0,
-                   help="max active clients per simulation process; 0 means all five")
+    p.add_argument("--client-training-concurrency",type=int,default=5,
+                   help="max active clients per simulation process; 5 runs all clients concurrently")
     p.add_argument("--memory-mode",choices=MEMORY_MODES,default="authors_exemplars",
                    help="authors_exemplars=original first-50/class source selection; none=source CE without exemplars")
     p.add_argument("--replay-ratio",type=float,default=1.)

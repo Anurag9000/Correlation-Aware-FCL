@@ -47,7 +47,7 @@ def test_persistent_optimizer_and_cropflip_stay_fixed_for_primary():
     for cfg in (full,partial):
         assert cfg.optimizer_state_policy=='persist'
         assert cfg.training_augmentation=='cifar_crop_flip'
-        assert cfg.client_training_concurrency==1
+        assert cfg.client_training_concurrency==5
         assert cfg.batch_size==64 and cfg.momentum==.9 and cfg.weight_decay==5e-4
         assert cfg.stream_terminal_flush and cfg.share_continual_state
-    assert partial.stream_offline_policy=='rotate_once'
+    assert partial.stream_offline_policy=='random'

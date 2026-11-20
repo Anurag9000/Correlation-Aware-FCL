@@ -46,22 +46,27 @@ authors' missing source**. Its provenance and equivalence must be established
 before use; its files must not be quietly represented as original.
 
 For FedCLASS, the user originally selected the **CE + FedAvg baseline**,
-not the paper's `OURS` self-distillation. Nevertheless the source CE learner
-has optimizer resets, AMP, an incremental `CENet`, client-local class selection
-and its own memory construction. Our current adapted CE/FedAvg runner instead
-uses persistent SGD, fixed 100-row logits and a generic replay buffer. Fresh
-sample-weighted FedAvg arithmetic can agree numerically, but this **does not
-establish trainer fidelity**.
+not the paper's `OURS` self-distillation. The active adapted CE/FedAvg runner
+now executes the source `CE._train` path in no-replay mode and has a separate
+Replay adapter that accumulates gradients over the full currently available
+archive for each incoming batch update. It also uses the source first-k
+exemplar constructor and source `FedAvg.update`. The class-index mapping,
+fixed 100-row adapter, client schedule, archive sharing, and offline behavior
+remain protocol adaptations; this does **not establish full trainer fidelity**.
 
 ## Explicitly permitted changes to the originals
 
-The experimental intervention requires five persistent clients; the
-initial two sequential 2-class tasks per client followed by one 2-class
-task per client per U2–U9; 9 training synchronizations plus a
-communication-only U10; FULL 5/5 uploads/downloads; OFFLINE 4/5 communication
-while 5/5 train; terminal delivery of accumulated hidden learning; class-IL
-inference. The requested batch, LR, epoch and memory settings are also
-user-specified experimental variables.
+The active paired experiment requires five persistent clients; one adjacent
+two-class task/client at each of 20 learning syncs beginning at sync 1; random
+selection of one client per sync whose model upload is withheld while all five
+train; a communication-only final flush; full archive delivery to every
+client; and class-IL inference. The two arms run as separate concurrent
+processes, each with five client workers and a server model. The requested
+batch, LR, epoch and memory settings are also user-specified variables.
+
+Older v6–v22 stream descriptions and factorial manifests retain their original
+settings as historical or separate research designs; they do not define the
+current primary paired runner.
 
 These are **protocol adaptations** and must be isolated in adapters and
 recorded. Original local losses, optimization semantics not explicitly
@@ -189,12 +194,13 @@ features but NOT into the target prototype/classifier weights. The regression
 tests assert this original behavior (rather than incorrectly demanding a
 prototype gradient).
 
-## 2026-11-20 source-v2 experiment identities
+## 2026-11-20 source-method experiment identities
 
-GLFC, LGA and FEAT use new `PILOT_SOURCE_CORE_V2` job IDs, and their
-source runner outputs live in `seedN/source_v2`. FedCLASS now has explicit
-`authors_exemplars` and `none` modes, uses `SOURCE_V2` job IDs, and has
-`*_source_v2` output folders. The old FedCLASS CLI flag `reservoir` is
+GLFC and LGA use `PILOT_SOURCE_CORE_V4` job IDs and `seedN/source_v4`
+outputs. FEAT uses `PILOT_SOURCE_CORE_V5` and `seedN/source_v5`. FedCLASS
+uses its separate `SOURCE_V3` identity. It now has explicit
+`authors_exemplars` and `none` modes, uses `SOURCE_V3` job IDs, and has
+`*_source_v3` output folders. The old FedCLASS CLI flag `reservoir` is
 rejected so its source first-k exemplars cannot be mislabeled as Algorithm R.
 Its original CE optimizer resets; there is no source 50/50 replay ratio.
 These identities prevent silent reuse of earlier completed partial ports.
@@ -214,7 +220,7 @@ prototypes are frozen parameters, shared by model state. The source GSA function
 is still executed.
 
 The output is marked `paper_reconstructed_fixed_ETF` and **not** the
-unpublished authors' `IncrementalNet_CausalETF`. FEAT V3 job IDs distinguish
+unpublished authors' `IncrementalNet_CausalETF`. FEAT V5 job IDs distinguish
 the fixed-ETF model from the earlier trainable-head native-loss pilot.
 The inference energy correction and exemplar scheduling are still missing.
 
@@ -283,7 +289,7 @@ CIFAR100 examples before applying the actual author PIL transforms.
 The experimental worker uses a per-client deterministic CPU RNG scope to
 adapt authors' sequential random augmentation to concurrently scheduled
 clients. This changes RNG consumption order (not transform definitions)
-and must be documented. FEAT receives a fresh `SOURCE_CORE_V4` job
+and must be documented. FEAT receives a fresh `SOURCE_CORE_V5` job
 identity and output directory; no older experiment artifact is overwritten.
 Other original FEAT mechanisms still remain incomplete and fidelity is
 still NOT certified.
@@ -349,8 +355,8 @@ run on actual available TRAIN/replay examples in the local BCE objective
 and on the current examples used by original `entropy_signal`.
 This is the original transform code, with a deterministic per-client RNG
 scope and fixed 64-size physical model forwards. Validation and TEST
-remain unaugmented. GLFC/LGA pilot identities advance to source V3;
-older V2 results are not overwritten. Source training optimizer and
+remain unaugmented. GLFC/LGA pilot identities advance to source V4;
+older V2/V3 results are not overwritten. Source training optimizer and
 proxy-server reconstruction remain incomplete, fidelity gate CLOSED.
 
 ## Original LGA radius calculation

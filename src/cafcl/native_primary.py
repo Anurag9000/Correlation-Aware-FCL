@@ -28,13 +28,13 @@ def make_native_jobs(suite,*,seed=0,lr=.03,epochs=10,client_training_concurrency
                  optimizer_state_policy='persist',
                  client_training_concurrency=client_training_concurrency,
                  job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V5' if suite=='feat' else 'V4'}_FULL_SEED{seed}")
-    offline=replace(full,participation=.8,stream_offline_policy='rotate_once',
-                    job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V5' if suite=='feat' else 'V4'}_ROTATING_OFFLINE_SEED{seed}")
+    offline=replace(full,participation=.8,stream_offline_policy='random',
+                    job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V5' if suite=='feat' else 'V4'}_RANDOM_OFFLINE_SEED{seed}")
     for cfg in (full,offline):cfg.validate()
     return full,offline
 
 def main(argv=None):
-    p=argparse.ArgumentParser(description='Native GLFC/LGA/FEAT concurrent full versus rotating-offline CIFAR-100 pilot')
+    p=argparse.ArgumentParser(description='Native GLFC/LGA/FEAT concurrent full versus random-offline CIFAR-100 pilot')
     p.add_argument('--suite',choices=tuple(SUITES),required=True)
     p.add_argument('--seed',type=int,default=0)
     p.add_argument('--lr',type=float,default=.03)
@@ -78,8 +78,14 @@ def main(argv=None):
         inactive_generic_reservoir_fraction_config=jobs[0].replay_reservoir_fraction,
         private_reservoir_per_class=None,
         expected_server_exemplars_after_flush=None,
+        expected_server_exemplars_per_class=None,
         source_memory_count_per_class=jobs[0].memory_per_class,
         memory_count_is_upper_bound=True,
+        replay_update=(
+            'source loader includes current inputs, source-selected local exemplars, '
+            'and the complete currently available server archive; source method '
+            'consumes that pool over its configured epochs'
+        ),
         training_augmentation=('authors_FEAT_cifar_crop_flip_jitter'
                                if is_feat else
                                'authors_GLFC_LGA_cifar_crop_flip_jitter'),
@@ -171,14 +177,14 @@ def main(argv=None):
     # human-facing label for these distinct protocol-harmonized native methods.
     report_path=root/'comparison'/'comparison.md'
     report_text=report_path.read_text()
-    report_text=report_text.replace('Two matched Replay/FedAvg runs,',
+    report_text=report_text.replace('Two matched runs,',
         f'Two matched {args.suite.upper()} source-method adapter/FedAvg runs,')
     report_text=report_text.replace(
         f"Training augmentation: {jobs[0].training_augmentation};",
         "Training augmentation: authors' original CIFAR crop/flip/jitter via PIL;")
-    report_text += ('\\n**Method fidelity:** This is an adapted native-loss '
+    report_text += ('\n**Method fidelity:** This is an adapted source-method '
                     'pilot, not the full upstream published method. '
-                    'See docs/NATIVE_OFFLINE_FIDELITY.md.\\n')
+                    'See docs/NATIVE_OFFLINE_FIDELITY.md.\n')
     report_path.write_text(report_text)
     print('PAIRED_RESULT',json.dumps(comparison,indent=2),flush=True)
 

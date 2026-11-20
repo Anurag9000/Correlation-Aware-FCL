@@ -1,14 +1,18 @@
 # Project status
 
-## Current canonical primary FedAvg result
+## Active primary experiment
 
-The primary CIFAR-100 Replay/FedAvg comparison is fixed to the ResNet-18, crop/flip, batch-64, 10-epoch, seed-0 protocol in [PRIMARY_PROBE.md](PRIMARY_PROBE.md). Client SGD momentum persists across tasks and communication. Server aggregation uses canonical sample-weighted whole-model FedAvg without classifier-row fusion.
+The current primary CIFAR-100 paired plan is the V23 adjacent-chain protocol in [PRIMARY_PROBE.md](PRIMARY_PROBE.md): 20 learning syncs, one two-class task per client per sync, overlapping neighboring class pairs, 50 private replay examples/class/client, random one-client model-upload omission in the hidden arm, and a terminal communication-only flush. Both arms use five concurrent client workers and run as separate processes on GPU 0. This is the configured design; it is not evidence that a new training run has completed.
 
-The completed runs achieved **38.58%** with full participation and **30.58%** with rotating 4-of-5 participation; both integrated all 100 classes. The paired gain over the preceding matched V19 run was 17.92 percentage points for full participation and 15.86 points for rotating offline. This is one seed and does not establish statistical significance. The rotating arm uses the repository's explicitly marked stale-update adapter.
+The Replay implementation traverses the complete available replay archive for every incoming-batch optimizer update, in batch-64 chunks. The primary report must be produced by two successful V23 worker runs before the protocol has a new empirical result.
 
-## Scope
+## Historical results
 
-The repository retains distinct continual-learning learners, factorial research configurations, and method-specific source-fidelity paths. They do not replace or alter the primary Replay/FedAvg recipe. Earlier protocol documents and run artifacts are historical records, not current primary launch instructions.
+The 38.58% full / 30.58% rotating-offline scores were produced by the earlier nine-sync disjoint-class protocol with sampled-minibatch replay. They remain historical and do not validate the current stream or Replay rule.
+
+## Other suites
+
+The repository also retains distinct local continual-learning methods, factorial research configurations, and server aggregation studies. Dated protocol documents and frozen manifests describe their own historical or separate experiment configurations; they are not instructions for the current primary paired launch.
 
 ```bash
 bash scripts/run_primary_probe_cifar100.sh --plan-only

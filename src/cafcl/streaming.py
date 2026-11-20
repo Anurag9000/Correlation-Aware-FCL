@@ -1,11 +1,10 @@
-"""CIFAR-100 communication-interval curriculum with canonical class-indexed tasks.
+"""CIFAR-100 communication-interval curricula with class-indexed tasks.
 
-The first communication interval has two two-class local experiences/client;
-every later interval has exactly ONE two-class experience/client before sync.
-This is the sole active class-pair curriculum for every server/client method.
-No task ID or task-specific classifier is created. This generator is deterministic,
-uses only original TRAIN images, and never intentionally duplicates raw images
-unless ``sample_overlap_fraction`` is nonzero.
+The canonical five-client chain schedule gives every client one adjacent
+two-class task per communication interval. It carries the last label seen by
+the previous client into the next pair, then carries client five's last label
+into client one at the following interval. It partitions TRAIN images by
+occurrence and never duplicates raw images unless explicitly configured.
 """
 from __future__ import annotations
 from collections import Counter, defaultdict
@@ -21,10 +20,47 @@ OVERLAP_KINDS = ('none','intra_same_round','intra_cross_round',
 def make_task_schedule(num_classes, cfg):
     """Return ordered (round, client, task ordinal, class IDs, recurrence flag).
 
-    Client-first initial class allocation: client 0 sees (0,1) then
-    (2,3); client 1 sees (4,5) then (6,7), etc. Subsequent rounds assign
-    one two-class episode per client, under all methods and suites.
+    With ``stream_client_chain``, each round assigns one adjacent pair to
+    every client, extending a single ordered chain across clients and rounds.
+    Otherwise the general overlap/task-length research scheduler is used.
     """
+    if cfg.stream_client_chain:
+        if cfg.classes_per_local_task != 2 or cfg.local_tasks_per_round != 1:
+            raise ValueError('Client-chain streaming requires one two-class task per client per sync')
+        order=list(cfg.class_order_override) if cfg.class_order_override else list(range(num_classes))
+        if len(order)!=num_classes or set(order)!=set(range(num_classes)):
+            raise ValueError('Stream class order must be a permutation of dataset labels')
+        if num_classes<2:
+            raise ValueError('Client-chain stream needs at least two classes')
+        schedule=[];seen=set();current=0;round_id=0;previous_pair=None
+        while current<num_classes:
+            round_pairs=[]
+            for cid in range(cfg.num_clients):
+                if previous_pair is None:
+                    pair=tuple(order[:2]);current=2
+                elif current<num_classes:
+                    pair=(previous_pair[-1],order[current]);current+=1
+                else:
+                    # Keep every client active in the final interval. The
+                    # finite 100-label/200-slot plan has one unavoidable
+                    # third owner (class 98) so class 99 also has two owners.
+                    pair=previous_pair
+                recurrent=any(label in seen for label in pair)
+                schedule.append((round_id,cid,0,pair,recurrent))
+                seen.update(pair);round_pairs.append(pair);previous_pair=pair
+            round_id+=1
+        if cfg.stream_recurrence_rounds:
+            history={cid:[] for cid in range(cfg.num_clients)}
+            for r,cid,_,labels,_ in schedule:
+                history[cid].append((r,labels))
+            for extra in range(cfg.stream_recurrence_rounds):
+                for cid in range(cfg.num_clients):
+                    own=list(dict.fromkeys(v for _,group in history[cid] for v in group))
+                    start=(extra*2)%len(own)
+                    labels=(own[start],own[(start+1)%len(own)])
+                    schedule.append((round_id,cid,0,labels,True))
+                round_id+=1
+        return schedule
     if cfg.classes_per_local_task != 2 or cfg.local_tasks_per_round != 2:
         raise ValueError('Only two initial two-class tasks and one subsequent two-class task are supported')
     rng = np.random.default_rng(cfg.seed + 73019)
