@@ -69,3 +69,83 @@ def test_native_original_models_forward_without_extra_dependencies():
         with torch.no_grad():
             out=model(torch.randn(2,3,32,32))
         assert out.shape==(2,100)
+
+
+def test_native_client_continues_through_disconnection_and_replay_uses_64():
+    from cafcl.config import RunConfig
+    from cafcl.continual import LocalState,local_train
+    class Bank:
+        class Train:
+            targets=[0]*3+[1]*3+[2]*3+[3]*3
+            def __len__(self):return len(self.targets)
+            def __getitem__(self,i):
+                return torch.full((3,8,8),float(self.targets[i])*.08),self.targets[i]
+        train=Train()
+        num_classes=100
+    bank=Bank()
+    for method in ('native_glfc','native_lga','native_feat'):
+        model=SmallNet()
+        cfg=RunConfig(dataset='synthetic',model='test_smallcnn',num_clients=2,
+            method=method,epochs=1,lr=.01,batch_size=64,
+            memory_per_class=2,replay_reservoir_fraction=.5,
+            share_continual_state=True)
+        client=LocalState(0)
+        client.receive(model.state_dict(),0)
+        client.local_experience=0
+        client.first_seen_local_experience.update({0:0,1:0})
+        client.arrival(list(range(6)),(0,1),0)
+        shapes=[]
+        handle=model.features.register_forward_pre_hook(lambda _mod,args:shapes.append(len(args[0])))
+        try:
+            first=local_train(model,client,bank,cfg,torch.device('cpu'),0,
+                              experience_end=True,active_pair_classes=(0,1))
+            client.shared_weights=first['weights']
+            assert first['steps']==1
+            assert client.native_teacher is not None
+            assert set(client.private_memory)=={0,1}
+            assert client.model_version==0
+            client.local_experience=1
+            client.first_seen_local_experience.update({2:1,3:1})
+            client.arrival(list(range(6,12)),(2,3),1)
+            second=local_train(model,client,bank,cfg,torch.device('cpu'),1,
+                               experience_end=True,active_pair_classes=(2,3))
+            assert second['steps']==2
+            assert set(client.memory)=={0,1,2,3}
+            assert set(client.native_teacher_classes)=={0,1,2,3}
+            assert client.model_version==0  # No communication: still offline.
+            assert shapes and set(shapes)=={64}
+        finally:
+            handle.remove()
+
+def test_native_method_server_sync_is_acknowledged_only_for_online_clients():
+    from cafcl.continual import LocalState
+    from cafcl.federated_cl import FederatedCLState
+    class Bank:
+        class Train:
+            targets=[0,0,1,1,2,2,3,3]
+            def __len__(self):return 8
+            def __getitem__(self,i):return torch.zeros(3,32,32),self.targets[i]
+        train=Train()
+        num_classes=4
+    weights={'w':torch.tensor([1.,2.])}
+    for method in ('native_glfc','native_lga','native_feat'):
+        online=LocalState(0)
+        offline=LocalState(1)
+        online.receive(weights,0);offline.receive(weights,0)
+        online.last_learning_method=method
+        online.private_memory={0:[0,1],1:[2,3]}
+        online.pending_upload_classes={0,1}
+        online.seen_indices={0,1,2,3}
+        offline.native_teacher={'w':torch.tensor([9.,8.])}
+        offline.native_teacher_classes={2,3}
+        server=FederatedCLState()
+        server.merge_clients([online],Bank(),method,weights,1)
+        online.receive(weights,1)
+        server.broadcast_to(online,method)
+        server.assert_complete_download(online)
+        assert set(online.native_teacher_classes)=={0,1}
+        assert set(online.received_memory)=={0,1}
+        assert offline.model_version==0
+        assert offline.federated_cl_version==0
+        assert offline.native_teacher_classes=={2,3}
+        assert not offline.received_memory
