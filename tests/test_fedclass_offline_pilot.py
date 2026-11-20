@@ -189,3 +189,30 @@ def test_offline_fedavg_complete_synthetic_end_to_end(tmp_path,method,memory):
             assert rows[0]["client_unsent_steps"][str(first_hidden)]>0
             assert len(rows[0]["per_sync_pending_classes"])==4
             assert rows[1]["stale_rebased_client_ids"], "Returning offline model was not rebased"
+
+
+def test_original_fedclass_fedavg_matches_shared_fresh_weighted_aggregation():
+    """The published FedCLASS FedAvg arithmetic equals the v16 fresh model mean."""
+    import importlib.util
+    from collections import OrderedDict
+    from pathlib import Path
+    from cafcl.simulator import aggregate
+
+    source=Path(__file__).resolve().parents[1]/"FedCLASS"/"utils"/"fed_algorithm.py"
+    spec=importlib.util.spec_from_file_location("_fedclass_original_aggregator_test",source)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    a=torch.nn.Linear(2,2,bias=False)
+    b=torch.nn.Linear(2,2,bias=False)
+    with torch.no_grad():
+        a.weight.fill_(2.)
+        b.weight.fill_(6.)
+    original=module.FedAvg(
+        [3,1],OrderedDict([("weight",torch.zeros_like(a.weight))]))
+    expected=original.update([a,b],[0,1])["weight"]
+    actual=aggregate(
+        [{"weights":{"weight":a.weight.detach().clone()},"examples":3},
+         {"weights":{"weight":b.weight.detach().clone()},"examples":1}],
+        {"weight":torch.zeros_like(a.weight)},"fedavg")["weight"]
+    torch.testing.assert_close(actual,expected,atol=0,rtol=0)
+    torch.testing.assert_close(actual,torch.full((2,2),3.))
