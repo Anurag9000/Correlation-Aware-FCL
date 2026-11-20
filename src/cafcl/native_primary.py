@@ -93,6 +93,16 @@ def main(argv=None):
     comparison=build_report(root,jobs)
     if comparison is None:
         raise RuntimeError('Both workers finished but paired result files were not produced')
+    # The shared paired reporter originated as the Replay pilot. Correct its
+    # human-facing label for these distinct protocol-harmonized native methods.
+    report_path=root/'comparison'/'comparison.md'
+    report_text=report_path.read_text()
+    report_text=report_text.replace('Two matched Replay/FedAvg runs,',
+        f'Two matched {args.suite.upper()} native-loss/FedAvg adapted runs,')
+    report_text += ('\\n**Method fidelity:** This is an adapted native-loss '
+                    'pilot, not the full upstream published method. '
+                    'See docs/NATIVE_OFFLINE_FIDELITY.md.\\n')
+    report_path.write_text(report_text)
     print('PAIRED_RESULT',json.dumps(comparison,indent=2),flush=True)
 
 if __name__=='__main__':main()
