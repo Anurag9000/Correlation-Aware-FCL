@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import torch
 import torch.nn.functional as F
+from .upstream_losses import original_loss
 
 NATIVE_METHODS=frozenset({"native_glfc","native_lga","native_feat"})
 
@@ -96,12 +97,13 @@ def native_loss(method,model,inputs,labels,known_classes,teacher=None,old_classe
         loss=F.cross_entropy(z,y)+feat_kd*feat_gsa(
             features,labels,model.classifier.weight,known_classes)
         return loss,logits
-    teacher_logits=None
-    if teacher is not None and old_classes:
-        with torch.no_grad():
-            teacher_logits=teacher(inputs)
-    return weighted_bce(logits,labels,known_classes,old_classes,
-                        teacher_logits,method),logits
+    # Execute the exact authors' _compute_loss/efficient_old_class_weight
+    # methods, with only sparse global label -> contiguous author-label mapping.
+    # Other original server/proxy/exemplar mechanisms are still not restored;
+    # the pilot stays blocked from claiming complete method fidelity.
+    return original_loss(method,logits,labels,known_classes,
+                         old_classes=old_classes,
+                         old_teacher=teacher,inputs=inputs),logits
 
 
 def historical_teacher(model,state,device):

@@ -139,3 +139,17 @@ the explicitly noncanonical version-lag-damped and BN-safe policy; it is **not**
 original-paper stale-update behavior. This is a real core-mechanism fix but it
 DOES NOT yet restore missing local/proxy/geometry/memory machinery or certify
 any pilot as fully faithful.
+
+## Original weighted BCE source now invoked (GLFC and LGA)
+
+The production local-loss path in `src/cafcl/native_methods.py` now calls
+`src/cafcl/upstream_losses.py`, which compiles and executes the exact
+`_compute_loss`, `efficient_old_class_weight` and `get_one_hot` function
+bodies from the author's immutable source files, with the sparse class IDs
+converted into contiguous coordinates. This replaces the earlier hand-written
+formula approximation, including LGA's historical task-dependent weight
+modulation and clamping. The old-teacher output is selected in old-class-first
+order as assumed by the original sources. The local training remains CUDA-only
+for these methods, as in the original code. This **does not** restore or certify
+original `beforeTrain`, entropy detection, exemplar memory, prototype gradients,
+proxy reconstruction or LGA geometry. The original modules are not modified.
