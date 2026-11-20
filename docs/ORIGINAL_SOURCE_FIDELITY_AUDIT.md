@@ -120,3 +120,4 @@ experimental evidence are not modified.
 **Current status:** The full source-faithful rebuild specified above is NOT
 complete. The gate and audit are a safety correction, not an assertion that
 the missing original mechanisms have now been implemented.
+\n## Byte-for-byte vendor provenance\n\nThe pinned `docs/ORIGINAL_UPSTREAM_BLOB_MANIFEST.json` records the Git blob SHA-1, size, executable mode and source commit for **all 76 original files** across the four repositories: GLFC 17, LGA 16, FEAT 18, FedCLASS 25. `tests/test_original_upstream_blobs.py` verifies every file against its Git blob SHA-1 during CI. This proves source-copy integrity only, **not original algorithm execution**.\n
