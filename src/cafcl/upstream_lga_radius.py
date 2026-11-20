@@ -36,6 +36,12 @@ class _CPUTransferOnly(ast.NodeTransformer):
             node.func.attr='to'
             node.args=[ast.Constant(value='cpu')]
             node.keywords=[]
+        elif (isinstance(node.func,ast.Attribute) and node.func.attr=='to'
+              and len(node.args)==1 and isinstance(node.args[0],ast.Name)
+              and node.args[0].id=='device'):
+            # Original source passes a CUDA integer device index; only
+            # CPU-only tests translate that transfer to CPU.
+            node.args=[ast.Constant(value='cpu')]
         return node
 
 
