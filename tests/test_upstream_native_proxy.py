@@ -107,3 +107,47 @@ def test_original_proxy_single_class_multiple_gradients_dataset_shape(method):
     assert len(source)==80
     _,target=source[63]
     assert target==18
+
+
+@pytest.mark.parametrize('method',['native_glfc','native_lga'])
+def test_real_original_gradient_inversion_one_iteration_cpu_fixture(method,monkeypatch):
+    """Execute the real author's gradient inversion body and LBFGS closure.
+
+    Original production remains 250 outer iterations with default LBFGS.
+    Only this CPU software-test fixture uses 1 iteration and 1 snapshot
+    to confirm functional graph, gradient shape and reconstructed pixels.
+    """
+    from types import SimpleNamespace
+    from cafcl.upstream_native_prototypes import (
+        original_source_le_net,_Physical64SourceClassifier)
+    import numpy as np
+    import torch.nn.functional as F
+
+    actual=torch.optim.LBFGS
+    def one_step_optimizer(*args,**kwargs):
+        kwargs['max_iter']=1
+        return actual(*args,**kwargs)
+    monkeypatch.setattr(torch.optim,'LBFGS',one_step_optimizer)
+
+    seed=137
+    encoder=original_source_le_net(method,seed,torch.device('cpu'))
+    wrapped=_Physical64SourceClassifier(encoder)
+    label=torch.tensor([23],dtype=torch.long)
+    sample=torch.randn(1,3,32,32)
+    truth=F.cross_entropy(wrapped(sample),label)
+    grad=torch.autograd.grad(truth,wrapped.parameters())
+    source=original_proxy_class(method,cpu_test=True)()
+    source.encode_model=wrapped
+    source.pool_grad=[[x.detach().cpu().clone() for x in grad]]
+    source.device=0
+    source.Iteration=1
+    source.num_image=1
+    source.args=SimpleNamespace(img_size=32)
+    source.reconstruction()
+    assert source.new_set_label==[23]
+    assert len(source.new_set)==1
+    assert len(source.new_set[0])==1
+    pixels=source.new_set[0][0]
+    assert isinstance(pixels,np.ndarray)
+    assert pixels.shape==(32,32,3)
+    assert pixels.dtype==np.uint8
