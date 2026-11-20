@@ -268,3 +268,22 @@ allocation. This is NOT yet full FEAT fidelity. Remaining FEAT gaps:
 `FEAT._select_data_for_retention` joint call, complete original ETF module
 unavailable, EGC correction at inference, local original
 `_local_finetune` class-aware training, and original replay composition.
+
+## FEAT training-time original transform source execution
+
+The FEAT pilot now invokes `FEAT._get_norm_and_transform('cifar100')`
+compiled directly from unchanged upstream `FEAT/methods/FEAT.py`. The
+resulting original RandomCrop(32,pad=4), RandomHorizontalFlip,
+ColorJitter(brightness=63/255), ToTensor and Normalize apply to every
+FEAT local TRAIN/replay batch. This restores source-specific training
+augmentation missing from the generic pilot, while TEST and validation
+remain normalized only. Input bytes are recovered from affine-normalized
+CIFAR100 examples before applying the actual author PIL transforms.
+
+The experimental worker uses a per-client deterministic CPU RNG scope to
+adapt authors' sequential random augmentation to concurrently scheduled
+clients. This changes RNG consumption order (not transform definitions)
+and must be documented. FEAT receives a fresh `SOURCE_CORE_V4` job
+identity and output directory; no older experiment artifact is overwritten.
+Other original FEAT mechanisms still remain incomplete and fidelity is
+still NOT certified.
