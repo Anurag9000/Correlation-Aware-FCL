@@ -1,94 +1,58 @@
-> **FIDELITY HOLD:** These three suites currently execute adapted losses and
-> native backbones only; upstream proxy, exemplar and geometric algorithms
-> remain unimplemented. Default launch refuses execution. This page describes
-> the **legacy adapted ablations only**; see
-> [the exact source audit](ORIGINAL_SOURCE_FIDELITY_AUDIT.md).
-> An explicitly labelled old ablation may be run with
-> `--permit-adapted-legacy`, but MUST NOT be presented as GLFC/LGA/FEAT.
->
-# Three native-method CIFAR-100 offline-client pilots
+> **SCIENTIFIC FIDELITY HOLD — CURRENT SOURCE PORT.** Original upstream
+> files are byte-identical, and selected original methods now execute,
+> but the complete GLFC/LGA/FEAT original training/proxy orchestration
+> is NOT yet integrated. Default GPU launch remains blocked. Explicit
+> `--permit-adapted-legacy` is a declaration of an INCOMPLETE paper
+> adaptation, never certification. See
+> [the mechanism inventory](ORIGINAL_SOURCE_FIDELITY_AUDIT.md).
 
-## Entry points
+# Three paired original-source compatibility pilots
 
-- `bash GLFC/pilot/run.sh --plan-only` or `bash GLFC/pilot/run.sh`
-- `bash LGA/pilot/run.sh --plan-only` or `bash LGA/pilot/run.sh`
-- `bash FEAT/pilot/run.sh --plan-only` or `bash FEAT/pilot/run.sh`
+The launchers are `GLFC/pilot/run.sh`, `LGA/pilot/run.sh`, and
+`FEAT/pilot/run.sh`. `--plan-only` is safe and available without GPU.
+Both FULL and rotating-OFFLINE arms launch in separate CUDA:0 processes.
+Five local clients learn in both arms. The only experimental intervention
+is a client temporarily unable to upload or download. The nine training
+intervals and communication-only tenth flush cover the prescribed
+independent CIFAR-100 two-class local streams. Model input batch64 is
+mandatory. Source fidelity is recorded separately from class-stream
+protocol adaptation. No GPU training has been launched as a newly
+certified faithful study.
 
-Install the project first with `python -m pip install -e '.[test]'`.
-The default production call runs exactly TWO separate, concurrent OS processes
-on physical GPU 0, each with five persistent client models and a server.
-The processes launch as a matched pair, and failure of either is fatal.
-Each process follows the established v16 first-four-then-two class stream:
-nine training intervals, one communication-only final flush, one cycling
-offline client per interval in the intervention, and all clients learning
-independently even when disconnected. Final inference never receives task IDs.
-All training, replay and evaluation forward batches have physical size 64.
-The private/client reservoir uses independent per-class Algorithm R with 50
-eligible TRAIN images per class; the server shares accepted deduplicated images.
+## Mechanism execution as presently implemented
 
-Results are isolated under `results/native_offline_pilots/{glfc,lga,feat}/seedN/`.
-Each method writes `design.json`, both workers' logs, per-sync reports,
-per-client/model synchronization traces, checkpoints and terminal comparison.
+| Method | Exact executed published source methods | Remaining differences |
+|---|---|---|
+| GLFC | CBAM feature extractor, source weighted BCE/teacher computation, original FedAvg, entropy`_signal`, `update_new_set`, exemplar reduction & herding, original fl_main crop/flip/jitter transform | Source `train` optimizer/schedule not invoked, source `prototype_mask` and proxy gradient inversion/monitor/model-back not invoked, original network dynamic expansion adapted |
+| LGA | Original CBAM, weighted BCE, FedAvg, entropy trigger and herding, fl_main PIL transform | Source `train` and proxy stack missing, `compute_radius`, `f_monitor` and geometry augmentation missing |
+| FEAT | Source ResNet backbone, GSA, `FLDataSelector` masked QR/SVD leverage selection, ECC projectors/energy and aggregation, authors' crop/flip/jitter | Official `utils/inc_net.py`, `methods/GSA.py`, `methods/EGC.py` are missing upstream; fixed ETF and correction code are explicitly labelled third-party/paper reconstructions, original `FEAT._fl_train` orchestration not directly executed |
 
-## Original source protection
+The source selector may choose duplicate FEAT retention tickets, as the
+author `torch.multinomial(...replacement=True)` does. GLFC/LGA memory
+is **NOT Algorithm R**: the original entropy detector can legitimately
+choose *no exemplars* when the rise is below its threshold. It selects
+from the previous local pair only on a positive trigger. The server's
+original-method archive receives actual selected source exemplars and
+source-method state ONLY from clients whose uploads are accepted.
+All selected clients receive accepted original-method artifacts; unsent
+hidden-client artifacts remain private until reconnection.
 
-The original upstream tracked files under `GLFC/src`, `LGA/` (excluding
-new `pilot`) and `FEAT/` (excluding new `pilot`) were copied byte-for-byte
-and are *not* altered. The native ResNet sources are dynamically imported from
-these directories, and native-method loss adaptations live under `src/cafcl`.
+## Explicit experimental adaptations
 
-## Scientific fidelity / limitations (important)
+Original authors do not train this particular disjoint, five-client,
+two-class, rotating-offline protocol. Dataset indexing and visible-class
+head mapping, per-client persistent state, 64-input physical batch
+constraint, terminal flush, and off-schedule delayed model fusion
+are documented changes. Our delayed update uses a noncanonical
+lag-damped, BatchNorm-aware algorithm; it does not claim to be the
+authors' original synchronous FedAvg behavior.
 
-These are **protocol-harmonized method adaptations, not exact paper
-reproductions**. This is explicitly logged in every design manifest.
+The two existing source-v3 GLFC/LGA and source-v4 FEAT job IDs and
+output folders are **distinct from earlier V1/V2 results**. No historical
+data have been altered. The FEAT fixed simplex ETF and subspace
+correction use a clearly identified third-party reconstruction because
+the official original implementation was never published.
 
-- **GLFC:** imports the published CBAM ResNet18 feature extractor and adapts
-  the published weighted BCE + sigmoid old-teacher loss to sparse, globally
-  indexed 100-class independent client streams. The upstream proxy-gradient
-  reconstruction, entropy-triggered exemplar herding and encoder-monitor
-  pipeline are **not yet integrated**; the common seeded global 50/class
-  reservoir is used instead. Do NOT cite this pilot as full GLFC accuracy.
-- **LGA:** imports its CBAM ResNet18 and adapts its published weighted BCE +
-  old-teacher objective to the same sparse client stream. Its native
-  proxy-gradient reconstruction, geometric radius and feature-augmented
-  monitoring path are **not yet integrated**. Do NOT cite as full LGA accuracy.
-- **FEAT:** imports the published FEAT ResNet18 feature extractor and ports
-  the actual GSA feature-prototype distillation objective with the
-  source's required FC-weight transpose corrected. The upstream repository
-  lacks critical `utils/inc_net.py` and related modules. This pilot uses
-  the compatible CNN+linear classifier, and does **not yet** reproduce native
-  per-client leverage-based exemplar selection or geometric projection
-  correction. Do NOT cite as complete FEAT accuracy.
-
-The three loss/backbone combinations are distinct, and their complete
-model-parameter updates use identical federated delayed-delta semantics.
-However, they should be reported as **native-loss ablations** until the
-missing method-specific components are restored and validated. These pilots
-are not proxies for published SOTA baselines.
-
-## Implementation invariants
-
-- Offline means **no upload and no download**, never "skip local SGD."
-- Every local episode trains with seen-class competition; future labels
-  are never presented as a task-ID oracle at inference.
-- Teacher snapshots survive disconnected episodes, and server teacher
-  replacement occurs only after accepted synchronization.
-- Once offline updates are received, the server fuses accumulated anchor-
-  relative deltas with an explicitly noncanonical stale-update adapter,
-  not pretend synchronous FedAvg.
-- The test set supplies audit metrics only and must not guide optimization.
-- A passed CPU plan test does **not** imply GPU/VRAM suitability or
-  scientifically acceptable accuracy.
-
-## Four-suite campaign supervision
-
-The eight-arm campaign supervisor and its GPU admission/monitoring policy are documented in `FOUR_SUITE_PILOT_CAMPAIGN.md`. The supervisor runs all three adapted native-loss pilots plus the FedCLASS CE+FedAvg reservoir arm as four concurrent paired controllers.
-
-**2026-11-20 aggregation correction:** The original authors' actual FedAvg
-functions now execute for GLFC, LGA and FEAT, including source-uniform
-rather than shared sample-size weighting. Their other original mechanisms
-remain incomplete; the method-fidelity gate remains active.
-
-**New source-v2 job identity:** Native pilots have `SOURCE_CORE_V2` job
-identifiers and `seedN/source_v2` output roots. This prevents completed
-V1 adapted-loss results from being returned as a newly executed method.
+See [ORIGINAL_SOURCE_FIDELITY_AUDIT.md](ORIGINAL_SOURCE_FIDELITY_AUDIT.md)
+for exact source paths, verified coverage, original-file SHA manifest,
+remaining blockers and the mandatory release conditions.

@@ -66,6 +66,25 @@ def main(argv=None):
                 original_feat_training_transform=(
                     'FEAT/methods/FEAT.py:_get_norm_and_transform(cifar100)'
                     if args.suite=='feat' else None))
+    # The generic Replay planning helper reports Algorithm R/reservoir memory.
+    # It is NOT executed by any of these three source-method pilot runners.
+    # Replace each inherited assertion with the real method-specific policy.
+    is_feat=args.suite=='feat'
+    plan.update(
+        replay_sampling=('authors_FLDataSelector_per_class_local_QR_SVD_with_replacement'
+                         if is_feat else
+                         'authors_entropy_triggered_previous_pair_herding'),
+        replay_reservoir_fraction=None,
+        inactive_generic_reservoir_fraction_config=jobs[0].replay_reservoir_fraction,
+        private_reservoir_per_class=None,
+        expected_server_exemplars_after_flush=None,
+        source_memory_count_per_class=jobs[0].memory_per_class,
+        memory_count_is_upper_bound=True,
+        training_augmentation=('authors_FEAT_cifar_crop_flip_jitter'
+                               if is_feat else
+                               'authors_GLFC_LGA_cifar_crop_flip_jitter'),
+        mathematical_source_training_optimizer_complete=False,
+    )
     root=Path(args.output_dir)/args.suite/('seed'+str(args.seed))/( 'source_v4' if args.suite=='feat' else 'source_v3')
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',plan)
@@ -132,7 +151,10 @@ def main(argv=None):
     report_path=root/'comparison'/'comparison.md'
     report_text=report_path.read_text()
     report_text=report_text.replace('Two matched Replay/FedAvg runs,',
-        f'Two matched {args.suite.upper()} native-loss/FedAvg adapted runs,')
+        f'Two matched {args.suite.upper()} source-method adapter/FedAvg runs,')
+    report_text=report_text.replace(
+        f"Training augmentation: {jobs[0].training_augmentation};",
+        "Training augmentation: authors' original CIFAR crop/flip/jitter via PIL;")
     report_text += ('\\n**Method fidelity:** This is an adapted native-loss '
                     'pilot, not the full upstream published method. '
                     'See docs/NATIVE_OFFLINE_FIDELITY.md.\\n')
