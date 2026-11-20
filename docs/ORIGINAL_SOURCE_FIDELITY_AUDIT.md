@@ -168,3 +168,17 @@ standard Linear classifier's `[C,d]` weights into the expected `[d,C]` form.
 This is a **protocol/model-shape adaptation**, not proof of original FEAT
 network parity. The official `IncrementalNet_CausalETF` remains absent, as do
 the original retention selection and inference correction in the active runner.
+
+## FedCLASS CE source training and exemplar selection execution
+
+`src/cafcl/upstream_fedclass_ce.py` now executes the author's original
+`FedCLASS/models/ce.py:CE._train` via original source AST, including SGD
+recreation and AMP scaler behavior. For user-specified 50/class memory, it also
+executes `BaseLearner._construct_exemplar_unified`, selecting the first
+eligible examples per local class as the published CE source actually does.
+This **replaces** the previous Algorithm R reservoir for the FedCLASS CE pilot.
+The original `FedAvg.update` is now used for aggregation. The old CLI string
+`--memory-mode reservoir` remains for backward compatibility, but the manifest
+now states the actual original selection policy. Source `FlTrainer.fl_train`
+and dynamic classifier growth remain protocol adaptations, not original
+function calls. The method is still **NOT certified fully paper-faithful**.

@@ -1,3 +1,13 @@
+> **2026-11-20 correction:** the adapted CE local training loop has been
+> replaced with source-executed `FedCLASS/models/ce.py:CE._train`, preserving
+> its optimizer resets, AMP and loss. Exemplar selection now uses the source
+> `BaseLearner._construct_exemplar_unified`: first 50 eligible TRAIN images
+> per new class, **not Algorithm R reservoir**. The retained CLI option
+> `--memory-mode reservoir` is a historical misnomer and must not be described
+> as Algorithm R. Source `FedAvg.update` also executes. The full trainer
+> orchestration and output-layer growth are still adapted; fidelity gate
+> remains closed.
+
 > **SOURCE-FIDELITY HOLD:** The original FedCLASS files are verified
 > byte-for-byte but this pilot's adapted CE/FedAvg trainer is NOT a direct
 > execution of `FedCLASS/models/ce.py:CE._train`. Standard production

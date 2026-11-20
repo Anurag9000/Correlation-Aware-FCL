@@ -338,6 +338,11 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     whether selected for federation or not. Shared weights are the private
     local model between rounds; server synchronization is handled separately.
     """
+    if cfg.model=='fedclass_resnet8' and cfg.method in {'replay','sgd'}:
+        from .upstream_fedclass_ce import train_original_ce
+        return train_original_ce(model,client,bank,cfg,device,round_id,
+                                 task_classes,experience_end=experience_end,
+                                 active_pair_classes=active_pair_classes)
     if client.shared_weights is None:
         raise RuntimeError('Client must synchronize before local training')
     client.last_learning_method=cfg.method

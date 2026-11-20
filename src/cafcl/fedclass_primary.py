@@ -86,12 +86,12 @@ def make_design(jobs,*,mode,replay_ratio):
         original_backbone="FedCLASS/convs/resnet_client.py:resnet8",
         original_classifier="FedCLASS/convs/linears.py:SimpleLinear",
         adapted_model="fedclass_resnet8",
-        local_loss="all-locally-known-class cross_entropy, no inference task id",
+        local_loss="original FedCLASS/models/ce.py:CE._train, compact all-locally-known CE",
         client_class_history="last-synchronized global classes plus privately acquired classes",
         memory_mode=mode,
         replay_ratio=(replay_ratio if mode=="reservoir" else 0.),
         per_class_reservoir_capacity=(50 if mode=="reservoir" else 0),
-        replay_policy=("independent per-client Algorithm R; accepted global archive"
+        replay_policy=("ORIGINAL FedCLASS BaseLearner._construct_exemplar_unified first-k/class; accepted global archive; legacy CLI label reservoir"
                        if mode=="reservoir" else "disabled"),
         upstream_fidelity="FedCLASS original ResNet8 + SimpleLinear + CE/FedAvg; v16 asynchronous class-IL adaptation",
         aggregation_on_return="v18 noncanonical G+alpha*(local-anchor), alpha=1/(1+version lag), BN-safe, single-stale terminal-flush cap 1/num_clients",
@@ -102,7 +102,7 @@ def make_design(jobs,*,mode,replay_ratio):
         five_clients_learning_concurrently_per_arm=True,
         test_oracle_task_id=False,
         native_source_unmodified=True,
-        paper_algorithm_warning="Not bitwise FedCLASS trainer: 100-class output, sparse client labels, full-batch64, persistent SGD, protocol synchronization, optional ER50.")
+        paper_algorithm_warning="Now executes original CE._train, original first-k exemplar selection, and original FedAvg.update, but class mapping, fixed physical batch64, 5 persistent independent client streams, shared memory and delayed upload are protocol adaptations; not original full fl_trainer orchestration.")
     return plan
 
 

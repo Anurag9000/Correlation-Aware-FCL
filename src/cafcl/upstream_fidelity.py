@@ -73,9 +73,10 @@ COMPONENTS={
  'fedclass':(
   ('FedCLASS/convs/resnet_client.py','resnet8','imported'),
   ('FedCLASS/convs/linears.py','SimpleLinear','imported'),
-  ('FedCLASS/models/ce.py','CE._train','adapted'),
+  ('FedCLASS/models/ce.py','CE._train','original_invoked'),
   ('FedCLASS/models/base.py','BaseLearner.gen_cur_classes','adapted'),
   ('FedCLASS/models/base.py','BaseLearner.build_rehearsal_memory','adapted'),
+  ('FedCLASS/models/base.py','BaseLearner._construct_exemplar_unified','original_invoked'),
   ('FedCLASS/utils/inc_net.py','CENet.update_fc','omitted'),
   ('FedCLASS/utils/fed_algorithm.py','FedAvg.update','original_invoked'),
   ('FedCLASS/fl_trainer.py','FlTrainer.fl_train','omitted'),
