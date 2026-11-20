@@ -13,8 +13,13 @@ def test_original_ecc_three_functions_have_author_source_filename():
         '_build_projector_from_W',
         'estimate_ecc_priors',
         'aggregate_ecc_priors_from_clients'}
+    import inspect
     for method in functions.values():
-        assert method.__code__.co_filename.endswith('FEAT/methods/FEAT.py')
+        # estimate_ecc_priors retains the author's @torch.no_grad decorator.
+        # The wrapper's code object points to PyTorch, while the unwrapped
+        # method must point to the original frozen author source.
+        assert inspect.unwrap(method).__code__.co_filename.endswith(
+            'FEAT/methods/FEAT.py')
 
 
 def test_source_ecc_aggregate_and_projector_finite():
