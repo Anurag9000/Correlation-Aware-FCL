@@ -169,7 +169,12 @@ def test_pilot_dispatch_spawns_both_arms_concurrently_on_gpu_zero(monkeypatch,tm
     import cafcl.data as data
     monkeypatch.setattr(torch.cuda,'is_available',lambda:True)
     monkeypatch.setattr(data,'get_data_bank',lambda *args,**kwargs:None)
-    monkeypatch.setattr(n,'build_report',lambda *args,**kwargs:{'mock_only':True})
+    def fake_build_report(root,jobs):
+        result=root/'comparison'/'comparison.md'
+        result.parent.mkdir(parents=True,exist_ok=True)
+        result.write_text('Two matched Replay/FedAvg runs,')
+        return {'mock_only':True}
+    monkeypatch.setattr(n,'build_report',fake_build_report)
     launched=[]
     class FakeProcess:
         pid=1234
@@ -185,3 +190,5 @@ def test_pilot_dispatch_spawns_both_arms_concurrently_on_gpu_zero(monkeypatch,tm
     assert [cmd[-2:] for cmd,_ in launched]==[['--worker','0'],['--worker','1']]
     assert all(kwargs['env']['CUDA_VISIBLE_DEVICES']=='0' for _,kwargs in launched)
     assert all(kwargs['stderr']==n.subprocess.STDOUT for _,kwargs in launched)
+    assert 'GLFC native-loss/FedAvg adapted' in (
+        tmp_path/'glfc'/'seed0'/'comparison'/'comparison.md').read_text()
