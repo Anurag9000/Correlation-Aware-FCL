@@ -70,22 +70,25 @@ def original_memory_methods(method,*,cpu_test=False):
     if len(candidates)!=1:
         raise RuntimeError("Authors original learner class unavailable")
     names={"update_new_set","entropy_signal","_construct_exemplar_set",
-           "_reduce_exemplar_sets"}
+           "_reduce_exemplar_sets","train","_compute_loss",
+           "efficient_old_class_weight"}
     subset=[n for n in candidates[0].body
             if isinstance(n,ast.FunctionDef) and n.name in names]
     if {n.name for n in subset}!=names:
         raise RuntimeError(f"Authors {method} entropy and herding not complete")
     entropy=[n for n in tree.body
-             if isinstance(n,ast.FunctionDef) and n.name=="entropy"]
-    if len(entropy)!=1:
-        raise RuntimeError("Authors entropy helper missing")
+             if isinstance(n,ast.FunctionDef) and n.name in {"entropy","get_one_hot"}]
+    if {n.name for n in entropy}!={"entropy","get_one_hot"}:
+        raise RuntimeError("Authors source loss/entropy helpers missing")
     bridge=ast.Module(body=entropy+[ast.ClassDef(
         name="SourceMemory",bases=[],keywords=[],body=subset,
         decorator_list=[])],type_ignores=[])
     if cpu_test:
         bridge=_CPUDeviceOnly().visit(bridge)
     ast.fix_missing_locations(bridge)
+    from torch.autograd import Variable
     namespace={"torch":torch,"nn":nn,"np":np,"F":F,
+               "Variable":Variable,"optim":torch.optim,
                "model_to_device":lambda m,p,d:m.to(
                    "cpu" if cpu_test else f"cuda:{int(d)}")}
     exec(compile(bridge,str(path),"exec"),namespace)
@@ -157,19 +160,25 @@ class _PrivateSourceImages:
         return ids[int(matches[0])]
 
 
-def original_before_local_task(method,model,client,bank,cfg,device,active_pair):
+def original_before_local_task(method,model,client,bank,cfg,device,active_pair,*,return_source=False):
     """Execute *original* update_new_set before each actual client local task."""
     if method not in SOURCE_FILES:raise ValueError(method)
     new=tuple(sorted(map(int,active_pair or ())))
     if len(new)!=2:
         raise RuntimeError("Source memory adaptation requires exactly two local classes")
     known=tuple(sorted(map(int,client.observed_classes)))
+    # The published old-model distillation writes old teacher predictions
+    # into the leading classifier columns. Sparse global IDs must therefore
+    # be compacted in [historical old, new] order, not numerical ID order.
+    previous=tuple(sorted(set(map(int,client.native_teacher_classes)) & set(known)))
+    visible=tuple(c for c in known if c not in previous)
+    order=previous+visible
     if not set(new).issubset(known):
         raise RuntimeError("Unseen class in original memory trigger")
     if not set(client.current_indices).issubset(client.seen_indices):
         raise RuntimeError("Current original entropy examples not locally arrived")
     from .continual import _FixedBatchSampler
-    data=_CurrentTrain(bank.train,client.current_indices,known)
+    data=_CurrentTrain(bank.train,client.current_indices,order)
     batch=_FixedBatchSampler(len(data),cfg.batch_size,
                              cfg.seed+client.client_id*1009+
                              client.local_experience*31,shuffle=False)
@@ -186,7 +195,15 @@ def original_before_local_task(method,model,client,bank,cfg,device,active_pair):
     source=original_memory_methods(method,cpu_test=(device.type=="cpu"))
     obj=source()
     obj.device=0 if device.index is None else device.index
-    obj.model=_CompactLogits(model,known).to(device)
+    obj.model=_CompactLogits(model,order).to(device)
+    obj.numclass=len(order)
+    obj.task_size=2
+    obj.task_id_old=int(client.local_experience)
+    obj.epochs=cfg.epochs if hasattr(cfg,'epochs') else 1
+    obj.learning_rate=cfg.lr if hasattr(cfg,'lr') else .03
+    from types import SimpleNamespace
+    obj.args=SimpleNamespace(lam=1.0)
+    obj.old_model=None
     obj.last_entropy=float(learned.get("last_entropy",0.))
     obj.last_class=list(last_classes) if last_classes else None
     obj.current_class=list(new)
@@ -240,7 +257,38 @@ def original_before_local_task(method,model,client,bank,cfg,device,active_pair):
         return np.mean(vectors,axis=0),vectors
 
     obj.compute_class_mean=MethodType(compute_class_mean,obj)
-    obj._get_train_and_test_dataloader=lambda classes,mix: loader
+
+    def training_loader(classes,mix):
+        if not mix:return loader
+        from .federated_cl import ClientArchiveDataset
+        # Replay is chosen by original update_new_set; use exactly the
+        # source-selected exemplars, with accepted server history as mandated
+        # by the user's class-stream synchronization intervention.
+        archived=[int(i) for ids in client.received_memory.values() for i in ids]
+        selected=[]
+        for cls,images in zip(obj.learned_classes,obj.exemplar_set):
+            provider.get_image_class(int(cls))
+            selected.extend(provider.original_index(int(cls),im) for im in images)
+        ids=list(dict.fromkeys(list(map(int,client.current_indices))+
+                                selected+archived))
+        for idx in archived:
+            if idx not in client.seen_indices and idx not in client.received_example_payloads:
+                raise RuntimeError('Unacknowledged historical image in source replay')
+        trdata=(ClientArchiveDataset(bank.train,client.received_example_payloads)
+                if client.received_example_payloads else bank.train)
+        samples=_CurrentTrain(trdata,ids,order)
+        sampler=_FixedBatchSampler(len(samples),cfg.batch_size,
+            cfg.seed+client.client_id*113+client.local_experience*103,
+            shuffle=True)
+        if getattr(cfg,'dataset','synthetic')=='cifar100':
+            from .upstream_native_augmentation import entropy_source_collate
+            col=entropy_source_collate(method,
+                  cfg.seed+client.client_id*119+client.local_experience*107)
+        else:col=None
+        obj.source_train_identifiers=ids
+        return DataLoader(samples,batch_sampler=sampler,num_workers=0,
+                          collate_fn=col)
+    obj._get_train_and_test_dataloader=training_loader
     # Important: the ORIGINAL update_new_set method handles entropy trigger,
     # source old-class retention, reduction, herding and the two data passes.
     source.update_new_set(obj)
@@ -264,4 +312,10 @@ def original_before_local_task(method,model,client,bank,cfg,device,active_pair):
         "retained_per_class":{int(k):len(v) for k,v in selected.items()},
         "source":"original_GLFC_LGA_update_new_set",
     }
+    if return_source:
+        obj.learned_classes=[order.index(int(c)) for c in obj.learned_classes]
+        obj.source_global_order=order
+        if not hasattr(obj,'source_train_identifiers'):
+            raise RuntimeError('Published update_new_set failed to prepare replay loader')
+        return dict(client.native_memory_state),obj
     return dict(client.native_memory_state)

@@ -368,3 +368,20 @@ federated CL state and is sent only to synchronized clients.
 
 This does NOT yet invoke original `LGA/ProxyServer.py:f_monitor`,
 so the estimate is not sufficient for full algorithmic fidelity.
+
+## Source-executed original GLFC/LGA local training
+
+The two GLFC and LGA experiment runners now dispatch to
+`src/cafcl/upstream_glfc_lga_train.py`. It invokes **the exact original
+source** `GLFC_model.train` / `LGA.train` method bodies compiled from the
+immutable author files, with their own fresh SGD initialization, no
+momentum, original weight decay `1e-5`, and source local-epoch
+learning-rate schedule. These replace the generic persistent-SGD loop.
+Original `_compute_loss` and `efficient_old_class_weight` also execute
+inside source training. The authors' original `update_new_set`
+builds the actual current+old-exemplar local loader; accepted historical
+server replay is added solely as demanded by the user's synced-class-IL
+protocol. Each model still trains on physical batch64. The original
+gradient-generating proxy learner, original server `model_back` selection
+and LGA proxy `f_monitor` remain missing, so the interim historical
+teacher is explicitly labelled noncanonical. **Not fully faithful.**
