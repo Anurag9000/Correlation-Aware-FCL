@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader,Subset
 
 @torch.inference_mode()
 def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=None, old=None, new=None,
-             task_class_groups=None, split='test'):
+             task_class_groups=None, split='test', feat_ecc=None):
     if split not in {'validation','test'}:
         raise ValueError(f'Unsupported evaluation split: {split}')
     dataset=getattr(bank,split,None)
@@ -39,7 +39,11 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
         if valid<batch_size:
             indices=torch.arange(batch_size-valid)%valid
             x=torch.cat((x,x[indices]),dim=0)
-        logits=model(x.to(device))[:valid]
+        if feat_ecc is None:
+            logits=model(x.to(device))[:valid]
+        else:
+            from .feat_inference_correction import paper_reconstructed_feat_logits
+            logits=paper_reconstructed_feat_logits(model,x.to(device),feat_ecc)[:valid]
         # The global classifier has shape-stable allocated rows, but classes
         # that have not arrived anywhere must not compete at inference.
         # Arrived-yet-offline classes DO compete: they are part of evaluation.

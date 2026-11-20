@@ -238,3 +238,14 @@ required fixed physical batch 64 is implemented using the shared padded tail
 sampler and may repeat tail examples in ECC EMA statistics, a user-protocol
 adaptation to flag in reported results. Full-method certification remains
 **FALSE** and the launch gate remains closed.
+
+## FEAT geometry applied at inference (third-party reconstruction)
+
+`src/cafcl/feat_inference_correction.py` now applies the FEAT projector
+energy-gating correction to actual class-incremental server validation and
+test predictions, using ONLY accepted-and-synchronized ECC statistics.
+The formula is independently reconstructed from
+https://github.com/kiennkt05/FEAT/blob/main/utils/inc_net.py because
+the official author repository does not include `utils/inc_net.py`.
+This is **not original-author source** and is NOT certified as equivalent
+to the missing code. The source-fidelity gate remains closed.

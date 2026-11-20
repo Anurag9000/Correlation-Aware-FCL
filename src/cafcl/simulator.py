@@ -593,7 +593,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                                                     device,peak.copy(),integrated=integrated,
                                                     old=old,new=new,
                                                     task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
-                                                    split='validation')
+                                                    split='validation',feat_ecc=(server_cl_state.feat_ecc if cfg.method=='native_feat' else None))
             if accepted and cfg.representation_diagnostics and old:
                 model.load_state_dict(global_state)
                 model.to(device)
@@ -748,7 +748,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 result,new_eval_peaks=evaluate(model,evaluation_bank,observed,cfg.batch_size,device,evaluation_peaks,
                                      integrated=integrated,old=old,new=new,
                                      task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
-                                     split=('test' if cfg.evaluate_final_only else 'validation'))
+                                     split=('test' if cfg.evaluate_final_only else 'validation'),feat_ecc=(server_cl_state.feat_ecc if cfg.method=='native_feat' else None))
                 if not cfg.evaluate_final_only:
                     peak=new_eval_peaks
                 result['evaluation_deferred']=False
@@ -767,12 +767,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     cfg.batch_size,device,peak=peak,integrated=integrated,
                     old=old,new=new,
                     task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
-                    split='validation')
+                    split='validation',feat_ecc=(server_cl_state.feat_ecc if cfg.method=='native_feat' else None))
             per_sync_test,test_peak=evaluate(model,evaluation_bank,observed,
                 cfg.batch_size,device,peak=test_peak,integrated=integrated,
                 old=old,new=new,
                 task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
-                split='test')
+                split='test',feat_ecc=(server_cl_state.feat_ecc if cfg.method=='native_feat' else None))
             # Report the previously defined all-arrived metric AND the
             # accepted-only server capability. Offline unsent classes must
             # never be presented as already learned by the server.
@@ -782,7 +782,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     cfg.batch_size,device,peak={},integrated=integrated,
                     old=old,new=new,
                     task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
-                    split='test')
+                    split='test',feat_ecc=(server_cl_state.feat_ecc if cfg.method=='native_feat' else None))
             sync_report=render_sync_report(run_dir,round_number=round_id+1,
                 model_version=version,num_clients=cfg.num_clients,
                 arrivals=scenario.arrivals,test_metrics=per_sync_test,
