@@ -217,3 +217,24 @@ The output is marked `paper_reconstructed_fixed_ETF` and **not** the
 unpublished authors' `IncrementalNet_CausalETF`. FEAT V3 job IDs distinguish
 the fixed-ETF model from the earlier trainable-head native-loss pilot.
 The inference energy correction and exemplar scheduling are still missing.
+
+## FEAT ECC original source execution and synchronization
+
+`src/cafcl/upstream_feat_geometry.py` now compiles and executes the **original
+source** projector, energy estimator and cross-client ECC-prior aggregation.
+The native FEAT local-training path records each client's actual old/new
+feature-space energy priors at the end of an experience; those priors persist
+through disconnected intervals and reach the server **only** when the client
+uploads. The server then uses the original `aggregate_ecc_priors_from_clients`
+formula and publishes the accepted result to connected clients. Projection
+matrices, scalar energies and source receipts are checkpointed as FEAT-specific
+state; hidden client information is not advanced into the server prematurely.
+
+**Limitations:** The authors' FEAT ETF inference implementation
+(`utils/inc_net.py`) is absent upstream. The projection and scalar priors are
+now actually computed and synchronized but cannot be called a faithful final
+inference correction until that missing original model path is recovered. The
+required fixed physical batch 64 is implemented using the shared padded tail
+sampler and may repeat tail examples in ECC EMA statistics, a user-protocol
+adaptation to flag in reported results. Full-method certification remains
+**FALSE** and the launch gate remains closed.

@@ -82,6 +82,8 @@ class FederatedCLState:
     memory_provenance:dict[int,set[int]]=field(default_factory=dict)
     # Stable provenance of each exemplar, including which local task supplied it.
     memory_origins:dict[int,tuple[int,int]]=field(default_factory=dict)
+    feat_ecc:dict|None=None
+    feat_ecc_history:list[dict]=field(default_factory=list)
 
     def merge_clients(self,uploaded_clients,bank,method,teacher_model,version):
         """Merge ONLY selected/uploaded private contributions once per source."""
@@ -138,6 +140,20 @@ class FederatedCLState:
                         if not torch.isfinite(x).all():raise ValueError(f'Nonfinite {kind} state')
                         old=table[key].get(name)
                         table[key][name]=x.detach().cpu().clone() if old is None else old+x.detach().cpu()
+        # FEAT method-specific ECC is uploaded only by accepted clients;
+        # all hidden clients' pending priors remain private until reconnection.
+        if method=='native_feat':
+            from .upstream_feat_geometry import consolidate_original_ecc,clone_feat_ecc
+            new_receipts=[receipt for client in uploaded_clients
+                          for receipt in client.pending_feat_ecc]
+            if new_receipts:
+                result=consolidate_original_ecc(new_receipts)
+                if result is not None:
+                    self.feat_ecc=clone_feat_ecc(result)
+                    self.feat_ecc_history.append(dict(version=int(version),
+                        accepted_clients=sorted(int(c.client_id) for c in uploaded_clients),
+                        source_receipts=len(new_receipts),
+                        old_energy=dict(result['energy'])))
         # Publish the current committed global model as LwF teacher on
         # EVERY synchronization, not only when a LwF client participated.
         # The latest model is the cumulative teacher for all prior classes.
@@ -169,6 +185,9 @@ class FederatedCLState:
             for kind,table in self.importance.items()}
         client.received_lwf_teacher=(_cpu_dict(self.teacher) if self.teacher else None)
         client.received_lwf_teacher_version=self.teacher_version
+        if method=='native_feat':
+            from .upstream_feat_geometry import clone_feat_ecc
+            client.received_feat_ecc=clone_feat_ecc(self.feat_ecc)
         # Transmit actual bytes to *every* selected client. The active local
         # algorithm decides whether to use replay, constraints, or regularizers.
         client.received_example_payloads={int(i):(x.clone(),int(y))
@@ -252,6 +271,15 @@ class FederatedCLState:
             for name,param in self.teacher.items():
                 if not torch.equal(client.lwf_teacher[name],param):
                     raise RuntimeError(f'Client LwF teacher mismatch: {name}')
+        if client.last_learning_method=='native_feat':
+            if (client.received_feat_ecc is None)!=(self.feat_ecc is None):
+                raise RuntimeError('Client missing accepted FEAT ECC state')
+            if self.feat_ecc is not None:
+                for k in ('PH','PT'):
+                    if not torch.equal(client.received_feat_ecc[k],self.feat_ecc[k]):
+                        raise RuntimeError('Corrupted FEAT original ECC projector')
+                if client.received_feat_ecc['energy']!=self.feat_ecc['energy']:
+                    raise RuntimeError('Corrupted FEAT original ECC energy')
         if client.received_server_class_sample_exposure!=self.class_sample_exposure:
             raise RuntimeError('Client historical class exposure table is incomplete')
         if not set(self.integrated_classes).issubset(client.observed_classes):
@@ -268,6 +296,8 @@ class FederatedCLState:
             'gradient_constraint_supports':sum(map(len,self.memory.values())),
             'importance_methods':sorted(self.importance),
             'teacher_version':self.teacher_version,
+            'feat_ecc_accepted_receipts':sum(x['source_receipts'] for x in self.feat_ecc_history),
+            'feat_ecc_history_entries':len(self.feat_ecc_history),
             'contributing_clients':sorted(self.uploaded_clients),
             'integrated_classes':len(self.integrated_classes)}
 

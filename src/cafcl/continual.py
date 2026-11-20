@@ -84,6 +84,8 @@ class LocalState:
     last_learning_method:str=''
     native_teacher:dict|None=None
     native_teacher_classes:set[int]=field(default_factory=set)
+    pending_feat_ecc:list[dict]=field(default_factory=list)
+    received_feat_ecc:dict|None=None
     def receive(self,weights,version,*,clear_memory=False):
         if clear_memory:
             self.memory.clear()
@@ -98,6 +100,7 @@ class LocalState:
         self.pending_upload_steps=0
         self.pending_class_update_steps={}
         self.pending_importance={}
+        self.pending_feat_ecc=[]
     def arrival(self,indices,labels,stage):
         if stage > self.current_stage:
             self.current_indices=[]
@@ -743,6 +746,15 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy,
                              reservoir_fraction=(cfg.replay_reservoir_fraction if cfg.method in ({'replay'}|NATIVE_METHODS) else 0.),
                              class_totals=(Counter(map(int,bank.train.targets)) if cfg.method in ({'replay'}|NATIVE_METHODS) and cfg.replay_reservoir_fraction else None))
+    if cfg.method=='native_feat' and experience_end and active_pair_classes:
+        # Original FEAT projection/EMA energies are computed from this
+        # client's legitimately available examples, even while offline;
+        # they cannot be published until the client reconnects.
+        from .upstream_feat_geometry import compute_client_feat_ecc
+        entry=compute_client_feat_ecc(model,client,bank,device,active_pair_classes,
+                                      batch_size=cfg.batch_size)
+        if entry is not None:
+            client.pending_feat_ecc.append(entry)
     if cfg.method in NATIVE_METHODS and experience_end:
         # The next local experience (also when offline) uses this actual local
         # checkpoint as its distillation teacher, until a legitimate download.
