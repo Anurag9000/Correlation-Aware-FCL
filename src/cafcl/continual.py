@@ -85,6 +85,8 @@ class LocalState:
     native_teacher:dict|None=None
     native_teacher_classes:set[int]=field(default_factory=set)
     pending_feat_ecc:list[dict]=field(default_factory=list)
+    feat_selection_tickets:dict[int,list[int]]=field(default_factory=dict)
+    feat_selection_receipts:list[dict]=field(default_factory=list)
     received_feat_ecc:dict|None=None
     def receive(self,weights,version,*,clear_memory=False):
         if clear_memory:
@@ -482,7 +484,14 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     eligible_history={cls:inds for cls,inds in client.memory.items()
                       if (cls in client.trained_classes if cfg.boundary_mode=='hidden'
                           else client.first_seen_local_experience.get(cls,client.local_experience)<client.local_experience)}
-    oldmemory=[i for group in eligible_history.values() for i in group]
+    oldmemory=[]
+    for cls,group in eligible_history.items():
+        # Source FEAT FLDataSelector samples WITH replacement. Preserve its
+        # actual retained tickets during local rehearsal, instead of the
+        # communication archive's legitimate unique-image normalization.
+        tickets=(client.feat_selection_tickets.get(cls) if cfg.method=='native_feat'
+                 else None)
+        oldmemory.extend(tickets if tickets is not None else group)
     if cfg.method in {'der','derpp'}:
         # A heterogeneous remote replay archive can contain images from
         # clients running other methods that never stored trajectory logits.
@@ -771,7 +780,11 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                 client.mas_omega,client.mas_anchor,fresh,fresh_anchor)
             client.mas_stage=client.local_experience
     # Never allocate replay/GEM memory for non-memory algorithms.
-    if cfg.method in ({'gem','agem','replay','er_ace'}|NATIVE_METHODS):
+    if cfg.method=='native_feat' and experience_end:
+        from .upstream_feat_replay import source_feat_select_local
+        source_feat_select_local(model,client,bank,cfg,device,indices,
+                                 active_pair_classes or ())
+    if cfg.method in ({'gem','agem','replay','er_ace','native_glfc','native_lga'}):
         client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy,
                              reservoir_fraction=(cfg.replay_reservoir_fraction if cfg.method in ({'replay'}|NATIVE_METHODS) else 0.),
                              class_totals=(Counter(map(int,bank.train.targets)) if cfg.method in ({'replay'}|NATIVE_METHODS) and cfg.replay_reservoir_fraction else None))

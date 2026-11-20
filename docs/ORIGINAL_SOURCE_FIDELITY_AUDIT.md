@@ -249,3 +249,22 @@ https://github.com/kiennkt05/FEAT/blob/main/utils/inc_net.py because
 the official author repository does not include `utils/inc_net.py`.
 This is **not original-author source** and is NOT certified as equivalent
 to the missing code. The source-fidelity gate remains closed.
+
+## FEAT: author's FLDataSelector now invoked for exemplar retention
+
+`src/cafcl/upstream_feat_replay.py` executes the unmodified author
+`FLDataSelector` AST, including random QR masking, singular-value leverage
+scores, aggregation of probabilities and multinomial **with replacement**.
+The pilot now uses that author-selected memory rather than Algorithm R for
+FEAT and retains duplicate selection tickets for local replay. The common
+server archive deduplicates image payloads in transit.
+
+**Protocol deviation:** The original FEAT selects jointly across all client
+feature sets at a global task boundary. This five-client independent task
+stream needs private selection even when clients are offline, so the current
+bridge performs class-local/source-functional selection. Its numerical
+selection distribution differs from the original joint cross-client query
+allocation. This is NOT yet full FEAT fidelity. Remaining FEAT gaps:
+`FEAT._select_data_for_retention` joint call, complete original ETF module
+unavailable, EGC correction at inference, local original
+`_local_finetune` class-aware training, and original replay composition.
