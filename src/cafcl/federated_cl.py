@@ -15,7 +15,7 @@ from dataclasses import dataclass,field
 import torch
 
 REGULARIZERS=('ewc','si','mas')
-MEMORY_METHODS=frozenset({'replay','gem','agem','er_ace','der','derpp'})
+MEMORY_METHODS=frozenset({'replay','gem','agem','er_ace','der','derpp','native_glfc','native_lga','native_feat'})
 
 def _cpu_dict(values):
     return {str(k):v.detach().cpu().clone() for k,v in values.items()}
@@ -199,6 +199,10 @@ class FederatedCLState:
         if self.teacher is not None:
             client.lwf_teacher=_cpu_dict(self.teacher)
             client.lwf_teacher_from_server=True
+        if method in {'native_glfc','native_lga','native_feat'}:
+            # Native old-model anchor is created ONLY during a real download.
+            client.native_teacher=_cpu_dict(self.teacher)
+            client.native_teacher_classes=set(self.integrated_classes)
         client.federated_cl_version=self.version
 
     def assert_complete_download(self,client):
