@@ -83,3 +83,8 @@ are not proxies for published SOTA baselines.
 ## Four-suite campaign supervision
 
 The eight-arm campaign supervisor and its GPU admission/monitoring policy are documented in `FOUR_SUITE_PILOT_CAMPAIGN.md`. The supervisor runs all three adapted native-loss pilots plus the FedCLASS CE+FedAvg reservoir arm as four concurrent paired controllers.
+
+**2026-11-20 aggregation correction:** The original authors' actual FedAvg
+functions now execute for GLFC, LGA and FEAT, including source-uniform
+rather than shared sample-size weighting. Their other original mechanisms
+remain incomplete; the method-fidelity gate remains active.

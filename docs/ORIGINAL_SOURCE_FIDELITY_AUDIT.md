@@ -121,3 +121,21 @@ experimental evidence are not modified.
 complete. The gate and audit are a safety correction, not an assertion that
 the missing original mechanisms have now been implemented.
 \n## Byte-for-byte vendor provenance\n\nThe pinned `docs/ORIGINAL_UPSTREAM_BLOB_MANIFEST.json` records the Git blob SHA-1, size, executable mode and source commit for **all 76 original files** across the four repositories: GLFC 17, LGA 16, FEAT 18, FedCLASS 25. `tests/test_original_upstream_blobs.py` verifies every file against its Git blob SHA-1 during CI. This proves source-copy integrity only, **not original algorithm execution**.\n
+## Actual original aggregation now executed
+
+The four paired pilot execution paths now dispatch aggregation directly through
+`src/cafcl/original_aggregation.py` using author-source code:
+
+- GLFC: `GLFC/src/Fed_utils.py:FedAvg`, uniform original averaging.
+- LGA: `LGA/Fed_utils.py:FedAvg`, uniform original averaging.
+- FEAT: `FEAT/utils/dmc.py:average_weights`, uniform original averaging.
+- FedCLASS CE: `FedCLASS/utils/fed_algorithm.py:FedAvg.update`, original sample-size weighting.
+
+The published original function bodies are compiled directly from their
+original AST in the first three cases; FedCLASS's original class is imported.
+Original source is unmodified. The upstream aggregation runs on the **accepted**
+model candidates. For delayed offline updates, candidate construction remains
+the explicitly noncanonical version-lag-damped and BN-safe policy; it is **not**
+original-paper stale-update behavior. This is a real core-mechanism fix but it
+DOES NOT yet restore missing local/proxy/geometry/memory machinery or certify
+any pilot as fully faithful.

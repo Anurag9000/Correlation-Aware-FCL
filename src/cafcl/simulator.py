@@ -164,8 +164,11 @@ def _guard_single_stale_terminal_flush(candidate, base, uploads, cfg, *, termina
     return guarded,scale
 
 
-def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None,class_history_counts=None):
+def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None,class_history_counts=None,source_method=None):
     if not updates:raise RuntimeError('No client updates to aggregate')
+    if method=='fedavg' and source_method is not None:
+        from .original_aggregation import original_aggregate
+        return original_aggregate(source_method,updates,base)
     if method=='uniform':
         weights=[1./len(updates)]*len(updates)
     else:
@@ -609,7 +612,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     if vectors:old_gradient=torch.stack(list(vectors.values())).mean(0)
                 mean=aggregate(accepted,global_state,cfg.aggregator,
                                clients=clients,round_id=round_id,old_gradient=old_gradient,
-                               class_history_counts=server_cl_state.class_sample_exposure)
+                               class_history_counts=server_cl_state.class_sample_exposure,
+                               source_method=(cfg.method if cfg.method in {'native_glfc','native_lga','native_feat'} else
+                                              'fedclass_resnet8' if cfg.model=='fedclass_resnet8' else None))
                 candidate,new_server_state=server_optimizer_step(
                     global_state,mean,cfg.aggregator,cfg,server_optimizer_state)
                 is_terminal_flush=bool(cfg.stream_protocol and cfg.stream_terminal_flush and round_id==total_rounds-1)

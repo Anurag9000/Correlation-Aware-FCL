@@ -34,7 +34,7 @@ COMPONENTS={
   ('GLFC/src/ProxyServer.py','proxyServer.reconstruction','omitted'),
   ('GLFC/src/ProxyServer.py','proxyServer.monitor','omitted'),
   ('GLFC/src/ProxyServer.py','proxyServer.model_back','omitted'),
-  ('GLFC/src/Fed_utils.py','FedAvg','adapted'),
+  ('GLFC/src/Fed_utils.py','FedAvg','original_invoked'),
  ),
  'lga':(
   ('LGA/ResNet.py','resnet18_cbam','imported'),
@@ -50,7 +50,7 @@ COMPONENTS={
   ('LGA/ProxyServer.py','proxyServer.reconstruction','omitted'),
   ('LGA/ProxyServer.py','proxyServer.f_monitor','omitted'),
   ('LGA/ProxyServer.py','proxyServer.model_back','omitted'),
-  ('LGA/Fed_utils.py','FedAvg','adapted'),
+  ('LGA/Fed_utils.py','FedAvg','original_invoked'),
  ),
  'feat':(
   ('FEAT/convs/resnet.py','resnet18','imported'),
@@ -77,7 +77,7 @@ COMPONENTS={
   ('FedCLASS/models/base.py','BaseLearner.gen_cur_classes','adapted'),
   ('FedCLASS/models/base.py','BaseLearner.build_rehearsal_memory','adapted'),
   ('FedCLASS/utils/inc_net.py','CENet.update_fc','omitted'),
-  ('FedCLASS/utils/fed_algorithm.py','FedAvg.update','adapted'),
+  ('FedCLASS/utils/fed_algorithm.py','FedAvg.update','original_invoked'),
   ('FedCLASS/fl_trainer.py','FlTrainer.fl_train','omitted'),
  ),
 }
