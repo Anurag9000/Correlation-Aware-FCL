@@ -45,7 +45,7 @@ jobs:
 
             mkdir "$folder"
             rsync -a --exclude='.git' "$source/" "$folder/"
-            git add -A -- "$folder"
+            git add -f -A -- "$folder"
 
             git -C "$source" ls-tree -r HEAD |
               awk -F '\t' -v prefix="$folder/" '{ split($1, a, " "); print a[1], a[3], prefix $2 }' |
