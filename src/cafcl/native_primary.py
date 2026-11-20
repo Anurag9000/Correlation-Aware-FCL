@@ -27,9 +27,9 @@ def make_native_jobs(suite,*,seed=0,lr=.03,epochs=10,client_training_concurrency
                  method=method,model=model,
                  optimizer_state_policy='persist',
                  client_training_concurrency=client_training_concurrency,
-                 job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V5'}_FULL_SEED{seed}")
+                 job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V5' if suite=='feat' else 'V4'}_FULL_SEED{seed}")
     offline=replace(full,participation=.8,stream_offline_policy='rotate_once',
-                    job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V5'}_ROTATING_OFFLINE_SEED{seed}")
+                    job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V5' if suite=='feat' else 'V4'}_ROTATING_OFFLINE_SEED{seed}")
     for cfg in (full,offline):cfg.validate()
     return full,offline
 
