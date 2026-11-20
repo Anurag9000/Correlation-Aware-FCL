@@ -110,15 +110,29 @@ def test_native_client_continues_through_disconnection_and_replay_uses_64():
             client.shared_weights=first['weights']
             assert first['steps']==1
             assert client.native_teacher is not None
-            assert set(client.private_memory)=={0,1}
+            if method=='native_feat':
+                assert set(client.private_memory)=={0,1}
+            else:
+                # Original GLFC/LGA update_new_set doesn't construct
+                # exemplars on the FIRST task (last_class is None).
+                assert client.private_memory=={}
+                assert client.native_memory_state['learned_classes']==[]
             assert client.model_version==0
             client.local_experience=1
             client.first_seen_local_experience.update({2:1,3:1})
             client.arrival(list(range(6,12)),(2,3),1)
             second=local_train(model,client,bank,cfg,torch.device('cpu'),1,
                                experience_end=True,active_pair_classes=(2,3))
-            assert second['steps']==2
-            assert set(client.memory)=={0,1,2,3}
+            if method=='native_feat':
+                assert second['steps']==2
+                assert set(client.memory)=={0,1,2,3}
+            else:
+                # If source entropy increase <= 1.2, source legitimately
+                # does NOT construct old exemplars. No fake replay.
+                assert second['steps']==1
+                assert client.native_memory_state['last_classes']==[2,3]
+                assert client.native_memory_state['last_signal'] is False
+                assert client.memory=={}
             assert set(client.native_teacher_classes)=={0,1,2,3}
             assert client.model_version==0  # No communication: still offline.
             assert shapes and set(shapes)=={64}

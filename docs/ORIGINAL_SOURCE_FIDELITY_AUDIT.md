@@ -332,3 +332,9 @@ local task-trigger state with a peer's entropy baseline: the original
 per-client method remains local and the server retains the union as
 origin-provenanced history, consistent with each source's semantics.
 This doesn't replace the original proxy reconstruction mechanisms.
+
+**Source-trigger regression:** CPU synthetic tests now force a threshold
+crossing and verify that exactly the original source herding chooses images
+from the PREVIOUS pair only, without reading future or other-client examples.
+The ordinary two-pair local-training test checks that a non-triggering entropy
+signal does **not** produce fake Algorithm-R exemplars.
