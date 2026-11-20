@@ -179,7 +179,7 @@ def test_all_three_pilot_entrypoints_write_audited_plans(tmp_path):
     for name in SUITES:
         native_primary.main(['--suite',name,'--seed','0',
                              '--output-dir',str(tmp_path),'--plan-only'])
-        design=json.loads((tmp_path/name/'seed0'/('source_v4' if name=='feat' else 'source_v2')/'design.json').read_text())
+        design=json.loads((tmp_path/name/'seed0'/('source_v4' if name=='feat' else 'source_v3')/'design.json').read_text())
         assert design['training_intervals']==9
         assert design['terminal_communication_only_flush'] is True
         assert design['full_and_offline_same_gpu']==0
@@ -213,4 +213,4 @@ def test_pilot_dispatch_spawns_both_arms_concurrently_on_gpu_zero(monkeypatch,tm
     assert all(kwargs['env']['CUDA_VISIBLE_DEVICES']=='0' for _,kwargs in launched)
     assert all(kwargs['stderr']==n.subprocess.STDOUT for _,kwargs in launched)
     assert 'GLFC native-loss/FedAvg adapted' in (
-        tmp_path/'glfc'/'seed0'/'source_v2'/'comparison'/'comparison.md').read_text()
+        tmp_path/'glfc'/'seed0'/'source_v3'/'comparison'/'comparison.md').read_text()

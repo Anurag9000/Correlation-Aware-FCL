@@ -27,9 +27,9 @@ def make_native_jobs(suite,*,seed=0,lr=.03,epochs=10,client_training_concurrency
                  method=method,model=model,
                  optimizer_state_policy='persist',
                  client_training_concurrency=client_training_concurrency,
-                 job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V4' if suite=='feat' else 'V2'}_FULL_SEED{seed}")
+                 job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V4' if suite=='feat' else 'V3'}_FULL_SEED{seed}")
     offline=replace(full,participation=.8,stream_offline_policy='rotate_once',
-                    job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V4' if suite=='feat' else 'V2'}_ROTATING_OFFLINE_SEED{seed}")
+                    job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V4' if suite=='feat' else 'V3'}_ROTATING_OFFLINE_SEED{seed}")
     for cfg in (full,offline):cfg.validate()
     return full,offline
 
@@ -59,10 +59,14 @@ def main(argv=None):
                 full_and_offline_same_gpu=0,concurrent_processes=2,
                 source_fidelity='UNVERIFIED_PARTIAL_ADAPTATION',
                 upstream_fidelity=fidelity_report(args.suite),
+                original_native_train_transform=(
+                    'official '+('GLFC/src/fl_main.py' if args.suite=='glfc' else
+                    'LGA/fl_main.py')+':train_transform'
+                    if args.suite in {'glfc','lga'} else None),
                 original_feat_training_transform=(
                     'FEAT/methods/FEAT.py:_get_norm_and_transform(cifar100)'
                     if args.suite=='feat' else None))
-    root=Path(args.output_dir)/args.suite/('seed'+str(args.seed))/( 'source_v4' if args.suite=='feat' else 'source_v2')
+    root=Path(args.output_dir)/args.suite/('seed'+str(args.seed))/( 'source_v4' if args.suite=='feat' else 'source_v3')
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',plan)
     if args.plan_only:

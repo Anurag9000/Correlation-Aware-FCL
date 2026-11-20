@@ -338,3 +338,17 @@ crossing and verify that exactly the original source herding chooses images
 from the PREVIOUS pair only, without reading future or other-client examples.
 The ordinary two-pair local-training test checks that a non-triggering entropy
 signal does **not** produce fake Algorithm-R exemplars.
+
+## GLFC/LGA original source train-time augmentation
+
+`src/cafcl/upstream_native_augmentation.py` now compiles the original
+`train_transform` assignments from official GLFC `src/fl_main.py` and
+LGA `fl_main.py`, including exact RandomCrop, RandomHorizontalFlip,
+ColorJitter, ToTensor and CIFAR100 Normalize. The authors' PIL transforms
+run on actual available TRAIN/replay examples in the local BCE objective
+and on the current examples used by original `entropy_signal`.
+This is the original transform code, with a deterministic per-client RNG
+scope and fixed 64-size physical model forwards. Validation and TEST
+remain unaugmented. GLFC/LGA pilot identities advance to source V3;
+older V2 results are not overwritten. Source training optimizer and
+proxy-server reconstruction remain incomplete, fidelity gate CLOSED.

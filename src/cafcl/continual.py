@@ -562,6 +562,11 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                 captured_logits={}
                 if logical_size!=cfg.batch_size:
                     raise RuntimeError('Training forward does not have exactly 64 images')
+                if cfg.method in {'native_glfc','native_lga'} and cfg.dataset=='cifar100':
+                    from .upstream_native_augmentation import original_glfc_lga_augment_batch
+                    x=original_glfc_lga_augment_batch(cfg.method,x.cpu(),seed=(
+                        cfg.seed+client.client_id*1_000_003+round_id*100_003+
+                        client.local_experience*1009+epoch*173+step_count))
                 if cfg.method=='native_feat' and cfg.dataset=='cifar100':
                     # Exact original FEAT CIFAR-100 crop/flip/brightness
                     # composed source transformations, not generic augmentation.

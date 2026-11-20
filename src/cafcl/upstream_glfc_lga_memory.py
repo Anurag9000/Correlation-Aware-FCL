@@ -173,7 +173,13 @@ def original_before_local_task(method,model,client,bank,cfg,device,active_pair):
     batch=_FixedBatchSampler(len(data),cfg.batch_size,
                              cfg.seed+client.client_id*1009+
                              client.local_experience*31,shuffle=False)
-    loader=DataLoader(data,batch_sampler=batch,num_workers=0)
+    if cfg.dataset=='cifar100':
+        from .upstream_native_augmentation import entropy_source_collate
+        collate=entropy_source_collate(method,
+            cfg.seed+client.client_id*1009+client.local_experience*31)
+    else:collate=None
+    loader=DataLoader(data,batch_sampler=batch,num_workers=0,
+                      collate_fn=collate)
     learned=client.native_memory_state or {}
     last_classes=tuple(learned.get("last_classes",()))
     learned_classes=list(learned.get("learned_classes",()))
