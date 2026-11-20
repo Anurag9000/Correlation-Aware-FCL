@@ -12,6 +12,7 @@ a common training-index namespace; image bytes are also explicitly transmitted.
 """
 from __future__ import annotations
 from dataclasses import dataclass,field
+import copy
 import torch
 
 REGULARIZERS=('ewc','si','mas')
@@ -84,12 +85,27 @@ class FederatedCLState:
     memory_origins:dict[int,tuple[int,int]]=field(default_factory=dict)
     feat_ecc:dict|None=None
     feat_ecc_history:list[dict]=field(default_factory=list)
+    source_method_artifacts:dict[int,dict]=field(default_factory=dict)
 
     def merge_clients(self,uploaded_clients,bank,method,teacher_model,version):
         """Merge ONLY selected/uploaded private contributions once per source."""
         for client in uploaded_clients:
             self.integrated_classes.update(int(c) for c in client.pending_upload_classes)
             self.acknowledged_train_indices.update(int(i) for i in client.seen_indices)
+        # Each accepted client's source-method artifact ledger becomes visible
+        # only at an actual upload. In particular, offline GLFC/LGA entropy
+        # and FEAT selection tickets must never leak before reconnection.
+        for client in uploaded_clients:
+            if (client.last_learning_method or method) in {
+                    'native_glfc','native_lga','native_feat'}:
+                self.source_method_artifacts[int(client.client_id)] = dict(
+                    source_method=str(client.last_learning_method or method),
+                    native_memory_state=copy.deepcopy(client.native_memory_state),
+                    feat_selection_tickets=copy.deepcopy(client.feat_selection_tickets),
+                    feat_selection_receipts=copy.deepcopy(client.feat_selection_receipts),
+                    local_experience=int(client.local_experience),
+                    received_at_server_version=int(version),
+                )
         method_by_client={int(c.client_id):(c.last_learning_method or method)
                           for c in uploaded_clients}
         if any(m in MEMORY_METHODS for m in method_by_client.values()):
@@ -185,6 +201,7 @@ class FederatedCLState:
             for kind,table in self.importance.items()}
         client.received_lwf_teacher=(_cpu_dict(self.teacher) if self.teacher else None)
         client.received_lwf_teacher_version=self.teacher_version
+        client.received_native_artifacts=copy.deepcopy(self.source_method_artifacts)
         if method=='native_feat':
             from .upstream_feat_geometry import clone_feat_ecc
             client.received_feat_ecc=clone_feat_ecc(self.feat_ecc)
@@ -280,6 +297,8 @@ class FederatedCLState:
                         raise RuntimeError('Corrupted FEAT original ECC projector')
                 if client.received_feat_ecc['energy']!=self.feat_ecc['energy']:
                     raise RuntimeError('Corrupted FEAT original ECC energy')
+        if client.received_native_artifacts!=self.source_method_artifacts:
+            raise RuntimeError('Client missing accepted original-method artifacts')
         if client.received_server_class_sample_exposure!=self.class_sample_exposure:
             raise RuntimeError('Client historical class exposure table is incomplete')
         if not set(self.integrated_classes).issubset(client.observed_classes):
@@ -298,6 +317,7 @@ class FederatedCLState:
             'teacher_version':self.teacher_version,
             'feat_ecc_accepted_receipts':sum(x['source_receipts'] for x in self.feat_ecc_history),
             'feat_ecc_history_entries':len(self.feat_ecc_history),
+            'source_method_artifact_clients':len(self.source_method_artifacts),
             'contributing_clients':sorted(self.uploaded_clients),
             'integrated_classes':len(self.integrated_classes)}
 

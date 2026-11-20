@@ -318,3 +318,17 @@ exemplars are stored, exactly as source `update_new_set` prescribes.
 gradient inversion/reconstruction, original model-back teacher decisions,
 and LGA's radius/geometry monitor. Full-method fidelity gate stays
 **CLOSED**.
+
+## Author-specific continual state merged and downloaded
+
+Server synchronization now archives origin-tagged method-specific artifacts
+from **accepted client uploads only**, including GLFC/LGA entropy history,
+learned-class/exemplar-selection ledger, and FEAT's unmodified
+leverage-selection tickets/receipts. Other clients receive exact copies of
+the acknowledged ledger after synchronization; offline client-private
+states are NOT revealed until reconnection. Download verification checks
+this receipt too. It deliberately does **not overwrite another client's**
+local task-trigger state with a peer's entropy baseline: the original
+per-client method remains local and the server retains the union as
+origin-provenanced history, consistent with each source's semantics.
+This doesn't replace the original proxy reconstruction mechanisms.

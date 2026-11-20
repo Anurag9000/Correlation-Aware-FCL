@@ -85,6 +85,7 @@ class LocalState:
     native_teacher:dict|None=None
     native_teacher_classes:set[int]=field(default_factory=set)
     native_memory_state:dict=field(default_factory=dict)
+    received_native_artifacts:dict[int,dict]=field(default_factory=dict)
     pending_feat_ecc:list[dict]=field(default_factory=list)
     feat_selection_tickets:dict[int,list[int]]=field(default_factory=dict)
     feat_selection_receipts:list[dict]=field(default_factory=list)
