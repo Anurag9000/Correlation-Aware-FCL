@@ -1,3 +1,5 @@
+> **Historical pilot design:** The only current primary Replay/FedAvg recipe is [PRIMARY_PROBE.md](PRIMARY_PROBE.md). This v6 ledger is retained for historical feasibility math; its primary-probe description and commands are retired.
+
 # CIFAR-100 native32 v6: exact experiment-ledger mathematics
 
 This is a reproducible **source-configuration feasibility audit**, not evidence of GPU training or scientific accuracy.

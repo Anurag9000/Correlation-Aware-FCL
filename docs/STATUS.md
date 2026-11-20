@@ -1,83 +1,15 @@
-> **CURRENT v16 (authoritative):** [Mandatory physical batch 64, Replay, SGD and evaluation audit](V16_BATCH64_RESERVOIR_SGD_AUDIT.md). All active production model forwards used for training, Replay, EWC/MAS, gradient constraints and diagnostics use 64 inputs; scoring counts only non-padded examples. The dual ResNet-18/ViT-Base suite is two concurrent processes **on GPU 0**, 50/class global shared Replay, SGD momentum 0.9 persisted between tasks and across communication, nine learning/synchronization rounds plus terminal flush. The CIFAR-100 factorial ledger is frozen in [v16 manifest](../configs/designs/stream_v16_batch64.json), 32,133 jobs/backbone. Previous v6–v15 split-batch and memory-policy descriptions below are historical; do not execute their command examples as current settings. Old result files and archived manifests remain intact for scientific provenance.
+# Project status
 
-> **CURRENT v15 dual pilot:** Physical batch 64 = effective batch 64 on both ResNet-18 and ViT-Base/16. No microbatching or gradient accumulation in the two-run campaign; the microbatch setting is explicitly tied to the requested batch size. The Python runner does one full logical-batch forward/backward before each SGD step (a final incomplete batch naturally contains fewer than 64 images). Job IDs and output roots are isolated from v14. The factorial research ledger is unchanged and still has its separately configured physical microbatch behavior. [Current launch settings](V15_PHYSICAL_BATCH_PILOT.md).
+## Current canonical primary FedAvg result
 
-> **CURRENT v14 source-of-truth:** [V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md](V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md). The remaining v6–v13 sections below are retained only as historical audit notes, not active protocol settings.
+The primary CIFAR-100 Replay/FedAvg comparison is fixed to the ResNet-18, crop/flip, batch-64, 10-epoch, seed-0 protocol in [PRIMARY_PROBE.md](PRIMARY_PROBE.md). Client SGD momentum persists across tasks and communication. Server aggregation uses canonical sample-weighted whole-model FedAvg without classifier-row fusion.
 
-The active ViT is standard **ViT-Base/16**, not Tiny; ResNet-18 CIFAR stem remains. All active jobs use momentum SGD 0.9 and L2 decay 5e-4 by default. New supervised samples compete with *all known* classes, and all known classifier rows can update; only unseen future rows stay frozen. The main probe defaults to effective batch64, microbatch8 and 50 replay images per class. After all 9 training syncs and final flush, a separate full post-server-sync accuracy table is written at every update (including before the final one). Held-out per-sync scores are diagnostics only. Prior results need a v14 rerun.
+The completed runs achieved **38.58%** with full participation and **30.58%** with rotating 4-of-5 participation; both integrated all 100 classes. The paired gain over the preceding matched V19 run was 17.92 percentage points for full participation and 15.86 points for rotating offline. This is one seed and does not establish statistical significance. The rotating arm uses the repository's explicitly marked stale-update adapter.
 
-# CIFAR-100 v6 implementation and validation status
+## Scope
 
-## Completed in source
-
-- **Exactly two switchable native production architectures**, both CIFAR-100 at 32×32: ViT-Tiny/16 (`vit_tiny_patch16_32`), CIFAR-stem ResNet-18 (`resnet18_cifar32`). No silent fallback to DeiT-224, SmallCNN or other CNN/ViT architectures; future model variants use the single registry in `models.py`.
-- The full factorial suite defaults to effective batch 1024; the two-job primary probe supports effective batch 64 or 1024 and configurable physical microbatching.
-- **Two-job primary A-GEM + FedAvg study:** five clients, two sequential two-class tasks per client each interval, five training intervals giving exactly 100 different classes. Full-participation baseline and an independently running arm with a different one-of-five client offline in each interval. One seed, one partial participation rate (80%), no overlap, final communication-only flush, same official 100-class test once at the end, per-class paired comparison.
-- No raw data or historical memory uploaded. Offline clients continue on persistent private weights and CL histories. On reconnection, pending changes are rebased to the current server model; participating clients get the newly merged global weights; disconnected clients remain untouched.
-- Canonical 100-class output mapping with a locally active task softmax; noncurrent classifier rows protected; representation backbone remains trainable.
-- ResNet-18 BatchNorm running counters are handled as monotone integer buffers, rather than causing aggregation to fail when disconnected clients have different counts.
-- **Mathematical audit:** of 53,805 existing per-backbone registrations, 38,370 remain structurally feasible and semantically distinguishable; 15,435 are excluded with recorded failure reasons (2,178 invalid overlap geometries, 6,534 invalid offline durations, 6,534 inert/aliased selection variants, and 189 LwF configurations varying unused parameters). Both choices cover all 99 local CL/server method combinations and the complete 5,346 balanced core.
-- Dedicated offline tests cover model shapes, active classifier rows, complete 100-class task schedule, exact once-only client exclusion, paired report, model switch, and math-audit pruning.
-
-## Not established
-
-- **No GPU server connection or real CIFAR-100 training was performed from this chat.** The script for concurrent launch on `mtechdeserver` is ready, but must be started on the machine or through an authorized remote execution connection.
-- The official final accuracy and statistical validity of the FCL research hypothesis are unknown. Two runs with one seed are explicitly a preliminary probe, not an uncertainty-calibrated result.
-- ViT-Tiny/16 has only four patch tokens at 32×32; this is an important architecture limitation. Both models now initialize randomly from the controlled seed; transfer-pretrained DeiT-224 has been retired, not silently reused at native 32×32.
-- ResNet BatchNorm running-statistics over microbatches are not mathematically equivalent to a physical batch of 1024. This limitation is reported.
-- Standard FedAvg is not identical to the code's stale-anchor accumulated-delta and class-wise classifier merge variant. The latter needs separate scientific validation.
-- The generator audits declared geometric/class-budget feasibility, but actual GPU numerical stability, training accuracy, paper fidelity of each CL algorithm, and some data/selector privacy issues are still to be established.
-
-## Reproducibility
+The repository retains distinct continual-learning learners, factorial research configurations, and method-specific source-fidelity paths. They do not replace or alter the primary Replay/FedAvg recipe. Earlier protocol documents and run artifacts are historical records, not current primary launch instructions.
 
 ```bash
-python -m pytest -q
-python scripts/validate_factorial_plans.py
-python scripts/audit_stream_math.py
 bash scripts/run_primary_probe_cifar100.sh --plan-only
-bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0
 ```
-
-Checkpoint protocol `cifar100_native32_v6`; distinct model-specific results roots. Never count old `cifar100_deit_v4` or v5 checkpoints as native v6 results. v6 prevents accidental resumption of CNN runs predating the BatchNorm reference-gradient fix.
-
-
-## V7 shared continual-learning state
-
-The model-only communications protocol is superseded by a v7 model + method-native-state protocol. The central server deduplicates contributed replay samples and DER target logits, aggregates nonduplicate diagonal EWC/SI/MAS importance contributions, and broadcasts its latest shared state only to clients that actually synchronize. The two-job pilot now uses Replay/FedAvg, private replay capacity 1000, and a separate v7 root. The frozen v6 job-geometry manifest is preserved, but v7 results are NOT equivalent to v6 results; old checkpoints cannot be reused. Cached GEM/A-GEM gradients from incompatible models are never naively averaged; their shared class evidence supports current-model reference-gradient recomputation. These updates are a **data-sharing simulator** and are not private FL.
-
-
-## Mandatory shared CL history — v8
-
-Every CIFAR-100 job now synchronizes full server continual-learning history with the model; the first next local task uses received compatible state. Includes mixed-method artifact routing, provenance-safe GEM, SI last-task consolidation and offline rejoin tests. See [v8 protocol](FEDERATED_CL_STATE_V8.md). v7 checkpoints are incompatible.
-
-
-## Current two-run CIFAR-100 Replay probe (v9)
-
-The two-arm primary probe now uses **classwise 10% Algorithm R reservoir replay**, not the earlier flat 1,000-example client cap or A-GEM method. Each class has 450 allowed TRAIN images (50 reserved for validation), so a client's fixed quota is 45 per class. Every client learns its own assigned two-label tasks and retains a persistent private reservoir; the server collects a deduplicated union from connected clients and broadcasts its entire exemplar archive. Hidden clients do not exchange either weights or memory. With 100 classes appearing once in this pilot, the expected final server archive is 4,500 samples after the communication-only flush.
-
-Native 32×32 ViT-Tiny/16 and CIFAR-stem ResNet-18 remain selectable. The primary pilot runs two concurrent GPU processes with effective batch size 1024 by default (or 64 explicitly), seed 0 and 10 epochs per binary episode. The full 38,370-job-per-backbone geometric ledger still applies; other methods keep their existing per-method budgets. The v9 simulator protocol, job IDs and primary output root isolate results from v8 and all preceding versions.
-
-
-## v10 single-GPU concurrent training (not yet GPU-benchmarked)
-
-All active CIFAR-100 simulator modes maintain one live independent model per client, submit local tasks across clients, and preserve a barrier between task ordinals. Default runs use a distinct CUDA stream per client; bounded client concurrency may schedule independent clients in waves, and concurrency one shares a CUDA stream for allocator reuse. Server aggregation and the shared CL-state broadcast happen only after every local task completes. Eight-arm GPU campaigns keep all eight experiment processes live concurrently. The primary run uses physical microbatch four by default and supports effective batch 64 or 1024; the active full-factorial suite retains its configured batch. GPU occupancy, memory, and accuracy require empirical server runs.
-
-The previous v9 checkpoint protocol is incompatible with v10. No silent serialized fallback is provided; adjust microbatch size if GPU VRAM is insufficient.
-
-
-## v11 server fidelity (pending CI)
-
-Nine server aggregation method names audited. FedAvg/FedAvgM/FedAdam use complete-model canonical server equations, with no custom classwise classifier fusion; uniform mean is explicit ablation. Five class-aware/conflict/retention weighting strategies are honestly labeled repository-specific. FedAdam follows the FedOpt paper's **uncorrected** moments and `v0=tau²` rather than bias-corrected central Adam; FedAvgM uses the Nesterov server momentum variant. Canonical FedAvg requires fresh common-ancestor client models; stale returning clients use an explicitly noncanonical delayed-delta adapter. Server class-example history counts only accepted uploads, and is used for the custom class-balanced weighting while canonical FedAvg continues to weight by actual contributed training-example counts. Scope: server-side aggregation/communication only; local CL objectives are unchanged.
-
-
-## v12 method fidelity (paper-mechanism audit)
-
-Current source contains 11 CL/local-learning modes. EWC Fisher (model-predictive per-example mean squared gradients), MAS output sensitivity (per-example mean absolute derivatives), SI task-gradient path integral, DER/DER++ pre-optimizer trajectory logits, per-class reservoir sampling, and GEM stage-group historical-task reference losses have been corrected and independently tested. Client streams, class heads, no-replay constraints, 5-client concurrency and server v11 aggregation remain intact. **Original paper exact experiment equivalence is not claimed for strict local active-class masking, federated unbounded replay sharing, or source-class GEM grouping.** See [CL_METHOD_FIDELITY_V12.md](CL_METHOD_FIDELITY_V12.md) for a method-by-method mathematical ledger and primary-paper references. No full v12 CIFAR-100 CUDA outcomes have yet been validated.
-
-
-## v13 CL-state-every-sync change
-
-The unique current stream is first 4 new classes/client in two tasks, then only 2 new classes/client in **each subsequent single task**, one server sync between. All accepted cumulative replay examples, historical DER raw logits, GEM/A-GEM reference evidence, EWC/SI/MAS precision tables, accepted class exposure, and the latest versioned LwF global teacher are broadcast to every online client irrespective of its present method. Runtime validation of every received archive happens after every model update. The primary 5-client pilot now has 9 train intervals + final flush, not 5+flush. The rotating offline client is cyclic so all clients eventually reconnect. New v13 checkpoints are required. See `FIRST4_THEN2_FULL_CL_V13.md`.
-
-
-**v13 accepted registry:** 32,133 runnable jobs per backbone; 99 method/server pairs remain. This supersedes the v12 38,370-per-backbone planning count. Frozen design file: `configs/designs/stream_v13_first4_then2.json`. The first complete v13 suite passed 215 tests, one CUDA test skipped. Further runtime state-byte integrity assertions were added afterward and must pass the final CI check.

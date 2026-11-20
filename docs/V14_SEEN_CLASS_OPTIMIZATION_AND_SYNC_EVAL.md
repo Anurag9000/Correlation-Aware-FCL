@@ -1,4 +1,9 @@
-# v14 — Correcting measured CIFAR-100 classifier collapse without changing FCL stream
+# Historical v14 audit — classifier collapse and per-sync evaluation
+
+This document records an earlier implementation and is retained as research
+history only. The primary launch specification is now
+[PRIMARY_PROBE.md](PRIMARY_PROBE.md); do not use v14 settings or commands as
+the current FedAvg recipe.
 
 ## Motivation and observed evidence (historical v10, not v14 accuracy)
 

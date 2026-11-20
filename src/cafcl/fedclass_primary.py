@@ -46,8 +46,9 @@ def make_fedclass_jobs(*,seed=0,lr=.03,epochs=10,memory_mode="authors_exemplars"
         raise ValueError("No-replay mode must use the default replay ratio")
     has_replay=memory_mode=="authors_exemplars"
     fraction=0. # No Algorithm R in the FedCLASS source; author picks first k.
-    baseline,_=make_jobs(backbone="cnn",seed=seed,lr=lr,epochs=epochs,
-                         replay_fraction=fraction)
+    baseline,_=make_jobs()
+    baseline=replace(baseline,seed=seed,lr=lr,epochs=epochs,
+                     training_augmentation='none')
     tag="AUTHORS_FIRST50" if has_replay else "AUTHORS_NO_REPLAY"
     baseline=replace(
         baseline,model="fedclass_resnet8",

@@ -30,7 +30,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v19_bounded_client_execution'
+PROTOCOL_VERSION = 'cifar100_native32_v21_primary_crop_flip'
 
 
 def _classwise_fedavg_contribution(uploads):

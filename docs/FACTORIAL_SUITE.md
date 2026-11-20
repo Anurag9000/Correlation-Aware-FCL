@@ -1,6 +1,4 @@
-> **CURRENT v16 (authoritative):** [Mandatory physical batch 64, Replay, SGD and evaluation audit](V16_BATCH64_RESERVOIR_SGD_AUDIT.md). All active production model forwards used for training, Replay, EWC/MAS, gradient constraints and diagnostics use 64 inputs; scoring counts only non-padded examples. The dual ResNet-18/ViT-Base suite is two concurrent processes **on GPU 0**, 50/class global shared Replay, SGD momentum 0.9 persisted between tasks and across communication, nine learning/synchronization rounds plus terminal flush. The CIFAR-100 factorial ledger is frozen in [v16 manifest](../configs/designs/stream_v16_batch64.json), 32,133 jobs/backbone. Previous v6–v15 split-batch and memory-policy descriptions below are historical; do not execute their command examples as current settings. Old result files and archived manifests remain intact for scientific provenance.
-
-> **ACTIVE v14:** The full 11-method × 9-server-algorithm suite now defaults to effective batch 64 and momentum SGD 0.9/weight decay 5e-4, standard ViT-Base/16 (or CIFAR ResNet-18), first-four-then-two task cadence, and a separate global accuracy table after every server sync. Historical geometry and file paths below are retained for comparison. [Current v14 protocol](V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md).
+> **Primary FedAvg:** Use only the fixed recipe in [PRIMARY_PROBE.md](PRIMARY_PROBE.md) for the primary Replay/FedAvg result. This factorial matrix is a separate research suite with distinct configurations and is not an alternate primary implementation.
 
 # CIFAR-100 v6 factorial ledger — feasibility-filtered, native 32×32 backbones
 
@@ -62,8 +60,8 @@ bash scripts/run_all_cifar100.sh --backbone cnn --plan-only
 bash scripts/run_all_cifar100.sh --backbone vit --plan-only --export-plan outputs/cifar100_vit_v6.jsonl.gz
 # validate both mathematical registry digests
 python scripts/validate_factorial_plans.py
-# primary intended first study: two jobs in parallel, one seed
-bash scripts/run_primary_probe_cifar100.sh --backbone vit --gpu 0
+# canonical primary study: fixed ResNet-18, crop/flip, one seed
+bash scripts/run_primary_probe_cifar100.sh --gpu 0
 ```
 
 **Scope:** This is exhaustive only over the *specified compatible finite axes*, not a full Cartesian product of all continuous hyperparameters or a claim that every source-coded variant is an exact paper implementation. Several advanced client-selection policies require privileged simulator metadata. The official test split must not drive adaptive client selection or hyperparameter tuning; the two-job probe evaluates official test only at the end.

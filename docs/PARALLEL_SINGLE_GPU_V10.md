@@ -1,3 +1,5 @@
+> **Historical primary settings:** Current launch instructions are in [PRIMARY_PROBE.md](PRIMARY_PROBE.md). This v10 note documents the older concurrency protocol and is not a primary FedAvg recipe.
+
 # v10: Strict task-ordinal concurrency on one GPU
 
 ## Contract applied throughout active repository

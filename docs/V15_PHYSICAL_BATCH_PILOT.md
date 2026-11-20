@@ -1,3 +1,5 @@
+> **Historical primary settings:** The current primary Replay/FedAvg recipe is [PRIMARY_PROBE.md](PRIMARY_PROBE.md). This v15 pilot note is retained as history and its launch examples are retired.
+
 # v15 two-job pilot: actual physical batch 64
 
 The pilot was previously configured with effective batch 64 and physical microbatch 8, which had not been requested and changes ResNet-18 BatchNorm behavior. This correction removes that intervention.

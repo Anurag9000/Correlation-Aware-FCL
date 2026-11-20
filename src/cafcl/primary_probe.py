@@ -17,16 +17,19 @@ from .simulator import run_experiment,atomic_json
 from .selection import participation_budget
 
 
-def make_jobs(*,backbone='vit',seed=0,lr=.03,epochs=10,replay_fraction=1/9):
-    pct_tag=f'{100*replay_fraction:g}'.replace('.','p')
-    cfg=replace(base(seed=seed,model=backbone),num_clients=5,batch_size=64,classwise_head_merge=False,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
+def make_jobs():
+    seed=0;lr=.03;epochs=10;replay_fraction=1/9
+    pct_tag='11p1111'
+    cfg=replace(base(seed=seed,model='cnn'),num_clients=5,batch_size=64,classwise_head_merge=False,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
         aggregator='fedavg',scenario='disjoint',stream_overlap_kind='none',
         stream_overlap_fraction=0.,classes_per_local_task=2,local_tasks_per_round=2,
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
         stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=ceil(450*replay_fraction),
-        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V16_BATCH64_'+resolve_backbone(backbone))
+        optimizer_state_policy='persist',client_training_concurrency=1,
+        training_augmentation='cifar_crop_flip',
+        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V21_CROP_FLIP_'+resolve_backbone('cnn'))
     partial=replace(cfg,participation=.8,stream_offline_policy='rotate_once',
-                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V16_BATCH64_'+resolve_backbone(backbone))
+                    job_id='PRIMARY_ROTATING_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V21_CROP_FLIP_'+resolve_backbone('cnn'))
     for job in (cfg,partial):job.validate()
     return cfg,partial
 
@@ -67,6 +70,8 @@ def audited_plan(jobs):
         replay_reservoir_fraction=baseline.replay_reservoir_fraction,
         replay_sampling=source_selection,
         source_memory_count_per_class=per_class_source,
+        training_augmentation=baseline.training_augmentation,
+        optimizer_state_policy=baseline.optimizer_state_policy,
         training_images_per_class=450,private_reservoir_per_class=per_class_source,
         expected_server_exemplars_after_flush=100*per_class_source,
         clients=5,classes_per_local_task=2,initial_local_tasks=2,
@@ -111,6 +116,7 @@ def build_report(root,jobs):
         'Two matched Replay/FedAvg runs, five clients, first round two binary tasks/client,',
         'then one binary task/client per round for eight more rounds (nine total),',
         'one terminal communication-only flush, seed controlled, original 100-class test split.',
+        f"Training augmentation: {jobs[0].training_augmentation}; optimizer-state policy: {jobs[0].optimizer_state_policy}.",
         'Per-sync held-out scores are REPORTING ONLY: never used by client selection/training.',
         'Per-sync CSV, PNG, JSON and MD tables: runs/<job_id>/per_sync_accuracy/sync_###.*', '',
         f"- Full accuracy: {overall['full_accuracy']:.6f}",
@@ -125,11 +131,6 @@ def build_report(root,jobs):
 
 def main(argv=None):
     p=argparse.ArgumentParser(description='Two simultaneous 5-client task-barrier simulations sharing ONE GPU')
-    p.add_argument('--backbone',choices=('vit','cnn'),default='vit')
-    p.add_argument('--seed',type=int,default=0)
-    p.add_argument('--lr',type=float,default=.03)
-    p.add_argument('--epochs',type=int,default=10)
-    p.add_argument('--replay-fraction',type=float,default=1/9,help='Per-class fraction of available TRAIN examples retained by Algorithm R')
     p.add_argument('--data-root',default='data')
     p.add_argument('--output-dir',default='results')
     p.add_argument('--gpu',type=int,default=0,
@@ -138,56 +139,47 @@ def main(argv=None):
                    help='Legacy spelling, must specify the SAME GPU twice, e.g. 0,0')
     p.add_argument('--plan-only',action='store_true')
     p.add_argument('--no-download',action='store_true')
-    p.add_argument('--allow-cpu',action='store_true',help='Synthetic/debug only; does not make a GPU production run')
     p.add_argument('--worker',type=int,choices=(0,1),default=None,help=argparse.SUPPRESS)
     args=p.parse_args(argv)
-    jobs=make_jobs(backbone=args.backbone,seed=args.seed,lr=args.lr,epochs=args.epochs,
-                   replay_fraction=args.replay_fraction)
+    jobs=make_jobs()
     design=audited_plan(jobs)
-    root=Path(args.output_dir)/('primary_cifar100_batch64_v16_'+args.backbone+
-        ('' if abs(args.replay_fraction-.1)<1e-12 else '_pct'+f'{100*args.replay_fraction:g}'.replace('.','p'))+
-        '_bs64_seed'+str(args.seed))
+    root=Path(args.output_dir)/'primary_cifar100_fedavg_v21_resnet18_cropflip_pct11p1111_bs64_seed0'
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',design)
     if args.plan_only:
         print(json.dumps(design,indent=2));return
     if args.worker is not None:
         import torch
-        if not args.allow_cpu and not torch.cuda.is_available():
+        if not torch.cuda.is_available():
             raise RuntimeError('GPU required; check CUDA_VISIBLE_DEVICES and PyTorch CUDA installation')
         result=run_experiment(jobs[args.worker],str(root/'runs'),args.data_root,download=False)
         print(json.dumps(result,indent=2),flush=True);return
     # Download/cache ONCE, before both processes access the immutable dataset.
     from .data import get_data_bank
-    get_data_bank('cifar100',args.data_root,download=not args.no_download,seed=args.seed)
+    get_data_bank('cifar100',args.data_root,download=not args.no_download,seed=0)
     available=[str(args.gpu),str(args.gpu)]
     if args.gpus is not None:
         alias=[x.strip() for x in args.gpus.split(',')]
         if len(alias)!=2 or not all(x.isdigit() for x in alias) or alias[0]!=alias[1]:
             p.error('Only one GPU is supported: use --gpu 0 or --gpus 0,0; do not use 0,1')
         available=alias
-    cmd=[sys.executable,'-m','cafcl.primary_probe','--backbone',args.backbone,
-         '--seed',str(args.seed),'--lr',str(args.lr),'--epochs',str(args.epochs),
-         '--replay-fraction',str(args.replay_fraction),
+    cmd=[sys.executable,'-m','cafcl.primary_probe',
          '--data-root',args.data_root,
          '--output-dir',args.output_dir,'--no-download']
-    if args.allow_cpu:cmd.append('--allow-cpu')
     processes=[]
-    try:
-        for idx,gpu in enumerate(available):
-            env=os.environ.copy();env['CUDA_VISIBLE_DEVICES']=gpu
-            env.setdefault('OMP_NUM_THREADS','1')
-            env.setdefault('MKL_NUM_THREADS','1')
-            log=root/(f'job_{idx}.log')
-            handle=log.open('a')
-            proc=subprocess.Popen(cmd+['--worker',str(idx)],env=env,stdout=handle,stderr=subprocess.STDOUT)
-            processes.append((proc,handle))
-            print(f'Launched {jobs[idx].job_id}: PID={proc.pid}, GPU={gpu}, log={log}',flush=True)
-        codes=[proc.wait() for proc,_ in processes]
-    finally:
-        for proc,handle in processes:
-            if proc.poll() is None:proc.terminate()
-            handle.close()
+    for idx,gpu in enumerate(available):
+        env=os.environ.copy();env['CUDA_VISIBLE_DEVICES']=gpu
+        env.setdefault('OMP_NUM_THREADS','1')
+        env.setdefault('MKL_NUM_THREADS','1')
+        log=root/(f'job_{idx}.log')
+        handle=log.open('a')
+        proc=subprocess.Popen(cmd+['--worker',str(idx)],env=env,stdout=handle,stderr=subprocess.STDOUT)
+        processes.append((proc,handle))
+        print(f'Launched {jobs[idx].job_id}: PID={proc.pid}, GPU={gpu}, log={log}',flush=True)
+    codes=[]
+    for proc,handle in processes:
+        codes.append(proc.wait())
+        handle.close()
     if any(c!=0 for c in codes):
         raise RuntimeError(f'One or both pilot jobs failed: {codes}. Inspect per-job logs; no false success reported.')
     report=build_report(root,jobs)

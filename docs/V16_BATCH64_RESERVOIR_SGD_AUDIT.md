@@ -1,6 +1,6 @@
-# v16: Mandatory physical batch 64, persistent SGD and unified Replay
+# v16: Historical physical batch 64 and persistent SGD audit
 
-**Current production protocol.** This supersedes v6–v15 runtime descriptions; historical sources/results remain archived for reproducibility. Do not relabel earlier results as v16.
+> **Historical primary settings:** The current primary Replay/FedAvg recipe is [PRIMARY_PROBE.md](PRIMARY_PROBE.md). This v16 audit is retained as historical methodology and does not define a current launch.
 
 ## Explicit requirements retained
 

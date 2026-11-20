@@ -1,13 +1,13 @@
-> **CURRENT v16 (authoritative):** [Mandatory physical batch 64, Replay, SGD and evaluation audit](V16_BATCH64_RESERVOIR_SGD_AUDIT.md). All active production model forwards used for training, Replay, EWC/MAS, gradient constraints and diagnostics use 64 inputs; scoring counts only non-padded examples. The dual ResNet-18/ViT-Base suite is two concurrent processes **on GPU 0**, 50/class global shared Replay, SGD momentum 0.9 persisted between tasks and across communication, nine learning/synchronization rounds plus terminal flush. The CIFAR-100 factorial ledger is frozen in [v16 manifest](../configs/designs/stream_v16_batch64.json), 32,133 jobs/backbone. Previous v6–v15 split-batch and memory-policy descriptions below are historical; do not execute their command examples as current settings. Old result files and archived manifests remain intact for scientific provenance.
+> **Primary FedAvg:** The canonical primary run is the fixed ResNet-18 recipe in [PRIMARY_PROBE.md](PRIMARY_PROBE.md). This file describes other architecture research options; it does not define alternate primary FedAvg runs.
 
-# CURRENT v14: Production 32×32 CIFAR-100 backbones
+# CIFAR-100 research backbones
 
 | CLI | Actual current model ID | Exact implementation | Default optimizer |
 |---|---|---|---|
 | `--backbone vit` | `vit_base_patch16_32` | Native standard **ViT-Base/16**, 12 layers × 768 channels × 12 heads, four 16×16 patches + CLS | SGD momentum 0.9, weight decay 5e-4 |
 | `--backbone cnn` | `resnet18_cifar32` | Native CIFAR-stem **ResNet-18**, [2,2,2,2] BasicBlocks, 3×3 stem/no maxpool | Same SGD |
 
-Both are randomly initialized and trained at native 32×32. Default effective batch64 (1024 is an explicit ablation). Both primary pilot arms share one GPU and have independently concurrent client models. ViT-Base is much larger than previous Tiny; a single GPU may not have sufficient VRAM for ten client instances. See [v14 scientific protocol](V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md).
+Both are randomly initialized and trained at native 32×32 for research configurations. The primary FedAvg probe is fixed to the CIFAR-stem ResNet-18 recipe in [PRIMARY_PROBE.md](PRIMARY_PROBE.md); ViT runs are separate experiments. ViT-Base is much larger than previous Tiny and may require separate GPU capacity assessment.
 
 ---
 

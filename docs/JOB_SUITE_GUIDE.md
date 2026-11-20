@@ -1,30 +1,18 @@
-> **CURRENT v16 (authoritative):** [Mandatory physical batch 64, Replay, SGD and evaluation audit](V16_BATCH64_RESERVOIR_SGD_AUDIT.md). All active production model forwards used for training, Replay, EWC/MAS, gradient constraints and diagnostics use 64 inputs; scoring counts only non-padded examples. The dual ResNet-18/ViT-Base suite is two concurrent processes **on GPU 0**, 50/class global shared Replay, SGD momentum 0.9 persisted between tasks and across communication, nine learning/synchronization rounds plus terminal flush. The CIFAR-100 factorial ledger is frozen in [v16 manifest](../configs/designs/stream_v16_batch64.json), 32,133 jobs/backbone. Previous v6–v15 split-batch and memory-policy descriptions below are historical; do not execute their command examples as current settings. Old result files and archived manifests remain intact for scientific provenance.
+# Experiment entry points
 
-> **Current v14 execution defaults:** [new protocol](V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md). ViT now refers to **ViT-Base/16**, not Tiny. Per-sync tables after every communication for every run, momentum SGD .9 with decay .0005, batch64 by default, and calibrated class-IL head training. Other old commands below are archival examples and may launch obsolete configurations.
+## Canonical primary Replay/FedAvg comparison
 
-# Experiment ledger and recommended execution order
+The only primary FedAvg recipe is the fixed CIFAR-100 ResNet-18 experiment in [PRIMARY_PROBE.md](PRIMARY_PROBE.md): seed 0, train-only crop/flip, Replay with 50 examples/class, batch 64, 10 epochs/task, persistent local momentum, nine learning syncs plus one communication-only flush, and full versus rotating 4-of-5 participation.
 
-**Run the two-job preliminary pilot first.** Do not launch the 38,370-job factorial suite to answer the initial research-direction question.
+```bash
+bash scripts/run_primary_probe_cifar100.sh --plan-only
+bash scripts/run_primary_probe_cifar100.sh --gpu 0
+```
 
-- Primary probe: `bash scripts/run_primary_probe_cifar100.sh --plan-only` (always exactly two jobs: baseline 5/5 visible, versus rotating 4/5 visible; seed 0; A-GEM + FedAvg; no overlap; 100 unique classes over five intervals; final flush).
-- Native default backbone: `--backbone vit` for 32×32 ViT-Tiny/16. Switch to `--backbone cnn` for 32×32 ResNet-18 with CIFAR stem. Both retain batch1024. Different backbones constitute separate studies, not additional arms hidden within the two-job pilot.
-- After preliminary review: `bash scripts/run_all_cifar100.sh --backbone vit --plan-only` for 38,370 feasibility-screened jobs with all 99 local/server method pairings. The separate CNN plan has the same number of configurations and a different SHA256.
-- The exact frozen manifests and overlap/outage/selection feasibility audit are in `configs/designs/stream_v6_native32.json`.
+The primary runner does not expose alternate optimizer, replay, augmentation, backbone, or seed variants. The completed one-seed outcomes were 38.58% full participation and 30.58% rotating offline. See the protocol for caveats and per-sync artifacts.
 
-**Old CIFAR-10 plans and 20-class jobs remain retired.** CIFAR-100 streams end when the 100 distinct labels have been allocated; the default 10-client disjoint curriculum naturally lasts 3 communication intervals (40+40+20), not five full 40-class intervals. The pilot uses five clients to produce exactly five full intervals.
+## Other research suites
 
-See [`PRIMARY_PROBE.md`](PRIMARY_PROBE.md), [`BACKBONES.md`](BACKBONES.md), [`FACTORIAL_SUITE.md`](FACTORIAL_SUITE.md), and [`STATUS.md`](STATUS.md).
+The repository also contains independently configured local continual-learning methods, factorial plans, and server aggregation studies. They remain separate research experiments and do not replace or alter the primary FedAvg recipe. Method-specific source aggregation for the native GLFC, LGA, FEAT, and FedCLASS pilots is documented in [the original-source fidelity audit](ORIGINAL_SOURCE_FIDELITY_AUDIT.md).
 
-
-## v10 execution invariant
-
-Every active CIFAR-100 job now schedules independent client model instances concurrently **at each task ordinal**, with a full barrier between tasks, before any server update. The two-arm primary pilot launches both whole federated simulations concurrently on the same GPU (`--gpu 0`). There is no client-sequential training path in the active simulator. Results use v10-specific paths; see `PARALLEL_SINGLE_GPU_V10.md`.
-
-
-v11 note: FedAvg and its canonical server-optimizer families now synchronize the entire model, including classifier rows, without any separate classwise post-aggregation. The five research-specific server methods retain their explicitly custom class-aware/conflict/retention transformations. A hidden client's unsent class-exposure counts remain hidden until upload. Old v10 status markers cannot be used with v11. The server is not yet proven GPU-accurate by these numerical/CI tests.
-
-
-**v12 local-method update:** The research protocol now audits all 11 client learners against their primary papers and corrects EWC, MAS, SI, DER and memory-sampling mathematics while preserving every scenario/task class-stream and server-update setting. Full v12 CIFAR-100 runs have not been executed as part of this source/CI audit; [full paper-method ledger](CL_METHOD_FIDELITY_V12.md).
-
-
-**v13 execution invariant:** Every executable CIFAR-100 suite member uses **two 2-class local tasks before the very first server sync**, then **one 2-class task before each following server sync**. Task-length ablations requesting a different number of local tasks/classes are now rejected from runnable plans; earlier task-length experiments remain historical references. Global CL evidence is downloaded to every online client after every sync. See `FIRST4_THEN2_FULL_CL_V13.md`.
+Earlier v6–v20 protocol documents, manifests, and result files are archival records. They must not be used as current launch instructions for the primary comparison.

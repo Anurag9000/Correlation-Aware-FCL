@@ -23,7 +23,7 @@ def test_no_legacy_split_batch_parameter_in_active_code():
 def test_full_factorial_replay_uses_pilot_classwise_reservoir_policy():
     job=next(cfg for family,cfg in expand(seeds=(0,),families=('balanced',),
         model='cnn') if cfg.method=='replay' and cfg.aggregator=='fedavg')
-    pilot=make_jobs(backbone='cnn')[0]
+    pilot=make_jobs()[0]
     assert job.memory_policy==pilot.memory_policy=='random_per_class'
     assert job.memory_per_class==pilot.memory_per_class==50
     assert job.replay_reservoir_fraction==0.
@@ -42,10 +42,12 @@ def test_memory_capacity_ablation_really_changes_sampled_reservoir():
             assert client.private_reservoir_seen_counts=={0:100,1:100}
         assert all(len(g)<=quota for g in client.private_memory.values())
 
-def test_momentum_persists_and_single_gpu_placement_stays_explicit():
-    full,partial=make_jobs(backbone='cnn')
+def test_persistent_optimizer_and_cropflip_stay_fixed_for_primary():
+    full,partial=make_jobs()
     for cfg in (full,partial):
         assert cfg.optimizer_state_policy=='persist'
+        assert cfg.training_augmentation=='cifar_crop_flip'
+        assert cfg.client_training_concurrency==1
         assert cfg.batch_size==64 and cfg.momentum==.9 and cfg.weight_decay==5e-4
         assert cfg.stream_terminal_flush and cfg.share_continual_state
     assert partial.stream_offline_policy=='rotate_once'

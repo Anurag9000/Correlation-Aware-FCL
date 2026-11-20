@@ -3,14 +3,13 @@ import json
 from dataclasses import replace
 import pytest
 from cafcl.primary_probe import make_jobs,audited_plan,build_report
-from cafcl.models import CNN_ID,VIT_ID
+from cafcl.models import CNN_ID
 from cafcl.full_matrix import expand
 from cafcl.stream_audit import check_stream
 
-@pytest.mark.parametrize('backbone',('vit','cnn'))
-def test_probe_has_two_matched_100_label_jobs_and_exhaustive_rotation(backbone):
-    full,rotating=make_jobs(backbone=backbone)
-    assert full.model==rotating.model==({'vit':VIT_ID,'cnn':CNN_ID}[backbone])
+def test_probe_is_the_fixed_two_job_100_label_recipe():
+    full,rotating=make_jobs()
+    assert full.model==rotating.model==CNN_ID
     assert full.batch_size==rotating.batch_size==64
     assert full.method==rotating.method=='replay'
     assert full.momentum==rotating.momentum==0.9
@@ -19,6 +18,10 @@ def test_probe_has_two_matched_100_label_jobs_and_exhaustive_rotation(backbone):
     assert full.share_continual_state and rotating.share_continual_state
     assert full.aggregator==rotating.aggregator=='fedavg'
     assert full.seed==rotating.seed==0
+    assert full.optimizer_state_policy==rotating.optimizer_state_policy=='persist'
+    assert full.training_augmentation==rotating.training_augmentation=='cifar_crop_flip'
+    assert full.client_training_concurrency==rotating.client_training_concurrency==1
+    assert 'V21_CROP_FLIP' in full.job_id and 'V21_CROP_FLIP' in rotating.job_id
     assert full.evaluate_final_only and rotating.evaluate_final_only
     assert full.participation==1. and rotating.participation==.8
     plan=audited_plan((full,rotating))

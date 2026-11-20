@@ -1,3 +1,5 @@
+> **Historical primary settings:** Current launch instructions are in [PRIMARY_PROBE.md](PRIMARY_PROBE.md). This v9 replay note is retained as historical methodology, not a current primary FedAvg recipe.
+
 # CIFAR-100 two-run pilot: per-class 10% reservoir replay (v9)
 
 Both concurrent arms use Replay + FedAvg and retain the v8 full server-archive synchronization mechanism. The difference is the **private sample selection rule**. Each client's independent reservoir uses the classical online Algorithm R with a fixed per-class capacity, and never receives raw hidden-client data until that client connects.

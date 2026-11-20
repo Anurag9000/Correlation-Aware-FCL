@@ -1,4 +1,6 @@
-# Federated continual-learning synchronization — mandatory v8 protocol
+> **Historical protocol:** The sole current primary Replay/FedAvg recipe is in [PRIMARY_PROBE.md](PRIMARY_PROBE.md). This v8 protocol is retained as research history and is not a current FedAvg implementation or launch guide.
+
+# Federated continual-learning synchronization — protocol v8
 
 Every CIFAR-100 production job now uses **shared model and shared method-specific continual-learning state**. A client is **always** a continual learner: it trains all locally arriving two-class tasks in sequence, even if it is disconnected from the central server. Communication/selection only controls uploads and downloads, never whether local learning occurs.
 

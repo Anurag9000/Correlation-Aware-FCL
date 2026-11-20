@@ -1,4 +1,9 @@
-# v11: Server aggregation and broadcast fidelity audit
+# Historical v11 server aggregation and broadcast fidelity audit
+
+This remains a mathematical reference for the server methods. It is not the
+primary-run launch specification; the current primary Replay/FedAvg recipe,
+including train-only crop/flip and persistent local momentum, is fixed in
+[PRIMARY_PROBE.md](PRIMARY_PROBE.md).
 
 Scope: **all nine server aggregation names** available in the Correlation-Aware-FCL repository. This document concerns server aggregation, class-history accounting, and model/CL-state broadcasts. Client losses, local continual-learning methods, sampling schedules and GPU concurrency are unchanged.
 
@@ -41,7 +46,7 @@ G_t = latest server model
 rebased_k = G_t + (L_k - A_k)
 \`\`\`
 
-The server runs the chosen complete-model aggregation on this rebased candidate. This retains the offline client's unsent learning while being an **explicit noncanonical stale-delta adapter**, not the exact original FedAvg, FedAvgM or FedAdam on that round. No extra stale-age damping, re-training from current global weights, or custom class calibration is silently introduced. Every round records \`stale_rebased_client_ids\`, \`upload_model_origins\`, \`aggregation_family\`, \`server_class_sample_exposure\`, \`server_integrated_class_count\`, and \`classwise_head_merge_applied\`.
+The server runs the chosen complete-model aggregation on this rebased candidate. This retains the offline client's unsent learning while being an **explicit noncanonical stale-delta adapter**, not the exact original FedAvg, FedAvgM or FedAdam on that round. The current primary recipe additionally applies the recorded version-lag scale \`1/(1+staleness)\`, and caps a sole stale terminal-flush candidate to \`1/num_clients\` of its already-scaled delta. It does not retrain returning clients from the current global model or apply custom classifier calibration. Every round records \`stale_rebased_client_ids\`, \`upload_model_origins\`, \`aggregation_family\`, \`server_class_sample_exposure\`, \`server_integrated_class_count\`, and \`classwise_head_merge_applied\`.
 
 ### Server communication boundary and state
 

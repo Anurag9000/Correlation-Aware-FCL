@@ -252,6 +252,30 @@ class _IndexedDataset(Dataset):
         return x,y,int(index)
 
 
+class _CIFARCropFlipDataset(Dataset):
+    """Apply standard CIFAR random crop and horizontal flip to a train view."""
+    def __init__(self,dataset,rng,padding=4):
+        self.dataset=dataset
+        self.rng=rng
+        self.padding=int(padding)
+        from .models import NORMALIZATION_MEAN,NORMALIZATION_STD
+        self.mean=torch.tensor(NORMALIZATION_MEAN,dtype=torch.float32).view(3,1,1)
+        self.std=torch.tensor(NORMALIZATION_STD,dtype=torch.float32).view(3,1,1)
+    def __len__(self):return len(self.dataset)
+    def __getitem__(self,index):
+        x,y=self.dataset[index]
+        if not torch.is_tensor(x) or tuple(x.shape)!=(3,32,32):
+            raise ValueError('CIFAR crop/flip expects normalized (3,32,32) tensors')
+        x=(x*self.std+self.mean).clamp(0,1)
+        p=self.padding
+        if p:x=F.pad(x,(p,p,p,p),mode='constant',value=0.)
+        top=int(self.rng.integers(0,2*p+1)) if p else 0
+        left=int(self.rng.integers(0,2*p+1)) if p else 0
+        x=x[:,top:top+32,left:left+32]
+        if self.rng.random()<.5:x=x.flip(-1)
+        return (x-self.mean)/self.std,y
+
+
 class _FixedBatchSampler:
     """No short optimizer batches: replay final samples from the same TRAIN pool."""
     def __init__(self,size,batch_size,seed,shuffle):
@@ -380,6 +404,11 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         # synchronized image archive, not the simulator's privileged data bank.
         from .federated_cl import ClientArchiveDataset
         training_data=ClientArchiveDataset(training_data,client.received_example_payloads)
+    if cfg.training_augmentation=='cifar_crop_flip':
+        augmentation_rng=np.random.default_rng(
+            cfg.seed+4_170_001+round_id*100_003+client.client_id*10_007+
+            (client.local_experience+1)*101)
+        training_data=_CIFARCropFlipDataset(training_data,augmentation_rng)
     optimizer=torch.optim.SGD(model.parameters(),lr=cfg.lr,momentum=cfg.momentum,
                               weight_decay=cfg.weight_decay)
     if cfg.optimizer_state_policy=='persist' and client.optimizer_state is not None:

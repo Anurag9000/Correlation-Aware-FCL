@@ -1,3 +1,5 @@
+> **Historical protocol:** The sole current primary Replay/FedAvg recipe is in [PRIMARY_PROBE.md](PRIMARY_PROBE.md). This v7 protocol is retained as research history and is not a current FedAvg implementation or launch guide.
+
 # Federated continual-learning state synchronization (protocol v7)
 
 ## Central requirement and privacy
