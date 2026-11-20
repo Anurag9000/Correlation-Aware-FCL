@@ -145,7 +145,7 @@ class RunConfig:
         assert self.epochs >= 1 and self.lr > 0
         assert 0 < self.participation <= 1
         assert self.selector in {"feature_max", "feature_min", "forgetting", "gem_informed", "history_adaptive", "gradient_align", "gradient_conflict", "random", "fixed", "round_robin", "coverage", "old", "new", "least_recent", "related", "recurrence", "overlap", "balanced", "diversity", "fairness", "stochastic_related", "historical_coverage"}
-        assert self.method in {"si", "sgd", "replay", "agem", "gem", "ewc", "er_ace", "der", "derpp", "mas", "lwf"}
+        assert self.method in {"si", "sgd", "replay", "agem", "gem", "ewc", "er_ace", "der", "derpp", "mas", "lwf", "native_glfc", "native_lga", "native_feat"}
         assert self.aggregator in {"class_balanced", "inverse_participation", "conflict_aware", "retention_aware", "conflict_projection", "fedavg", "uniform", "fedadam", "fedavgm"}
         assert self.scenario in {"stationary", "gradual_drift", "shifted_recurrence", "task_incremental", "disjoint", "iid", "overlap", "related", "recurrence", "asynchronous", "mixed", "domain", "non_iid"}
         if self.dataset == 'synthetic':
@@ -156,7 +156,7 @@ class RunConfig:
         assert self.memory_per_class >= 0
         assert 0 <= self.replay_reservoir_fraction <= 1, 'Reservoir fraction must be within [0,1]'
         if self.replay_reservoir_fraction:
-            assert self.method == 'replay', 'Per-class reservoir fraction applies to Replay only'
+            assert self.method in {'replay','native_glfc','native_lga','native_feat'}, 'Per-class reservoir fraction applies to replay-capable methods only'
         if self.dataset=='cifar100':
             assert self.stream_protocol and self.class_pair_protocol=='strict', (
                 'Every active CIFAR-100 job must use the unique first4-then2 class-pair stream')
@@ -194,7 +194,7 @@ class RunConfig:
             assert self.boundary_mode=='hidden' 
         if self.boundary_mode=='hidden':
             # Stage-dependent consolidation would leak hidden task boundaries.
-            assert self.method in {"sgd","replay","gem","agem","er_ace","der","derpp"}
+            assert self.method in {"sgd","replay","gem","agem","er_ace","der","derpp","native_glfc","native_lga","native_feat"}
             assert self.gem_grouping!='stage' 
         assert self.gem_grouping in {"class", "stage", "all"}
         assert 0 <= self.momentum < 1 and self.weight_decay >= 0
