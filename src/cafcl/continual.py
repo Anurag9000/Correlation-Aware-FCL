@@ -370,6 +370,12 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     whether selected for federation or not. Shared weights are the private
     local model between rounds; server synchronization is handled separately.
     """
+    if cfg.method=='native_feat':
+        from .upstream_feat_train import train_original_feat
+        return train_original_feat(
+            model,client,bank,cfg,device,round_id,task_classes,
+            experience_end=experience_end,
+            active_pair_classes=active_pair_classes)
     if cfg.method in {'native_glfc','native_lga'}:
         from .upstream_glfc_lga_train import train_original_glfc_lga
         return train_original_glfc_lga(

@@ -27,9 +27,9 @@ def make_native_jobs(suite,*,seed=0,lr=.03,epochs=10,client_training_concurrency
                  method=method,model=model,
                  optimizer_state_policy='persist',
                  client_training_concurrency=client_training_concurrency,
-                 job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V4'}_FULL_SEED{seed}")
+                 job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V5'}_FULL_SEED{seed}")
     offline=replace(full,participation=.8,stream_offline_policy='rotate_once',
-                    job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V4'}_ROTATING_OFFLINE_SEED{seed}")
+                    job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V5'}_ROTATING_OFFLINE_SEED{seed}")
     for cfg in (full,offline):cfg.validate()
     return full,offline
 
@@ -99,8 +99,18 @@ def main(argv=None):
             jobs[0].optimizer_state_policy if args.suite in {'glfc','lga'}
             else None),
         author_proxy_server_complete=False,
+        original_feat_local_optimizer=(args.suite=='feat'),
+        original_feat_gsa_orientation_fix=(
+            '[C,D] to [D,C] source-call compatibility repair'
+            if args.suite=='feat' else None),
+        optimizer_state_policy=(
+            'original_FEAT_fresh_SGD'
+            if args.suite=='feat' else
+            'authors_fresh_optimizer_per_task'),
+        original_feat_ema_decay=(.8 if args.suite=='feat' else None),
     )
-    root=Path(args.output_dir)/args.suite/('seed'+str(args.seed))/'source_v4'
+    root=Path(args.output_dir)/args.suite/('seed'+str(args.seed))/(
+        'source_v5' if args.suite=='feat' else 'source_v4')
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',plan)
     if args.plan_only:

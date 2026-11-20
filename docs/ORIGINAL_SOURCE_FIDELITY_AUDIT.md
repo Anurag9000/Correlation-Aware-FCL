@@ -385,3 +385,25 @@ protocol. Each model still trains on physical batch64. The original
 gradient-generating proxy learner, original server `model_back` selection
 and LGA proxy `f_monitor` remain missing, so the interim historical
 teacher is explicitly labelled noncanonical. **Not fully faithful.**
+
+## FEAT published source local SGD and GSA orientation defect
+
+`src/cafcl/upstream_feat_train.py` invokes the actual unchanged source
+`FEAT._local_update` for the first pair and `FEAT._local_finetune`
+for subsequent pairs. It uses the original SGD recreation, momentum=0.9,
+source weight decay, CE+0.1·GSA objective and source ECC estimation
+with published `ema_decay=0.8`. The shared generic FEAT optimizer path
+is bypassed. The source's own teacher is `eval()` only and unused in its
+loss (this is confirmed by the original source).
+
+The **published FEAT source itself has a shape error**:
+`FEAT._local_update/_local_finetune` passes `model.fc.weight` in
+`[C,D]` layout, yet `gsa_distill_loss` expects prototypes `[D,C]`.
+The source would fail when executing the original ResNet+classifier
+without adaptation. We do **not** rewrite the original function;
+the compatibility namespace transposes the matrix at this one boundary
+while executing the unchanged original GSA math. This is NOT bitwise
+author-source behavior and is explicitly recorded in the per-task output.
+The FEAT ETF head and geometric correction remain unverified
+paper/third-party reconstructions. The original `_fl_train` aggregation
+loop still needs protocol integration; the fidelity gate stays CLOSED.
