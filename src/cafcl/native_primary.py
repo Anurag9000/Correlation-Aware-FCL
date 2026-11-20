@@ -27,9 +27,9 @@ def make_native_jobs(suite,*,seed=0,lr=.03,epochs=10,client_training_concurrency
                  method=method,model=model,
                  optimizer_state_policy='persist',
                  client_training_concurrency=client_training_concurrency,
-                 job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V4' if suite=='feat' else 'V3'}_FULL_SEED{seed}")
+                 job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V4'}_FULL_SEED{seed}")
     offline=replace(full,participation=.8,stream_offline_policy='rotate_once',
-                    job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V4' if suite=='feat' else 'V3'}_ROTATING_OFFLINE_SEED{seed}")
+                    job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V4'}_ROTATING_OFFLINE_SEED{seed}")
     for cfg in (full,offline):cfg.validate()
     return full,offline
 
@@ -83,9 +83,24 @@ def main(argv=None):
         training_augmentation=('authors_FEAT_cifar_crop_flip_jitter'
                                if is_feat else
                                'authors_GLFC_LGA_cifar_crop_flip_jitter'),
-        mathematical_source_training_optimizer_complete=False,
+        mathematical_source_training_optimizer_complete=(
+            args.suite in {'glfc','lga'}),
+        author_optimizer_source=('GLFC/src/GLFC.py:GLFC_model.train'
+                                 if args.suite=='glfc' else
+                                 'LGA/LGA.py:LGA.train'
+                                 if args.suite=='lga' else None),
+        sgd_momentum=(0. if args.suite in {'glfc','lga'} else jobs[0].momentum),
+        sgd_weight_decay=(.00001 if args.suite in {'glfc','lga'}
+                          else jobs[0].weight_decay),
+        optimizer_state_policy=(
+            'authors_fresh_optimizer_per_task'
+            if args.suite in {'glfc','lga'} else jobs[0].optimizer_state_policy),
+        ignored_generic_optimizer_policy_config=(
+            jobs[0].optimizer_state_policy if args.suite in {'glfc','lga'}
+            else None),
+        author_proxy_server_complete=False,
     )
-    root=Path(args.output_dir)/args.suite/('seed'+str(args.seed))/( 'source_v4' if args.suite=='feat' else 'source_v3')
+    root=Path(args.output_dir)/args.suite/('seed'+str(args.seed))/'source_v4'
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',plan)
     if args.plan_only:

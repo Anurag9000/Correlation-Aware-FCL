@@ -23,8 +23,8 @@ certified faithful study.
 
 | Method | Exact executed published source methods | Remaining differences |
 |---|---|---|
-| GLFC | CBAM feature extractor, source weighted BCE/teacher computation, original FedAvg, entropy`_signal`, `update_new_set`, exemplar reduction & herding, original fl_main crop/flip/jitter transform | Source `train` optimizer/schedule not invoked, source `prototype_mask` and proxy gradient inversion/monitor/model-back not invoked, original network dynamic expansion adapted |
-| LGA | Original CBAM, weighted BCE, FedAvg, entropy trigger and herding, fl_main PIL transform | Source `train` and proxy stack missing, `compute_radius`, `f_monitor` and geometry augmentation missing |
+| GLFC | Original CBAM, source `train`, BCE/teacher loss, FedAvg, entropy detection and herding, source CIFAR augmentation | Proxy gradient generation/reconstruction and `model_back` teacher routing absent; source network growth adapted |
+| LGA | Original CBAM, source `train`, weighted BCE, FedAvg, entropy-triggered herding, source augmentation, and `compute_radius` | Gradient inversion, feature proxy `f_monitor`, server teacher/model-back incomplete |
 | FEAT | Source ResNet backbone, GSA, `FLDataSelector` masked QR/SVD leverage selection, ECC projectors/energy and aggregation, authors' crop/flip/jitter | Official `utils/inc_net.py`, `methods/GSA.py`, `methods/EGC.py` are missing upstream; fixed ETF and correction code are explicitly labelled third-party/paper reconstructions, original `FEAT._fl_train` orchestration not directly executed |
 
 The source selector may choose duplicate FEAT retention tickets, as the
@@ -47,7 +47,7 @@ are documented changes. Our delayed update uses a noncanonical
 lag-damped, BatchNorm-aware algorithm; it does not claim to be the
 authors' original synchronous FedAvg behavior.
 
-The two existing source-v3 GLFC/LGA and source-v4 FEAT job IDs and
+The source-v4 GLFC/LGA/FEAT job IDs and
 output folders are **distinct from earlier V1/V2 results**. No historical
 data have been altered. The FEAT fixed simplex ETF and subspace
 correction use a clearly identified third-party reconstruction because
@@ -56,3 +56,10 @@ the official original implementation was never published.
 See [ORIGINAL_SOURCE_FIDELITY_AUDIT.md](ORIGINAL_SOURCE_FIDELITY_AUDIT.md)
 for exact source paths, verified coverage, original-file SHA manifest,
 remaining blockers and the mandatory release conditions.
+
+**Source-v4 training correction:** The GLFC/LGA local SGD loops are now executed
+from the actual unchanged authors' `train` methods (fresh SGD; momentum 0,
+weight decay 0.00001; source epoch schedule), rather than persisting the
+shared simulated momentum. The design manifest now reports the **executed**
+optimizer instead of the inherited generic pilot settings. All three
+source-method identities are V4; no previous V2/V3 experiment can be reused.
