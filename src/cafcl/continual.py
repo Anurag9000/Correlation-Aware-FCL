@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader,Subset,Dataset
 from .cl_estimators import estimate_diagonal_importance
 from .class_indexed import canonical_active_loss,freeze_other_class_rows
 from scipy.optimize import minimize
+from .native_methods import NATIVE_METHODS,native_loss,historical_teacher
 
 @dataclass
 class LocalState:
@@ -80,7 +81,9 @@ class LocalState:
     received_server_class_sample_exposure:dict[int,int]=field(default_factory=dict)
     received_lwf_teacher:dict|None=None
     received_lwf_teacher_version:int=-1
-    last_learning_method:str='' 
+    last_learning_method:str=''
+    native_teacher:dict|None=None
+    native_teacher_classes:set[int]=field(default_factory=set)
     def receive(self,weights,version,*,clear_memory=False):
         if clear_memory:
             self.memory.clear()
@@ -374,6 +377,12 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     if cfg.optimizer_state_policy=='persist' and client.optimizer_state is not None:
         optimizer.load_state_dict(client.optimizer_state)
     params=_trainable_params(model)
+    native_teacher=(historical_teacher(model,client.native_teacher,device)
+                    if cfg.method in {'native_glfc','native_lga'} and client.native_teacher is not None
+                    else None)
+    native_old_classes=set(client.native_teacher_classes)&set(seen_classes)
+    if active_pair_classes:
+        native_old_classes.difference_update(active_pair_classes)
     if cfg.method=='si':
         if client.si_omega is None:
             client.si_omega={}
@@ -471,7 +480,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     def full_training_batches(loaded):
         x,y=loaded[:2]
         original_ids=loaded[2] if len(loaded)>2 else None
-        if cfg.method!='replay' or not oldmemory or cfg.replay_ratio<=0:
+        if cfg.method not in ({'replay'}|NATIVE_METHODS) or not oldmemory or cfg.replay_ratio<=0:
             yield x,y,original_ids
             return
         # One supervised CE over a MIXED current/history physical batch of 64.
@@ -501,35 +510,40 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     raise RuntimeError('Training forward does not have exactly 64 images')
                 x=x.to(device,non_blocking=True)
                 y=y.to(device,non_blocking=True)
-                logits=model(x)
+                if cfg.method in NATIVE_METHODS:
+                    loss,logits=native_loss(cfg.method,model,x,y,seen_classes,
+                                            teacher=native_teacher,old_classes=native_old_classes)
+                else:
+                    logits=model(x)
                 if original_ids is not None:
                     for idx,z in zip(original_ids.tolist(),logits.detach().cpu()):
                         captured_logits[int(idx)]=z.clone()
-                if active_pair_classes is not None:
-                    # ER-ACE is intentionally asymmetric in its source paper:
-                    # mask historical logits for *new* examples only, unlike
-                    # standard ER, EWC, SI, MAS, GEM, LwF and DER.
-                    current_competition=(active_pair_classes if cfg.method=='er_ace'
-                                         else seen_classes)
-                    loss=canonical_active_loss(logits,y,current_competition)
-                elif cfg.learning_setting=='task_il':
-                    if task_classes is None or not set(y.tolist()).issubset(set(task_classes)):
-                        raise RuntimeError('Task-IL labels do not match the known local task')
-                    task_mask=torch.ones(logits.shape[1],dtype=torch.bool,device=device)
-                    task_mask[torch.as_tensor(task_classes,dtype=torch.long,device=device)]=False
-                    logits=logits.masked_fill(task_mask.unsqueeze(0),-1e9)
-                if active_pair_classes is None and cfg.method=='er_ace':
-                    # ER-ACE stream loss: mask historical classes absent from the
-                    # *current* physical batch, but retain future/unseen output columns.
-                    mask=torch.zeros(logits.shape[1],dtype=torch.bool,device=device)
-                    current_labels=set(int(v) for v in y.unique().tolist())
-                    for past_cls in client.observed_classes:
-                        if past_cls not in current_labels and past_cls < logits.shape[1]:
-                            mask[past_cls]=True
-                    stream_logits=logits.masked_fill(mask.unsqueeze(0),-1e9)
-                    loss=F.cross_entropy(stream_logits,y)
-                elif active_pair_classes is None:
-                    loss=F.cross_entropy(logits,y)
+                if cfg.method not in NATIVE_METHODS:
+                    if active_pair_classes is not None:
+                        # ER-ACE is intentionally asymmetric in its source paper:
+                        # mask historical logits for *new* examples only, unlike
+                        # standard ER, EWC, SI, MAS, GEM, LwF and DER.
+                        current_competition=(active_pair_classes if cfg.method=='er_ace'
+                                             else seen_classes)
+                        loss=canonical_active_loss(logits,y,current_competition)
+                    elif cfg.learning_setting=='task_il':
+                        if task_classes is None or not set(y.tolist()).issubset(set(task_classes)):
+                            raise RuntimeError('Task-IL labels do not match the known local task')
+                        task_mask=torch.ones(logits.shape[1],dtype=torch.bool,device=device)
+                        task_mask[torch.as_tensor(task_classes,dtype=torch.long,device=device)]=False
+                        logits=logits.masked_fill(task_mask.unsqueeze(0),-1e9)
+                    if active_pair_classes is None and cfg.method=='er_ace':
+                        # ER-ACE stream loss: mask historical classes absent from the
+                        # *current* physical batch, but retain future/unseen output columns.
+                        mask=torch.zeros(logits.shape[1],dtype=torch.bool,device=device)
+                        current_labels=set(int(v) for v in y.unique().tolist())
+                        for past_cls in client.observed_classes:
+                            if past_cls not in current_labels and past_cls < logits.shape[1]:
+                                mask[past_cls]=True
+                        stream_logits=logits.masked_fill(mask.unsqueeze(0),-1e9)
+                        loss=F.cross_entropy(stream_logits,y)
+                    elif active_pair_classes is None:
+                        loss=F.cross_entropy(logits,y)
                 if cfg.method=='si':
                     # SI path integral uses *unregularized current task loss*
                     # (not SI/EWC/FedProx penalties or projected gradients).
@@ -720,10 +734,15 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                 client.mas_omega,client.mas_anchor,fresh,fresh_anchor)
             client.mas_stage=client.local_experience
     # Never allocate replay/GEM memory for non-memory algorithms.
-    if cfg.method in {'gem','agem','replay','er_ace'}:
+    if cfg.method in ({'gem','agem','replay','er_ace'}|NATIVE_METHODS):
         client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy,
-                             reservoir_fraction=(cfg.replay_reservoir_fraction if cfg.method=='replay' else 0.),
-                             class_totals=(Counter(map(int,bank.train.targets)) if cfg.method=='replay' and cfg.replay_reservoir_fraction else None))
+                             reservoir_fraction=(cfg.replay_reservoir_fraction if cfg.method in ({'replay'}|NATIVE_METHODS) else 0.),
+                             class_totals=(Counter(map(int,bank.train.targets)) if cfg.method in ({'replay'}|NATIVE_METHODS) and cfg.replay_reservoir_fraction else None))
+    if cfg.method in NATIVE_METHODS and experience_end:
+        # The next local experience (also when offline) uses this actual local
+        # checkpoint as its distillation teacher, until a legitimate download.
+        client.native_teacher={k:v.detach().cpu().clone() for k,v in model.state_dict().items()}
+        client.native_teacher_classes=set(seen_classes)
     old_loss_after=local_old_loss() if cfg.prepost_diagnostics else None
     client.last_constraint_violations=num_violations
     if cfg.optimizer_state_policy=='persist':
