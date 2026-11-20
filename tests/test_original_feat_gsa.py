@@ -30,9 +30,10 @@ def test_original_feat_relation_loss_actual_execution_and_backprop(monkeypatch):
     assert torch.isfinite(got)
     got.backward()
     assert features.grad is not None and torch.isfinite(features.grad).all()
-    assert classifier.grad is not None
-    assert torch.count_nonzero(classifier.grad[[4,5]])>0
-    assert torch.count_nonzero(classifier.grad[[0,3,6,99]])==0
+    # The authors explicitly .detach() logPP (prototype relation targets).
+    # Consequently GSA is a student feature regularizer and MUST NOT update
+    # any classifier/prototype weights through this loss.
+    assert classifier.grad is None
 
 
 def test_feat_no_future_class_access():
@@ -41,4 +42,4 @@ def test_feat_no_future_class_access():
     y=torch.tensor([4,5]*32)
     loss=original_feat_gsa(f,y,w,{4,5})
     loss.backward()
-    assert torch.count_nonzero(w.grad[[0,1,2,99]])==0
+    assert w.grad is None  # original FEAT logPP target is detached

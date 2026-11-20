@@ -182,3 +182,9 @@ The original `FedAvg.update` is now used for aggregation. The old CLI string
 now states the actual original selection policy. Source `FlTrainer.fl_train`
 and dynamic classifier growth remain protocol adaptations, not original
 function calls. The method is still **NOT certified fully paper-faithful**.
+
+**FEAT source-gradient parity:** `gsa_distill_loss` explicitly detaches the
+prototype-relation target `logPP`. Thus GSA gradients flow into student
+features but NOT into the target prototype/classifier weights. The regression
+tests assert this original behavior (rather than incorrectly demanding a
+prototype gradient).
