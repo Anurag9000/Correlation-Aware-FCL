@@ -155,7 +155,7 @@ class NativePublishedFeature(nn.Module):
         module=importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         self.method=method
-        self.original=(module.resnet18(pretrained=False) if method=='native_feat_resnet'
+        self.original=(module.resnet18(pretrained=False,args={'dataset':'cifar100','init_cls':2,'increment':2}) if method=='native_feat_resnet'
                        else module.resnet18_cbam(pretrained=False))
 
     def forward(self,x):
