@@ -8,9 +8,10 @@ Run the supervisor inside a persistent server `tmux` session:
 cd /home/anurag24092/Projects/Correlation-Aware-FCL
 .venv/bin/python scripts/launch_four_fcil_pilots.py \
   --seed 0 --lr 0.03 --epochs 10 --gpu 0 \
-  --data-root data \
-  --output-dir results/eight_arm_20261120
+  --data-root data --wait-for-gpu
 ```
+
+With `--wait-for-gpu`, the supervisor validates all paired plans first, then checks admission every five minutes until GPU 0 has no unrelated compute process and at least 28 GiB free. It must be started in tmux so the deferred launch survives a client disconnect.
 
 It validates seed-0 plans for GLFC, LGA, FEAT, and FedCLASS reservoir mode, then starts the four suite controllers without waiting between them. Each controller launches its FULL and ROTATING_OFFLINE workers concurrently. The campaign manifest records the commit, plan/config receipts, dataset counts, controller/worker PIDs, and five-minute GPU snapshots. If any controller fails or eight distinct CUDA worker contexts cannot be observed during startup, it terminates the campaign process groups and marks the manifest failed. Re-run the identical commit/config/output path with `--resume` only after a failed campaign; the supervisor verifies prior PIDs have exited and workers resume from per-round checkpoints. Each retry gets a separate log directory and the manifest retains attempt history. A successful campaign requires all four paired controllers to exit successfully; each writes its own comparison artifacts.
 

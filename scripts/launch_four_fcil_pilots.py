@@ -61,25 +61,30 @@ def gpu_snapshot(gpu: int) -> dict:
             "compute_processes": processes, "sampled_at_utc": utc_now()}
 
 
-def preflight(args, env: dict[str, str], *, plans_only: bool = False) -> tuple[list[dict], dict]:
+def hardware_preflight(args, env: dict[str, str]) -> dict:
     if args.gpu != 0:
         raise RuntimeError("This campaign's four launchers are pinned to physical GPU 0")
+    cuda = run_json([sys.executable, "-c",
+        "import json,torch; print(json.dumps({'available':torch.cuda.is_available(),"
+        "'count':torch.cuda.device_count(), 'name':torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}))"],
+        cwd=ROOT, env=env)
+    if not cuda["available"] or cuda["count"] < 1:
+        raise RuntimeError(f"CUDA device 0 unavailable in {sys.executable}: {cuda}")
+    gpu = gpu_snapshot(args.gpu)
+    if gpu["compute_processes"]:
+        raise RuntimeError("GPU 0 has unrelated compute processes; preserving them and refusing launch: "
+                           + json.dumps(gpu["compute_processes"]))
+    if gpu["free_mib"] < args.min_free_mib:
+        raise RuntimeError(f"GPU 0 has {gpu['free_mib']} MiB free; campaign gate requires "
+                           f"{args.min_free_mib} MiB free")
+    return {"cuda": cuda, "gpu": gpu}
+
+
+def preflight(args, env: dict[str, str], *, plans_only: bool = False) -> tuple[list[dict], dict]:
     if plans_only:
-        cuda, gpu = {"skipped": "--plans-only"}, {"skipped": "--plans-only"}
+        hardware = {"cuda": {"skipped": "--plans-only"}, "gpu": {"skipped": "--plans-only"}}
     else:
-        cuda = run_json([sys.executable, "-c",
-            "import json,torch; print(json.dumps({'available':torch.cuda.is_available(),"
-            "'count':torch.cuda.device_count(), 'name':torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}))"],
-            cwd=ROOT, env=env)
-        if not cuda["available"] or cuda["count"] < 1:
-            raise RuntimeError(f"CUDA device 0 unavailable in {sys.executable}: {cuda}")
-        gpu = gpu_snapshot(args.gpu)
-        if gpu["compute_processes"]:
-            raise RuntimeError("GPU 0 has unrelated compute processes; preserving them and refusing launch: "
-                               + json.dumps(gpu["compute_processes"]))
-        if gpu["free_mib"] < args.min_free_mib:
-            raise RuntimeError(f"GPU 0 has {gpu['free_mib']} MiB free; campaign gate requires "
-                               f"{args.min_free_mib} MiB free")
+        hardware = hardware_preflight(args, env)
     plans = []
     with tempfile.TemporaryDirectory(prefix="cafcl_four_pilot_plan_") as plan_tmp:
         for suite in SUITES:
@@ -100,7 +105,7 @@ def preflight(args, env: dict[str, str], *, plans_only: bool = False) -> tuple[l
             if plan.get("batch_size") != 64 or plan.get("sgd_momentum") != .9 or plan.get("sgd_weight_decay") != .0005:
                 raise RuntimeError(f"{suite} plan has an unexpected physical batch or SGD setting")
             plans.append({"suite": suite, "module": module, "plan": plan})
-    return plans, {"cuda": cuda, "gpu": gpu}
+    return plans, hardware
 
 
 def atomic_manifest(path: Path, data: dict) -> None:
@@ -178,6 +183,8 @@ def main() -> int:
     parser.add_argument("--startup-timeout", type=int, default=180)
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument("--plans-only", action="store_true", help="validate all four job plans without GPU checks")
+    parser.add_argument("--wait-for-gpu", action="store_true",
+                        help="inside tmux, check GPU admission every --poll-seconds until it is available")
     parser.add_argument("--resume", action="store_true",
                         help="resume a failed campaign from its per-round checkpoints")
     args = parser.parse_args()
@@ -191,8 +198,26 @@ def main() -> int:
     env["CUDA_VISIBLE_DEVICES"] = "0"
     env.setdefault("OMP_NUM_THREADS", "1")
     env.setdefault("MKL_NUM_THREADS", "1")
+    if args.wait_for_gpu and (args.preflight_only or args.plans_only):
+        print("PREFLIGHT_BLOCKED: --wait-for-gpu cannot be combined with a preflight-only mode", file=sys.stderr)
+        return 2
+    if args.wait_for_gpu and not os.environ.get("TMUX"):
+        print("PREFLIGHT_BLOCKED: --wait-for-gpu must run inside a persistent tmux session", file=sys.stderr)
+        return 2
     try:
-        plans, hardware = preflight(args, env, plans_only=args.plans_only)
+        if args.wait_for_gpu:
+            plans, _ = preflight(args, env, plans_only=True)
+            print(f"All four paired plans passed. Waiting for GPU 0 admission; rechecking every {args.poll_seconds}s.",
+                  flush=True)
+            while True:
+                try:
+                    hardware = hardware_preflight(args, env)
+                    break
+                except Exception as exc:
+                    print(f"GPU_ADMISSION_WAIT: {exc}; next check in {args.poll_seconds}s", flush=True)
+                    time.sleep(args.poll_seconds)
+        else:
+            plans, hardware = preflight(args, env, plans_only=args.plans_only)
     except Exception as exc:
         print(f"PREFLIGHT_BLOCKED: {exc}", file=sys.stderr, flush=True)
         return 2
