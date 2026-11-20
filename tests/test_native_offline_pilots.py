@@ -124,7 +124,11 @@ def test_native_client_continues_through_disconnection_and_replay_uses_64():
             second=local_train(model,client,bank,cfg,torch.device('cpu'),1,
                                experience_end=True,active_pair_classes=(2,3))
             if method=='native_feat':
-                assert second['steps']==2
+                # The author's source trainer makes one physical batch64
+                # from current TRAIN plus retained source tickets. It does
+                # NOT use generic mixed replay that created two updates.
+                assert second['steps']==1
+                assert second['source_method'].endswith('FEAT._local_finetune')
                 assert set(client.memory)=={0,1,2,3}
             else:
                 # If source entropy increase <= 1.2, source legitimately
