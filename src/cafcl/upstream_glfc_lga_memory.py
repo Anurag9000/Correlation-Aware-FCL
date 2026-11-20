@@ -46,6 +46,16 @@ class _CPUDeviceOnly(ast.NodeTransformer):
             node.func.attr="to"
             node.args=[ast.Constant(value="cpu")]
             node.keywords=[]
+        elif (isinstance(node.func,ast.Attribute) and node.func.attr=="to"
+              and len(node.args)==1 and
+              isinstance(node.args[0],ast.Attribute)
+              and isinstance(node.args[0].value,ast.Name)
+              and node.args[0].value.id=="self"
+              and node.args[0].attr=="device"):
+            # LGA entropy_signal calls Tensor.to(self.device), where the
+            # authors self.device is a CUDA index. CPU-only fixtures map
+            # exactly this transfer to CPU; all source math stays intact.
+            node.args=[ast.Constant(value="cpu")]
         return node
 
 
