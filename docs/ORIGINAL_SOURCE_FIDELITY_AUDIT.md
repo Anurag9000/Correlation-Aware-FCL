@@ -352,3 +352,19 @@ scope and fixed 64-size physical model forwards. Validation and TEST
 remain unaugmented. GLFC/LGA pilot identities advance to source V3;
 older V2 results are not overwritten. Source training optimizer and
 proxy-server reconstruction remain incomplete, fidelity gate CLOSED.
+
+## Original LGA radius calculation
+
+`src/cafcl/upstream_lga_radius.py` compiles and executes the **exact
+original** `LGA/myNetwork.py:network.compute_radius` and
+`network.Image_transform` bodies at the second class-stage boundary.
+The source covariance diagonal/trace and root-mean-radius arithmetic
+is unmodified. The DATA are only server-acknowledged TRAIN examples
+from original classes 0 and 1. Their number is 450/class instead of
+the upstream original 500, so the source is given 9 instead of 10
+fifty-image slices; each underlying model feature forward is padded to
+the user's physical batch64. The scalar radius is part of committed
+federated CL state and is sent only to synchronized clients.
+
+This does NOT yet invoke original `LGA/ProxyServer.py:f_monitor`,
+so the estimate is not sufficient for full algorithmic fidelity.

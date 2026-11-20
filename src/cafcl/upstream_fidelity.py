@@ -48,7 +48,7 @@ COMPONENTS={
   ('LGA/LGA.py','LGA._reduce_exemplar_sets','original_invoked'),
   ('LGA/LGA.py','LGA.proto_grad_sharing','omitted'),
   ('LGA/LGA.py','LGA.prototype_mask','omitted'),
-  ('LGA/myNetwork.py','network.compute_radius','omitted'),
+  ('LGA/myNetwork.py','network.compute_radius','original_invoked'),
   ('LGA/ProxyServer.py','proxyServer.reconstruction','omitted'),
   ('LGA/ProxyServer.py','proxyServer.f_monitor','omitted'),
   ('LGA/ProxyServer.py','proxyServer.model_back','omitted'),

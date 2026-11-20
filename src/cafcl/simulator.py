@@ -464,6 +464,17 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             thread_name_prefix='fcl-client')
         for round_id in range(first_round,total_rounds):
             round_start=time.monotonic()
+            if (cfg.method=='native_lga' and round_id==1
+                    and server_cl_state.native_lga_radius is None):
+                # Official LGA computes a source covariance radius once
+                # at its first class-stage boundary. Use only TRAIN samples
+                # already integrated by the server after interval one.
+                from .upstream_lga_radius import original_lga_radius
+                model.load_state_dict(global_state)
+                model.to(device)
+                server_cl_state.native_lga_radius=original_lga_radius(
+                    model,bank,server_cl_state.acknowledged_train_indices,device)
+            
             # Queue all client arrivals but do NOT expose later class labels to
             # the local learner before it has processed earlier class events.
             # This is essential for ER-ACE masking and true within-round CL.

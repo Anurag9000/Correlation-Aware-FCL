@@ -86,6 +86,7 @@ class FederatedCLState:
     feat_ecc:dict|None=None
     feat_ecc_history:list[dict]=field(default_factory=list)
     source_method_artifacts:dict[int,dict]=field(default_factory=dict)
+    native_lga_radius:float|None=None
 
     def merge_clients(self,uploaded_clients,bank,method,teacher_model,version):
         """Merge ONLY selected/uploaded private contributions once per source."""
@@ -202,6 +203,7 @@ class FederatedCLState:
         client.received_lwf_teacher=(_cpu_dict(self.teacher) if self.teacher else None)
         client.received_lwf_teacher_version=self.teacher_version
         client.received_native_artifacts=copy.deepcopy(self.source_method_artifacts)
+        client.received_lga_radius=self.native_lga_radius
         if method=='native_feat':
             from .upstream_feat_geometry import clone_feat_ecc
             client.received_feat_ecc=clone_feat_ecc(self.feat_ecc)
@@ -297,6 +299,8 @@ class FederatedCLState:
                         raise RuntimeError('Corrupted FEAT original ECC projector')
                 if client.received_feat_ecc['energy']!=self.feat_ecc['energy']:
                     raise RuntimeError('Corrupted FEAT original ECC energy')
+        if client.received_lga_radius!=self.native_lga_radius:
+            raise RuntimeError('Client missing original LGA radius')
         if client.received_native_artifacts!=self.source_method_artifacts:
             raise RuntimeError('Client missing accepted original-method artifacts')
         if client.received_server_class_sample_exposure!=self.class_sample_exposure:
@@ -318,6 +322,7 @@ class FederatedCLState:
             'feat_ecc_accepted_receipts':sum(x['source_receipts'] for x in self.feat_ecc_history),
             'feat_ecc_history_entries':len(self.feat_ecc_history),
             'source_method_artifact_clients':len(self.source_method_artifacts),
+            'native_lga_radius':self.native_lga_radius,
             'contributing_clients':sorted(self.uploaded_clients),
             'integrated_classes':len(self.integrated_classes)}
 
