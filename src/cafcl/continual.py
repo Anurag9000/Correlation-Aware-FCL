@@ -89,6 +89,7 @@ class LocalState:
     received_lga_radius:float|None=None
     pending_native_prototypes:list[dict]=field(default_factory=list)
     received_native_prototypes:dict=field(default_factory=dict)
+    received_native_proxy:dict|None=None
     pending_feat_ecc:list[dict]=field(default_factory=list)
     feat_selection_tickets:dict[int,list[int]]=field(default_factory=dict)
     feat_selection_receipts:list[dict]=field(default_factory=list)

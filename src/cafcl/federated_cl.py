@@ -89,6 +89,11 @@ class FederatedCLState:
     native_lga_radius:float|None=None
     native_prototype_gradients:dict[tuple[int,int,int],dict]=field(default_factory=dict)
     native_latest_accepted_prototypes:list[tuple[int,int,int]]=field(default_factory=list)
+    # Proxy source reconstruction, teacher history and pending accepted
+    # gradient backlog. Never includes a hidden client's unsent receipts.
+    native_proxy_state:dict|None=None
+    native_proxy_pending_receipts:list[dict]=field(default_factory=list)
+    native_proxy_history:list[dict]=field(default_factory=list)
 
     def merge_clients(self,uploaded_clients,bank,method,teacher_model,version):
         """Merge ONLY selected/uploaded private contributions once per source."""
@@ -223,6 +228,8 @@ class FederatedCLState:
         client.received_native_artifacts=copy.deepcopy(self.source_method_artifacts)
         client.received_lga_radius=self.native_lga_radius
         client.received_native_prototypes=copy.deepcopy(self.native_prototype_gradients)
+        if method in {'native_glfc','native_lga'}:
+            client.received_native_proxy=copy.deepcopy(self.native_proxy_state)
         if method=='native_feat':
             from .upstream_feat_geometry import clone_feat_ecc
             client.received_feat_ecc=clone_feat_ecc(self.feat_ecc)
@@ -328,6 +335,26 @@ class FederatedCLState:
             if any(not torch.equal(x,y) for x,y in zip(
                     local['gradients'],receipt['gradients'])):
                 raise RuntimeError('Corrupt GLFC/LGA source gradient tensors')
+        if client.last_learning_method in {'native_glfc','native_lga'}:
+            local=client.received_native_proxy
+            source=self.native_proxy_state
+            if (local is None)!=(source is None):
+                raise RuntimeError('Client did not receive original source proxy teacher state')
+            if source is not None:
+                for name in ('best_model_1','best_model_2'):
+                    a=local[name]; b=source[name]
+                    if (a is None)!=(b is None):
+                        raise RuntimeError('Original proxy teacher slot missing')
+                    if a is not None:
+                        if set(a)!=set(b) or any(
+                          not torch.equal(a[k],b[k]) for k in b):
+                            raise RuntimeError('Corrupted original proxy teacher')
+                if (local['best_perf']!=source['best_perf'] or
+                    local['server_round']!=source['server_round'] or
+                    local['reconstructed_images']!=source['reconstructed_images']):
+                    raise RuntimeError('Incorrect source proxy reconstruction metadata')
+                if local['new_set_label']!=source['new_set_label']:
+                    raise RuntimeError('Incorrect source proxy class labels')
         if client.received_lga_radius!=self.native_lga_radius:
             raise RuntimeError('Client missing original LGA radius')
         if client.received_native_artifacts!=self.source_method_artifacts:
@@ -353,6 +380,12 @@ class FederatedCLState:
             'source_method_artifact_clients':len(self.source_method_artifacts),
             'native_lga_radius':self.native_lga_radius,
             'original_proto_gradient_receipts':len(self.native_prototype_gradients),
+            'original_proxy_accepted_backlog':len(self.native_proxy_pending_receipts),
+            'original_proxy_source_steps':sum(
+                int(e.get('ran_source_dataloader',False)) for e in self.native_proxy_history),
+            'original_proxy_teacher_available':bool(
+                self.native_proxy_state and
+                self.native_proxy_state.get('best_model_2') is not None),
             'contributing_clients':sorted(self.uploaded_clients),
             'integrated_classes':len(self.integrated_classes)}
 
