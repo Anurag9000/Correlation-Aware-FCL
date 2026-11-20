@@ -211,9 +211,11 @@ def construct_source_proxy(method,model,seed,device,*,prior=None,radius=None,ep_
     proxy.num_image=20
     proxy.learning_rate=float(lr)
     proxy.device=0 if device.index is None else device.index
+    if method=='native_lga' and radius is None:
+        radius=.15  # LGA/myNetwork.py:network.__init__ source default
     proxy.model=_ProxyModelCompatible(copy.deepcopy(model),radius).to(device).eval()
     if method=='native_lga':
-        proxy.model.radius=float(radius) if radius is not None else 0.0
+        proxy.model.radius=float(radius)
         proxy.args=SimpleNamespace(tasks_global=10,proxy_init=6,img_size=32)
         proxy.ep_g=int(ep_g)
     # Each source reconstruction forward receives one logical image;

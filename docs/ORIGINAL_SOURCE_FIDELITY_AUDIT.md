@@ -525,3 +525,7 @@ unchanged, then converts the source ndarray to a list with a
 execute unchanged. This is explicitly recorded as an upstream
 compatibility repair, not a claim that the original repository runs
 unmodified. Original source blobs are still immutable.
+
+## LGA original initial proxy radius
+
+The LGA source network initializes `radius=0.15`. The proxy's compatible model now uses that original default before the source covariance-radius update, rather than incorrectly forcing 0.0 (which would select the plain rather than the geometric `f_monitor` branch). The new conditional state remains an experimental compatibility layer, not a change to any original vendored file.
