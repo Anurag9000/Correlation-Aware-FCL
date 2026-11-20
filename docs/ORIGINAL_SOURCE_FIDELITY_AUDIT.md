@@ -287,3 +287,34 @@ and must be documented. FEAT receives a fresh `SOURCE_CORE_V4` job
 identity and output directory; no older experiment artifact is overwritten.
 Other original FEAT mechanisms still remain incomplete and fidelity is
 still NOT certified.
+
+## GLFC and LGA source entropy/herding in the pretraining path
+
+`src/cafcl/upstream_glfc_lga_memory.py` now calls original-source
+`update_new_set`, `entropy_signal`, `_reduce_exemplar_sets` and
+`_construct_exemplar_set` on every local task BEFORE training, including
+disconnected clients. It persists original per-client entropy baseline,
+last-class pair, learned-class order, and selected exemplar indices.
+Original CIFAR RGB arrays are mapped back to immutable per-client TRAIN
+index records. It no longer inserts generic Algorithm R memory for these
+two methods. Server uploads include only **actual source-selected exemplars**
+from accepted clients.
+
+The source authors choose 6 classes or `args.iid * task_size` in
+`beforeTrain`, which cannot execute unchanged when the user requires
+exactly 2 new classes per client. An explicit current/last-two-class
+adapter is used instead. The author's `memory_size / learned_numclass`
+calculation is preserved but the total source budget is set to
+user-specified 50 per learned class. The original `compute_class_mean`
+preprocessing and feature extraction are adapted into fixed physical
+batch-64 inference (rather than GLFC's whole-class forward and LGA's
+50-images batches), keeping the original feature-normalized mean and
+unmodified original herding argmin. These are recorded as
+**protocol-required differences**, not hidden as bitwise reproduction.
+Entropy triggers may legitimately be false, in which case no new class
+exemplars are stored, exactly as source `update_new_set` prescribes.
+
+**Still missing:** original source proxy gradient generation,
+gradient inversion/reconstruction, original model-back teacher decisions,
+and LGA's radius/geometry monitor. Full-method fidelity gate stays
+**CLOSED**.

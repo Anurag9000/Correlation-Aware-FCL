@@ -84,6 +84,7 @@ class LocalState:
     last_learning_method:str=''
     native_teacher:dict|None=None
     native_teacher_classes:set[int]=field(default_factory=set)
+    native_memory_state:dict=field(default_factory=dict)
     pending_feat_ecc:list[dict]=field(default_factory=list)
     feat_selection_tickets:dict[int,list[int]]=field(default_factory=dict)
     feat_selection_receipts:list[dict]=field(default_factory=list)
@@ -377,6 +378,12 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     client.last_learning_method=cfg.method
     model.load_state_dict(client.shared_weights)
     model.to(device)
+    if cfg.method in {'native_glfc','native_lga'}:
+        # Original source update_new_set is a BEFORE-train entropy trigger,
+        # not post-hoc random reservoir selection. It runs even offline.
+        from .upstream_glfc_lga_memory import original_before_local_task
+        original_before_local_task(cfg.method,model,client,bank,cfg,device,
+                                   active_pair_classes)
     model.train()
     if active_pair_classes is not None:
         active_pair_classes=tuple(sorted(set(int(c) for c in active_pair_classes)))
@@ -792,7 +799,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         from .upstream_feat_replay import source_feat_select_local
         source_feat_select_local(model,client,bank,cfg,device,indices,
                                  active_pair_classes or ())
-    if cfg.method in ({'gem','agem','replay','er_ace','native_glfc','native_lga'}):
+    if cfg.method in ({'gem','agem','replay','er_ace'}):
         client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy,
                              reservoir_fraction=(cfg.replay_reservoir_fraction if cfg.method in ({'replay'}|NATIVE_METHODS) else 0.),
                              class_totals=(Counter(map(int,bank.train.targets)) if cfg.method in ({'replay'}|NATIVE_METHODS) and cfg.replay_reservoir_fraction else None))
