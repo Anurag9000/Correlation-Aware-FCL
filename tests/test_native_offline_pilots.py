@@ -149,3 +149,40 @@ def test_native_method_server_sync_is_acknowledged_only_for_online_clients():
         assert offline.federated_cl_version==0
         assert offline.native_teacher_classes=={2,3}
         assert not offline.received_memory
+
+
+def test_all_three_pilot_entrypoints_write_audited_plans(tmp_path):
+    import json
+    from cafcl import native_primary
+    for name in SUITES:
+        native_primary.main(['--suite',name,'--seed','0',
+                             '--output-dir',str(tmp_path),'--plan-only'])
+        design=json.loads((tmp_path/name/'seed0'/'design.json').read_text())
+        assert design['training_intervals']==9
+        assert design['terminal_communication_only_flush'] is True
+        assert design['full_and_offline_same_gpu']==0
+        assert design['concurrent_processes']==2
+        assert design['total_jobs']==2
+
+def test_pilot_dispatch_spawns_both_arms_concurrently_on_gpu_zero(monkeypatch,tmp_path):
+    from cafcl import native_primary as n
+    import cafcl.data as data
+    monkeypatch.setattr(torch.cuda,'is_available',lambda:True)
+    monkeypatch.setattr(data,'get_data_bank',lambda *args,**kwargs:None)
+    monkeypatch.setattr(n,'build_report',lambda *args,**kwargs:{'mock_only':True})
+    launched=[]
+    class FakeProcess:
+        pid=1234
+        def wait(self):return 0
+        def poll(self):return 0
+        def terminate(self):raise AssertionError('Successful worker must not terminate')
+    def fake_popen(cmd,**kwargs):
+        launched.append((cmd,kwargs))
+        return FakeProcess()
+    monkeypatch.setattr(n.subprocess,'Popen',fake_popen)
+    n.main(['--suite','glfc','--output-dir',str(tmp_path),'--no-download'])
+    assert len(launched)==2
+    assert [cmd[-2:] for cmd,_ in launched]==[['--worker','0'],['--worker','1']]
+    assert all(kwargs['env']['CUDA_VISIBLE_DEVICES']=='0' for _,kwargs in launched)
+    assert all(kwargs['stdout'] is kwargs['stderr'] if False else
+               kwargs['stderr']==n.subprocess.STDOUT for _,kwargs in launched)
