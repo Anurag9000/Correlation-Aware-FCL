@@ -64,7 +64,9 @@ def test_paired_fedclass_configs_and_schedule(mode,method,count):
         missing.append(next(iter(set(range(5))-online)))
     assert set(missing[:5])==set(range(5))
     assert missing[5:]==missing[:4]
-    assert set(select_offline_cohort(hidden,9,10,[]))==set(range(5))
+    # The selector validates an initial four-client cohort even for U10.
+    # The simulator itself bypasses the selector on the terminal flush.
+    assert set(select_offline_cohort(hidden,9,10,list(range(4))))==set(range(5))
     meta=make_design((full,hidden),mode=mode,replay_ratio=1.)
     assert meta["upstream_commit"]==SOURCE_COMMIT
     assert meta["test_oracle_task_id"] is False
