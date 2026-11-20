@@ -19,7 +19,8 @@ from cafcl.models import create_model
     ("none","sgd",0),
 ])
 def test_paired_fedclass_configs_and_schedule(mode,method,count):
-    full,hidden=make_fedclass_jobs(memory_mode=mode,seed=13,epochs=10,lr=.03)
+    full,hidden=make_fedclass_jobs(memory_mode=mode,seed=13,epochs=10,lr=.03,
+                                   client_training_concurrency=2)
     assert full.model==hidden.model=="fedclass_resnet8"
     assert full.method==hidden.method==method
     assert full.aggregator==hidden.aggregator=="fedavg"
@@ -37,6 +38,7 @@ def test_paired_fedclass_configs_and_schedule(mode,method,count):
     assert full.share_continual_state and hidden.share_continual_state
     assert full.learning_setting=="class_il" and hidden.learning_setting=="class_il"
     assert full.class_pair_protocol=="strict" and hidden.class_pair_protocol=="strict"
+    assert full.client_training_concurrency==hidden.client_training_concurrency==2
     assert set(full.to_dict())==set(hidden.to_dict())
     diff={k for k in full.to_dict() if full.to_dict()[k]!=hidden.to_dict()[k]}
     assert diff=={"job_id","participation","stream_offline_policy"}

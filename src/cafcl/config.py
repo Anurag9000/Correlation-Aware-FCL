@@ -98,6 +98,9 @@ class RunConfig:
     # singleton fallbacks; 'strict' rejects unpairable class arrivals.
     class_pair_protocol: str = 'compatible'
     classwise_head_merge: bool = True
+    # Zero keeps all active clients concurrent. A lower explicit value runs
+    # independent client tasks in bounded waves to fit shared GPU memory.
+    client_training_concurrency: int = 0
 
     # New communication-interval task stream; orthogonal design knobs.
     stream_protocol: bool = False
@@ -115,6 +118,7 @@ class RunConfig:
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
         assert self.batch_size == 64 or self.dataset == "synthetic", "All production optimization must use physical batch 64"
         assert self.num_clients >= 2
+        assert 0 <= self.client_training_concurrency <= self.num_clients
         assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
         assert self.stream_overlap_kind in {'none','intra_same_round','intra_cross_round','inter_same_round','inter_cross_round','combined'}
         assert 0 <= self.stream_overlap_fraction <= 1
@@ -260,6 +264,7 @@ class RunConfig:
         if data['importance_samples_per_experience']==32:data.pop('importance_samples_per_experience')
         if data['replay_reservoir_fraction']==0.0:data.pop('replay_reservoir_fraction')
         if data['share_continual_state'] is True:data.pop('share_continual_state')
+        if data['client_training_concurrency']==0:data.pop('client_training_concurrency')
         return data
 
     def signature(self):

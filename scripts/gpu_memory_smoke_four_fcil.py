@@ -59,7 +59,7 @@ def gpu_usage(gpu=0):
             "compute_processes": processes, "at_utc": utc_now()}
 
 
-def worker(suite, method, model_id, start_dir, timeout):
+def worker(suite, method, model_id, start_dir, timeout, client_concurrency):
     import copy
     import torch
     import torch.nn.functional as F
@@ -116,11 +116,13 @@ def worker(suite, method, model_id, start_dir, timeout):
                 optimizer.step()
         return float(loss.detach().cpu())
 
-    with ThreadPoolExecutor(max_workers=5, thread_name_prefix=f"{suite}-smoke") as pool:
+    with ThreadPoolExecutor(max_workers=client_concurrency,
+                            thread_name_prefix=f"{suite}-smoke") as pool:
         losses = list(pool.map(train_one, range(5)))
     torch.cuda.synchronize(device)
     result = {
         "suite": suite, "method": method, "model_id": model_id,
+        "client_training_concurrency": client_concurrency,
         "pid": os.getpid(), "physical_batch_size": 64,
         "client_models": len(clients), "server_models": 1,
         "teacher_models": len(teachers) if is_native else 0,
@@ -135,6 +137,7 @@ def worker(suite, method, model_id, start_dir, timeout):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gpu", type=int, default=0)
+    parser.add_argument("--client-concurrency", type=int, default=5)
     parser.add_argument("--reserve-mib", type=int, default=0,
                         help="minimum free VRAM after the smoke; default is zero")
     parser.add_argument("--allow-shared-gpu", action="store_true",
@@ -147,6 +150,8 @@ def main():
     args = parser.parse_args()
     if args.gpu != 0:
         parser.error("The four suite pilots are pinned to GPU 0")
+    if not 1 <= args.client_concurrency <= 5:
+        parser.error("--client-concurrency must be between 1 and 5")
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     os.environ.setdefault("OMP_NUM_THREADS", "1")
     os.environ.setdefault("MKL_NUM_THREADS", "1")
@@ -154,7 +159,8 @@ def main():
         if args.start_dir is None:
             parser.error("--start-dir is required for a worker")
         suite, method, model_id = SUITES[args.worker // 2]
-        worker(suite, method, model_id, args.start_dir, args.timeout)
+        worker(suite, method, model_id, args.start_dir, args.timeout,
+               args.client_concurrency)
         return 0
 
     if args.output_dir is None:
@@ -179,7 +185,8 @@ def main():
             handle = log_path.open("w")
             command = [sys.executable, str(Path(__file__).resolve()),
                        "--worker", str(worker_index),
-                       "--start-dir", str(start_dir), "--timeout", str(args.timeout)]
+                       "--start-dir", str(start_dir), "--timeout", str(args.timeout),
+                       "--client-concurrency", str(args.client_concurrency)]
             proc = subprocess.Popen(command, cwd=ROOT, env=os.environ.copy(),
                                     stdout=handle, stderr=subprocess.STDOUT)
             workers.append((proc, suite, arm))

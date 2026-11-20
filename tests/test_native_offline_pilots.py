@@ -27,6 +27,14 @@ def test_all_three_paired_pilot_schedules():
         assert all(len(x['online_clients'])==4 for x in plan['offline_schedule'])
         assert set(map(int,range(100)))==set(range(100))
 
+
+def test_bounded_client_execution_is_included_in_native_pair_plan():
+    jobs=make_native_jobs('glfc',client_training_concurrency=2)
+    assert jobs[0].client_training_concurrency==jobs[1].client_training_concurrency==2
+    plan=audited_plan(jobs)
+    assert plan['client_execution_mode']=='bounded_concurrent_task_barriers'
+    assert plan['client_training_concurrency']==2
+
 class SmallNet(nn.Module):
     def __init__(self):
         super().__init__()

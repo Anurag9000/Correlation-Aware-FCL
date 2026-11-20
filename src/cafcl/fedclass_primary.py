@@ -28,7 +28,7 @@ MEMORY_MODES=("reservoir","none")
 
 
 def make_fedclass_jobs(*,seed=0,lr=.03,epochs=10,memory_mode="reservoir",
-                       replay_ratio=1.):
+                       replay_ratio=1.,client_training_concurrency=0):
     """Build matched FedCLASS CE/FedAvg class-IL jobs.
 
     reservoir: the v16 50-TRAIN-exemplars/class Algorithm R ER protocol;
@@ -55,6 +55,7 @@ def make_fedclass_jobs(*,seed=0,lr=.03,epochs=10,memory_mode="reservoir",
         replay_reservoir_fraction=fraction,
         replay_ratio=(replay_ratio if has_replay else 0.),
         aggregator="fedavg",classwise_head_merge=False,
+        client_training_concurrency=client_training_concurrency,
         job_id=f"FEDCLASS_CE_{tag}_FULL_SEED{seed}")
     rotating=replace(baseline,participation=.8,
                      stream_offline_policy="rotate_once",
@@ -110,6 +111,8 @@ def main(argv=None):
     p.add_argument("--seed",type=int,default=0)
     p.add_argument("--lr",type=float,default=.03)
     p.add_argument("--epochs",type=int,default=10)
+    p.add_argument("--client-training-concurrency",type=int,default=0,
+                   help="max active clients per simulation process; 0 means all five")
     p.add_argument("--memory-mode",choices=MEMORY_MODES,default="reservoir",
                    help="reservoir=50 examples/class, or none=vanilla CE/FedAvg")
     p.add_argument("--replay-ratio",type=float,default=1.)
@@ -124,7 +127,8 @@ def main(argv=None):
     if args.gpu!=0:
         p.error("The concurrent FedCLASS pilots must both use GPU 0")
     jobs=make_fedclass_jobs(seed=args.seed,lr=args.lr,epochs=args.epochs,
-                            memory_mode=args.memory_mode,replay_ratio=args.replay_ratio)
+                            memory_mode=args.memory_mode,replay_ratio=args.replay_ratio,
+                            client_training_concurrency=args.client_training_concurrency)
     root=_output_root(args)
     root.mkdir(exist_ok=True,parents=True)
     design=make_design(jobs,mode=args.memory_mode,replay_ratio=args.replay_ratio)
@@ -146,6 +150,7 @@ def main(argv=None):
         sys.executable,"-m","cafcl.fedclass_primary",
         "--seed",str(args.seed),"--lr",str(args.lr),"--epochs",str(args.epochs),
         "--memory-mode",args.memory_mode,"--replay-ratio",str(args.replay_ratio),
+        "--client-training-concurrency",str(args.client_training_concurrency),
         "--gpu","0","--data-root",args.data_root,"--output-dir",args.output_dir,
         "--no-download"]
     processes=[]

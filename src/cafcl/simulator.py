@@ -30,7 +30,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v18_terminal_stale_flush_guard'
+PROTOCOL_VERSION = 'cifar100_native32_v19_bounded_client_execution'
 
 
 def _classwise_fedavg_contribution(uploads):
@@ -457,7 +457,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         # simultaneous processes; each process has five client workers.
         client_runtimes=create_client_runtimes(cfg,bank,clients,device)
         client_executor=ThreadPoolExecutor(
-            max_workers=cfg.num_clients,thread_name_prefix='fcl-client')
+            max_workers=(cfg.client_training_concurrency or cfg.num_clients),
+            thread_name_prefix='fcl-client')
         for round_id in range(first_round,total_rounds):
             round_start=time.monotonic()
             # Queue all client arrivals but do NOT expose later class labels to
@@ -856,7 +857,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'client_private_replay_by_class':{str(cid):{str(cls):len(indices) for cls,indices in client.private_memory.items()} for cid,client in clients.items()},
                            'client_federated_cl_versions':{str(cid):c.federated_cl_version for cid,c in clients.items()},
                            'local_details':local_details,
-                           'client_execution_mode':'parallel_task_barriers',
+                           'client_execution_mode':(
+                               'parallel_task_barriers'
+                               if not cfg.client_training_concurrency
+                               else 'bounded_concurrent_task_barriers'),
+                           'client_training_concurrency':(
+                               cfg.client_training_concurrency or cfg.num_clients),
                            'task_barriers':task_barriers,
                            'independent_live_client_models':len(client_runtimes),
                            'seconds':time.monotonic()-round_start,

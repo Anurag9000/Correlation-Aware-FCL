@@ -138,59 +138,67 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
         active = [cid for cid in sorted(prepared) if task_index < len(prepared[cid])]
         if not active:
             continue
-        start_barrier = Barrier(len(active))
-        pending = []
-        for cid in active:
-            client = clients[cid]
-            raw = prepared[cid][task_index]
-            has_new = has_new_events[cid]
-            if has_new:
-                classes = tuple(int(c) for c in raw['class_ids'])
-                client.arrival(raw['indices'], classes, raw['global_stage'])
-                for cls in classes:
-                    if raw['is_recurrence']:
-                        client.recurrence_rounds[cls] = round_id
-                all_available[cid].extend(raw['indices'])
-                client.local_experience += 1
-                for idx in raw['indices']:
-                    client.sample_first_local_experience.setdefault(
-                        int(idx), client.local_experience)
-                for cls in classes:
-                    client.first_seen_local_experience.setdefault(
-                        cls, client.local_experience)
-                client.local_training_events.append({
-                    'round': round_id, 'local_experience': client.local_experience,
-                    'class': classes[0] if len(classes) == 1 else None,
-                    'classes': list(classes), 'global_stage': raw['global_stage'],
-                    'recurrence': raw['is_recurrence'],
-                    'selected_for_upload': False})
-                client.current_indices = list(raw['indices'])
-                if cfg.pending_policy == 'bounded' and cfg.max_pending_samples > 0:
-                    client.current_indices = client.current_indices[-cfg.max_pending_samples:]
-            if cfg.learning_setting == 'task_il':
-                stage = raw['global_stage']
-                task_labels = scenario.stages[min(stage, len(scenario.stages) - 1)]
-            else:
-                task_labels = None
-            local_cfg = cfg
-            if cfg.client_heterogeneity:
-                from dataclasses import replace
-                methods = ('sgd', 'gem', 'agem', 'replay')
-                local_cfg = replace(cfg, method=methods[cid % len(methods)])
-            event = {
-                'is_actual': bool(has_new),
-                'active_pair': (tuple(raw['class_ids'])
-                                if has_new and len(raw['class_ids']) >= 2
-                                and not cfg.label_noise_rate else None),
-            }
-            pending.append((cid, executor.submit(
-                _train_one, runtimes[cid], client, bank, local_cfg, device,
-                round_id, event, task_labels, start_barrier)))
-        # Hard barrier: all Task N workers finish before any Task N+1 starts.
+        concurrency = cfg.client_training_concurrency or len(active)
         outcomes = []
-        for cid, future in pending:
-            result, start, end = future.result()
-            outcomes.append((cid, result, start, end))
+        execution_waves = []
+        # Client updates are independent until the round barrier. Running them
+        # in bounded waves preserves the same per-client batch/optimizer work
+        # while limiting simultaneously live activations on a shared GPU.
+        for offset in range(0, len(active), concurrency):
+            wave = active[offset:offset + concurrency]
+            execution_waves.append(wave)
+            start_barrier = Barrier(len(wave))
+            pending = []
+            for cid in wave:
+                client = clients[cid]
+                raw = prepared[cid][task_index]
+                has_new = has_new_events[cid]
+                if has_new:
+                    classes = tuple(int(c) for c in raw['class_ids'])
+                    client.arrival(raw['indices'], classes, raw['global_stage'])
+                    for cls in classes:
+                        if raw['is_recurrence']:
+                            client.recurrence_rounds[cls] = round_id
+                    all_available[cid].extend(raw['indices'])
+                    client.local_experience += 1
+                    for idx in raw['indices']:
+                        client.sample_first_local_experience.setdefault(
+                            int(idx), client.local_experience)
+                    for cls in classes:
+                        client.first_seen_local_experience.setdefault(
+                            cls, client.local_experience)
+                    client.local_training_events.append({
+                        'round': round_id, 'local_experience': client.local_experience,
+                        'class': classes[0] if len(classes) == 1 else None,
+                        'classes': list(classes), 'global_stage': raw['global_stage'],
+                        'recurrence': raw['is_recurrence'],
+                        'selected_for_upload': False})
+                    client.current_indices = list(raw['indices'])
+                    if cfg.pending_policy == 'bounded' and cfg.max_pending_samples > 0:
+                        client.current_indices = client.current_indices[-cfg.max_pending_samples:]
+                if cfg.learning_setting == 'task_il':
+                    stage = raw['global_stage']
+                    task_labels = scenario.stages[min(stage, len(scenario.stages) - 1)]
+                else:
+                    task_labels = None
+                local_cfg = cfg
+                if cfg.client_heterogeneity:
+                    from dataclasses import replace
+                    methods = ('sgd', 'gem', 'agem', 'replay')
+                    local_cfg = replace(cfg, method=methods[cid % len(methods)])
+                event = {
+                    'is_actual': bool(has_new),
+                    'active_pair': (tuple(raw['class_ids'])
+                                    if has_new and len(raw['class_ids']) >= 2
+                                    and not cfg.label_noise_rate else None),
+                }
+                pending.append((cid, executor.submit(
+                    _train_one, runtimes[cid], client, bank, local_cfg, device,
+                    round_id, event, task_labels, start_barrier)))
+            # Every active client completes Task N before any Task N+1 starts.
+            for cid, future in pending:
+                result, start, end = future.result()
+                outcomes.append((cid, result, start, end))
         begins, ends = [], []
         for cid, result, start, end in outcomes:
             begins.append(start)
@@ -220,6 +228,7 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
             'task_ordinal': task_index + 1,
             'client_ids': active,
             'completed_count': len(outcomes),
+            'execution_waves': execution_waves,
             'start_spread_seconds': max(begins) - min(begins),
             'overlap_window_seconds': max(0., min(ends) - max(begins)),
             'wall_seconds': max(ends) - min(begins),

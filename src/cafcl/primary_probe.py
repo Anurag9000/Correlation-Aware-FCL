@@ -53,8 +53,9 @@ def audited_plan(jobs):
             offline_classes=sorted({c for rr,cid,_,labels,_ in stream if rr==r and cid==offline[r] for c in labels}),
             online_clients=[c for c in range(5) if c!=offline[r]]))
         assert len(by_round[-1]['offline_classes'])==(4 if r==0 else 2)
-    return dict(dataset='cifar100',seed=baseline.seed,backbone=baseline.model,batch_size=baseline.batch_size,sgd_momentum=baseline.momentum,sgd_weight_decay=baseline.weight_decay,
-        client_execution_mode='parallel_task_barriers',
+    plan=dict(dataset='cifar100',seed=baseline.seed,backbone=baseline.model,batch_size=baseline.batch_size,sgd_momentum=baseline.momentum,sgd_weight_decay=baseline.weight_decay,
+        client_execution_mode=('parallel_task_barriers' if not baseline.client_training_concurrency
+                               else 'bounded_concurrent_task_barriers'),
         client_models_per_run=baseline.num_clients,
         canonical_whole_model_aggregation=not baseline.classwise_head_merge,
         process_topology='two_independent_runs_on_one_gpu',
@@ -68,6 +69,9 @@ def audited_plan(jobs):
         terminal_communication_only_flush=True,all_classes_once=True,
         offline_rotation_covers_all=True,
         total_jobs=2,job_ids=[c.job_id for c in jobs],offline_schedule=by_round)
+    if baseline.client_training_concurrency:
+        plan['client_training_concurrency']=baseline.client_training_concurrency
+    return plan
 
 
 def build_report(root,jobs):

@@ -47,11 +47,20 @@ def test_all_methods_two_binary_episodes_same_round_while_offline(method,tmp_pat
     holders={str(c):((0,) if c<4 else (1,)) for c in range(10)}
     cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,stages=1,rounds_per_stage=1,
         participation=.5,participation_overrides={'0':(1,)},
+        client_training_concurrency=1,
         method=method,aggregator='fedavg',holders_override=holders,
         class_pair_protocol='strict',checkpoint_every=1,
         memory_per_class=4,job_id='pairs_'+method)
     assert run_experiment(cfg,str(tmp_path),verbose=False)['status']=='completed'
     check=torch.load(tmp_path/cfg.job_id/'model_final.pt',weights_only=False)
+    import json
+    metrics=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
+    assert metrics[0]['client_execution_mode']=='bounded_concurrent_task_barriers'
+    assert metrics[0]['client_training_concurrency']==1
+    for barrier in metrics[0]['task_barriers']:
+        waves=barrier['execution_waves']
+        assert all(len(wave)==1 for wave in waves)
+        assert sorted(cid for wave in waves for cid in wave)==barrier['client_ids']
     c=check['clients'][0]
     assert [e['classes'] for e in c['local_training_events']]==[[0,1],[2,3]]
     assert c['pending_upload_steps']>0 and c['model_version']==0

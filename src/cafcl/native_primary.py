@@ -18,11 +18,12 @@ SUITES={
     'feat':('native_feat','native_feat_resnet'),
 }
 
-def make_native_jobs(suite,*,seed=0,lr=.03,epochs=10):
+def make_native_jobs(suite,*,seed=0,lr=.03,epochs=10,client_training_concurrency=0):
     if suite not in SUITES:raise ValueError('Unknown native suite')
     method,model=SUITES[suite]
     full,_=make_jobs(backbone='cnn',seed=seed,lr=lr,epochs=epochs,replay_fraction=1/9)
     full=replace(full,method=method,model=model,
+                 client_training_concurrency=client_training_concurrency,
                  job_id=f'{suite.upper()}_PILOT_FULL_V1_SEED{seed}')
     offline=replace(full,participation=.8,stream_offline_policy='rotate_once',
                     job_id=f'{suite.upper()}_PILOT_ROTATING_OFFLINE_V1_SEED{seed}')
@@ -35,6 +36,8 @@ def main(argv=None):
     p.add_argument('--seed',type=int,default=0)
     p.add_argument('--lr',type=float,default=.03)
     p.add_argument('--epochs',type=int,default=10)
+    p.add_argument('--client-training-concurrency',type=int,default=0,
+                   help='max active clients per simulation process; 0 means all five')
     p.add_argument('--gpu',type=int,default=0)
     p.add_argument('--data-root',default='data')
     p.add_argument('--output-dir',default='results/native_offline_pilots')
@@ -43,7 +46,8 @@ def main(argv=None):
     p.add_argument('--worker',type=int,choices=(0,1),default=None,help=argparse.SUPPRESS)
     args=p.parse_args(argv)
     if args.gpu!=0:p.error('This campaign is explicitly pinned to GPU 0')
-    jobs=make_native_jobs(args.suite,seed=args.seed,lr=args.lr,epochs=args.epochs)
+    jobs=make_native_jobs(args.suite,seed=args.seed,lr=args.lr,epochs=args.epochs,
+                          client_training_concurrency=args.client_training_concurrency)
     plan=audited_plan(jobs)
     plan.update(suite=args.suite,native_method=SUITES[args.suite][0],
                 native_upstream_model=SUITES[args.suite][1],experiment='native_compatible_port',
@@ -67,6 +71,7 @@ def main(argv=None):
     get_data_bank('cifar100',args.data_root,download=not args.no_download,seed=args.seed)
     base=[sys.executable,'-m','cafcl.native_primary','--suite',args.suite,
           '--seed',str(args.seed),'--lr',str(args.lr),'--epochs',str(args.epochs),
+          '--client-training-concurrency',str(args.client_training_concurrency),
           '--gpu','0','--data-root',args.data_root,'--output-dir',args.output_dir,
           '--no-download']
     handles=[]

@@ -91,6 +91,7 @@ def preflight(args, env: dict[str, str], *, plans_only: bool = False) -> tuple[l
             module = "cafcl.fedclass_primary" if suite == "fedclass" else "cafcl.native_primary"
             command = [sys.executable, "-m", module, "--seed", str(args.seed),
                        "--lr", str(args.lr), "--epochs", str(args.epochs),
+                       "--client-training-concurrency", str(args.client_training_concurrency),
                        "--gpu", "0", "--data-root", str(args.data_root),
                        "--output-dir", str(Path(plan_tmp) / suite), "--plan-only"]
             if suite != "fedclass":
@@ -104,6 +105,8 @@ def preflight(args, env: dict[str, str], *, plans_only: bool = False) -> tuple[l
                 raise RuntimeError(f"{suite} plan does not retain exactly 50 examples/class")
             if plan.get("batch_size") != 64 or plan.get("sgd_momentum") != .9 or plan.get("sgd_weight_decay") != .0005:
                 raise RuntimeError(f"{suite} plan has an unexpected physical batch or SGD setting")
+            if plan.get("client_training_concurrency") != args.client_training_concurrency:
+                raise RuntimeError(f"{suite} plan has an unexpected bounded client concurrency")
             plans.append({"suite": suite, "module": module, "plan": plan})
     return plans, hardware
 
@@ -171,7 +174,8 @@ def worker_pids(log_path: Path) -> list[int]:
 
 def run_gpu_smoke(args, env: dict[str, str], smoke_dir: Path) -> dict:
     command = [sys.executable, str(ROOT / "scripts" / "gpu_memory_smoke_four_fcil.py"),
-               "--gpu", "0", "--reserve-mib", str(args.smoke_reserve_mib),
+               "--gpu", "0", "--client-concurrency", str(args.client_training_concurrency),
+               "--reserve-mib", str(args.smoke_reserve_mib),
                "--output-dir", str(smoke_dir)]
     if args.allow_shared_gpu:
         command.append("--allow-shared-gpu")
@@ -194,6 +198,8 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--lr", type=float, default=.03)
     parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--client-training-concurrency", type=int, default=2,
+                        help="max active clients per run at once; defaults to 2 for eight workers")
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--data-root", type=Path, default=ROOT / "data")
     parser.add_argument("--output-dir", type=Path, default=None)
@@ -212,6 +218,8 @@ def main() -> int:
     parser.add_argument("--resume", action="store_true",
                         help="resume a failed campaign from its per-round checkpoints")
     args = parser.parse_args()
+    if not 1 <= args.client_training_concurrency <= 5:
+        parser.error("--client-training-concurrency must be between 1 and 5")
     if args.output_dir is None:
         stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         args.output_dir = ROOT / "results" / f"eight_arm_{stamp}"
@@ -273,6 +281,7 @@ def main() -> int:
                          and previous.get("seed") == args.seed
                          and previous.get("lr") == args.lr
                          and previous.get("epochs") == args.epochs
+                         and previous.get("client_training_concurrency") == args.client_training_concurrency
                          and previous.get("gpu") == args.gpu
                          and previous.get("data_root") == str(args.data_root))
         resumable = {"failed", "preflight_failed", "preflight",
@@ -308,6 +317,7 @@ def main() -> int:
     preflight_manifest = {"status": "preflight", "commit": commit,
                           "started_at_utc": utc_now(), "seed": args.seed,
                           "lr": args.lr, "epochs": args.epochs, "batch_size": 64,
+                          "client_training_concurrency": args.client_training_concurrency,
                           "gpu": args.gpu, "data_root": str(args.data_root),
                           "dataset_partition": bank_check, "plans": plans,
                           "hardware": hardware, "output_dir": str(args.output_dir),
@@ -377,7 +387,9 @@ def main() -> int:
                          "worker_pids", "failure", "logs_dir")})
     manifest = {"status": "starting", "commit": commit, "started_at_utc": utc_now(),
                 "seed": args.seed, "lr": args.lr, "epochs": args.epochs,
-                "batch_size": 64, "gpu": args.gpu, "data_root": str(args.data_root),
+                "batch_size": 64,
+                "client_training_concurrency": args.client_training_concurrency,
+                "gpu": args.gpu, "data_root": str(args.data_root),
                 "dataset_partition": bank_check, "plans": plans, "hardware": hardware,
                 "controllers": {}, "worker_pids": {}, "snapshots": [],
                 "output_dir": str(args.output_dir), "logs_dir": str(logs),
@@ -392,12 +404,14 @@ def main() -> int:
             launcher = ROOT / launcher_dir / "pilot" / "run.sh"
             if suite == "fedclass":
                 command = ["bash", str(launcher), "--seed", str(args.seed), "--lr", str(args.lr),
-                           "--epochs", str(args.epochs), "--gpu", "0", "--memory-mode", "reservoir",
+                           "--epochs", str(args.epochs), "--client-training-concurrency",
+                           str(args.client_training_concurrency), "--gpu", "0", "--memory-mode", "reservoir",
                            "--replay-ratio", "1.0", "--data-root", str(args.data_root), "--no-download",
                            "--output-dir", str(args.output_dir / "fedclass")]
             else:
                 command = ["bash", str(launcher), "--seed", str(args.seed), "--lr", str(args.lr),
-                           "--epochs", str(args.epochs), "--gpu", "0", "--data-root", str(args.data_root),
+                           "--epochs", str(args.epochs), "--client-training-concurrency",
+                           str(args.client_training_concurrency), "--gpu", "0", "--data-root", str(args.data_root),
                            "--no-download", "--output-dir", str(args.output_dir / "native")]
             log = (logs / f"{suite}.log").open("w")
             proc = subprocess.Popen(command, cwd=ROOT, env=env, stdout=log,
