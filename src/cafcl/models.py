@@ -171,10 +171,54 @@ class NativePublishedFeature(nn.Module):
             raise RuntimeError(f'Unexpected published backbone features: {out.shape}')
         return out
 
+class FedCLASSResNet8Feature(nn.Module):
+    """Unmodified FedCLASS/convs/resnet_client.py ResNet-8, CIFAR 32x32.
+
+    FedCLASS's CENet wraps this feature extractor and SimpleLinear.
+    We keep both upstream modules byte-identical; only their loading and
+    100-class / sparse-class scheduling are adapted here.
+    """
+    num_features=64
+
+    def __init__(self):
+        super().__init__()
+        import importlib.util
+        from pathlib import Path
+        source=Path(__file__).resolve().parents[2]/'FedCLASS/convs/resnet_client.py'
+        if not source.is_file():
+            raise FileNotFoundError(f'Vendored FedCLASS architecture missing: {source}')
+        spec=importlib.util.spec_from_file_location('_cafcl_fedclass_resnet_client',source)
+        module=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.original=module.resnet8(pretrained=False)
+        if self.original.out_dim!=self.num_features:
+            raise RuntimeError('FedCLASS ResNet8 feature dimension changed')
+
+    def forward(self,x):
+        features=self.original(x)
+        if features.ndim!=2 or features.shape[1]!=self.num_features:
+            raise RuntimeError(f'FedCLASS ResNet8 unexpected features: {tuple(features.shape)}')
+        return features
+
+
+def _fedclass_original_linear(in_features,out_features):
+    """Construct the original upstream SimpleLinear, including zero bias init."""
+    import importlib.util
+    from pathlib import Path
+    source=Path(__file__).resolve().parents[2]/'FedCLASS/convs/linears.py'
+    if not source.is_file():
+        raise FileNotFoundError(f'Vendored FedCLASS classifier missing: {source}')
+    spec=importlib.util.spec_from_file_location('_cafcl_fedclass_linears',source)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.SimpleLinear(in_features,out_features,bias=True)
+
+
 FEATURE_FACTORIES={VIT_ID:ViTBaseFeature,CNN_ID:CIFARResNet18Feature,
     'native_glfc_cbam':lambda:NativePublishedFeature('native_glfc_cbam'),
     'native_lga_cbam':lambda:NativePublishedFeature('native_lga_cbam'),
-    'native_feat_resnet':lambda:NativePublishedFeature('native_feat_resnet')}
+    'native_feat_resnet':lambda:NativePublishedFeature('native_feat_resnet'),
+    'fedclass_resnet8':FedCLASSResNet8Feature}
 MODEL_IDS=tuple(FEATURE_FACTORIES)
 
 class CanonicalClassifier(nn.Module):
@@ -182,13 +226,20 @@ class CanonicalClassifier(nn.Module):
         super().__init__()
         if backbone_name not in MODEL_IDS:raise ValueError(f'Unknown research backbone: {backbone_name}')
         self.features=FEATURE_FACTORIES[backbone_name]()
-        self.classifier=nn.Linear(self.features.num_features,classes)
+        self.classifier=(_fedclass_original_linear(self.features.num_features,classes)
+                         if backbone_name=='fedclass_resnet8'
+                         else nn.Linear(self.features.num_features,classes))
         self.backbone_description=dict(model_id=backbone_name,model_family='vit' if backbone_name==VIT_ID else 'cnn',
             input_size=32,classes=classes,pretrained=False,initialization='seeded_random',
             normalization_mean=NORMALIZATION_MEAN,normalization_std=NORMALIZATION_STD,
             patch_size=16 if backbone_name==VIT_ID else None,
             vit_variant='ViT-Base/16' if backbone_name==VIT_ID else None,
-            classifier='canonical_class_indexed',implementation='native_torch')
+            classifier=('FedCLASS/convs/linears.py:SimpleLinear'
+                        if backbone_name=='fedclass_resnet8' else 'canonical_class_indexed'),
+            implementation=('vendored_original_FedCLASS_architecture'
+                            if backbone_name=='fedclass_resnet8' else 'native_torch'),
+            upstream_source=('FedCLASS/convs/resnet_client.py:resnet8 + FedCLASS/convs/linears.py:SimpleLinear'
+                             if backbone_name=='fedclass_resnet8' else None))
     def forward(self,x):return self.classifier(self.features(x))
 
 # One registry, intentionally easy to extend with requested ViT/ResNet variants later.
