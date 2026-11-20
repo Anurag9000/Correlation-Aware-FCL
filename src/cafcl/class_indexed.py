@@ -11,10 +11,21 @@ from torch import nn
 
 
 def classifier_parameter_names(model):
-    """Return last Linear projection's parameter names for supported models."""
-    found = [(n,m) for n,m in model.named_modules() if isinstance(m, nn.Linear)]
+    """Return the last 2D affine projection's parameter names.
+
+    Frozen upstream methods may implement their linear output head as a
+    custom ``nn.Module`` with ``nn.Parameter`` weight/bias fields rather than
+    subclassing ``nn.Linear`` (FedCLASS SimpleLinear is one example).
+    """
+    found = []
+    for name, module in model.named_modules():
+        weight = getattr(module, 'weight', None)
+        bias = getattr(module, 'bias', None)
+        if (isinstance(weight, nn.Parameter) and weight.ndim == 2
+                and (bias is None or isinstance(bias, nn.Parameter))):
+            found.append((name, module))
     if not found:
-        raise ValueError('A class-indexed classifier requires a final Linear layer')
+        raise ValueError('A class-indexed classifier requires a final 2D affine layer')
     name, layer=found[-1]
     prefix=f'{name}.' if name else ''
     return prefix+'weight', prefix+'bias' if layer.bias is not None else None

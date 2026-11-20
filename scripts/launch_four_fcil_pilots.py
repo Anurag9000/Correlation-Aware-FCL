@@ -197,10 +197,10 @@ def main() -> int:
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--data-root", type=Path, default=ROOT / "data")
     parser.add_argument("--output-dir", type=Path, default=None)
-    parser.add_argument("--min-free-mib", type=int, default=28672,
-                        help="minimum free GPU memory before launch; default reserves 4 GiB on a 32-GiB card")
-    parser.add_argument("--smoke-reserve-mib", type=int, default=4096,
-                        help="minimum measured free VRAM after the eight-process smoke")
+    parser.add_argument("--min-free-mib", type=int, default=0,
+                        help="optional free VRAM gate; default is zero")
+    parser.add_argument("--smoke-reserve-mib", type=int, default=0,
+                        help="minimum measured free VRAM after the eight-process smoke; default is zero")
     parser.add_argument("--allow-shared-gpu", action="store_true",
                         help="measure and allow the currently active GPU jobs to share GPU 0")
     parser.add_argument("--poll-seconds", type=int, default=300)

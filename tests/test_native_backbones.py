@@ -54,6 +54,18 @@ def test_backward_uses_only_active_classifier_rows_both_backbones():
         assert torch.count_nonzero(next(m.features.parameters()).grad)>0
 
 
+def test_fedclass_custom_simplelinear_head_supports_class_row_freezing():
+    from cafcl.class_indexed import freeze_other_class_rows
+    model=create_model('fedclass_resnet8',100)
+    assert classifier_parameter_names(model)==('classifier.weight','classifier.bias')
+    model.train()
+    logits=model(torch.randn(2,3,32,32))
+    canonical_active_loss(logits,torch.tensor([8,9]),(8,9)).backward()
+    freeze_other_class_rows(model,{8,9})
+    assert torch.count_nonzero(model.classifier.weight.grad[[0,7,10,99]])==0
+    assert torch.count_nonzero(model.classifier.weight.grad[[8,9]])>0
+
+
 def test_production_batch64_and_swappable_backbone_guard():
     from cafcl.full_matrix import base
     for model_id in (VIT_ID,CNN_ID):

@@ -135,11 +135,12 @@ def worker(suite, method, model_id, start_dir, timeout):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gpu", type=int, default=0)
-    parser.add_argument("--reserve-mib", type=int, default=4096)
+    parser.add_argument("--reserve-mib", type=int, default=0,
+                        help="minimum free VRAM after the smoke; default is zero")
     parser.add_argument("--allow-shared-gpu", action="store_true",
                         help="include currently allocated compute processes in the measured baseline")
     parser.add_argument("--timeout", type=int, default=300)
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--worker", type=int, choices=range(8), default=None,
                         help=argparse.SUPPRESS)
     parser.add_argument("--start-dir", type=Path, help=argparse.SUPPRESS)
@@ -155,6 +156,9 @@ def main():
         suite, method, model_id = SUITES[args.worker // 2]
         worker(suite, method, model_id, args.start_dir, args.timeout)
         return 0
+
+    if args.output_dir is None:
+        parser.error("--output-dir is required for the smoke supervisor")
 
     args.output_dir.mkdir(parents=True, exist_ok=False)
     start_dir = args.output_dir / "barrier"
