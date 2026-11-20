@@ -94,3 +94,16 @@ def test_source_proxy_dataset_keeps_original_accessors_and_fixes_numpy_compariso
     assert label==2 and tuple(image.shape)==(3,32,32)
     assert source.__class__.__mro__[1].__getitem__.__code__.co_filename.endswith(
         'GLFC/src/proxy_data.py' if method=='native_glfc' else 'LGA/proxy_data.py')
+
+
+@pytest.mark.parametrize('method',['native_glfc','native_lga'])
+def test_original_proxy_single_class_multiple_gradients_dataset_shape(method):
+    import numpy as np
+    from cafcl.upstream_native_proxy import (
+        proxy_dataset_adapter_class,original_proxy_test_transform)
+    source=proxy_dataset_adapter_class(method)(original_proxy_test_transform(method))
+    source.getTestData([[np.zeros((32,32,3),dtype=np.uint8)
+                         for _ in range(80)]],[18])
+    assert len(source)==80
+    _,target=source[63]
+    assert target==18

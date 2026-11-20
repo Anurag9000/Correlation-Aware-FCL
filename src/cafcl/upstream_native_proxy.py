@@ -180,7 +180,11 @@ def proxy_dataset_adapter_class(method):
     class SourceContainerCompat(source):
         def getTestData(self,*args,**kwargs):
             super().getTestData(*args,**kwargs)
-            if isinstance(self.TestData,np.ndarray):
+            # One recovered class stays a plain Python list in the
+            # original source's concatenate() helper; several classes
+            # become an ndarray. Both paths need the original __len__
+            # methods' expected .shape[0] without ambiguous != [].
+            if isinstance(self.TestData,(np.ndarray,list)) and len(self.TestData)>0:
                 self.TestData=_ProxyArrayList(self.TestData)
     return SourceContainerCompat
 
