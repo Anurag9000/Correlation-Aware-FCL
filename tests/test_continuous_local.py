@@ -87,9 +87,12 @@ def test_rebased_deltas_include_unsent_offline_updates():
     client.pending_upload_examples=20
     client.pending_upload_classes={0,5}
     client.pending_upload_class_counts={0:10,5:10}
-    # Server has moved since client downloaded 2,2; private change is 3,1.
+    # Server moved since the client's download. Version-lag damping is 1/(1+lag).
     uploaded=anchored_upload(client,{'w':torch.tensor([9.,9.])})
-    assert uploaded['weights']['w'].tolist()==pytest.approx([12.,10.])
+    assert uploaded['weights']['w'].tolist()==pytest.approx([10.5,9.5])
+    assert uploaded['stale_update_scale']==pytest.approx(.5)
+    assert uploaded['staleness_versions']==1
+    assert uploaded['aggregation_input_semantics']=='stale_delta_damped_bn_safe'
     assert uploaded['anchor_version']==0
     assert uploaded['accumulated_classes']==[0,5]
 

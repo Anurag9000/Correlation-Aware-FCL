@@ -91,7 +91,7 @@ def make_design(jobs,*,mode,replay_ratio):
         replay_policy=("independent per-client Algorithm R; accepted global archive"
                        if mode=="reservoir" else "disabled"),
         upstream_fidelity="FedCLASS original ResNet8 + SimpleLinear + CE/FedAvg; v16 asynchronous class-IL adaptation",
-        aggregation_on_return="versioned G+(local-anchor) noncanonical stale FedAvg adapter",
+        aggregation_on_return="v18 noncanonical G+alpha*(local-anchor), alpha=1/(1+version lag), BN-safe, single-stale terminal-flush cap 1/num_clients",
         fully_connected="5/5 clients upload and receive every synchronization",
         round_robin="4/5 clients upload and receive, one excluded but still trains",
         full_and_offline_same_gpu=0,
@@ -187,7 +187,7 @@ def main(argv=None):
         "\n**Source and method fidelity:** upstream FedCLASS ResNet8, SimpleLinear,"
         " CE and sample-weighted FedAvg; adapted to the v16 class-pair stream and"
         " offline-only communication intervention. Returning stale clients use"
-        " a noncanonical delta-rebase adapter. See FedCLASS/pilot/README.md.\n")
+        " a lag-damped, BN-safe stale rebase with a sole-stale terminal cap. See FedCLASS/pilot/README.md.\n")
     report.write_text(narrative)
     print("FEDCLASS_PAIRED_RESULT",json.dumps(comparison,indent=2),flush=True)
     print(f"Comparison: {report}",flush=True)

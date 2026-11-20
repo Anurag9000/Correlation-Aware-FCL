@@ -97,10 +97,12 @@ classes** have been integrated by the final flush.
   or a successful server download compete in the cross-entropy loss.
   Unknown future classes do not.
 - Whole-model, sample-weighted FedAvg for freshly synchronized clients.
-  The prior v16 server explicitly applies the noncanonical
-  `G_current + (L_client - A_last_download)` stale-delta rebase for a
-  returning offline client, with version/provenance metadata. This is an
-  **experimental adaptation**, not an algorithm from original FedAvg.
+  The current v18 server applies the noncanonical lag-damped
+  `G_current + alpha * (L_client - A_last_download)` stale-delta rebase for a
+  returning offline client (alpha = 1/(1+server_version_lag)). Stale BN
+  buffers retain server values; when the terminal flush has exactly one stale
+  uploader, the provisional update receives an additional 1/num_clients cap.
+  These are **experimental safeguards**, not original FedAvg.
 - All accepted client learning states are acknowledged exactly once;
   online clients receive the accepted server-global CL history.
   Disconnected clients receive **nothing** until their next sync.
