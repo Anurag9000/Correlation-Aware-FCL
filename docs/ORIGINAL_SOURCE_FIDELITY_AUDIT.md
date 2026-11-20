@@ -441,3 +441,44 @@ NO prototypes, exactly as the source prescribes. Note that threshold
 dormant under 2-class local additions. The original server
 reconstruction/monitor/model_back is still outstanding. The complete
 pilot is NOT yet fully paper faithful, gate CLOSED.
+
+## GLFC/LGA original proxy component isolated — not yet server-connected
+
+`src/cafcl/upstream_native_proxy.py` extracts the published source
+`proxyServer.dataloader`, `gradient2label`, `reconstruction`,
+`monitor`, LGA `f_monitor`, `model_back`, plus the original
+`Proxy_Data` class. These are executed from the authors' unchanged
+source AST; a source-compatible original LeNet encoder is seeded
+identically to the client prototype-sharing encoder. The original
+250-step LBFGS inversion and twenty reconstructions per label are
+retained in source `reconstruction`; no substitute algorithm is
+claimed. Tests verify original entrypoint provenance, gradient-label
+identification and 64-sample monitoring.
+
+**Integration status:** the actual simulator's GLFC/LGA server still
+does **not** invoke `proxyServer.dataloader` or apply `model_back` to
+subsequent local teachers. This component by itself does not close the
+source-to-runtime gap. Source `dataloader` assumes sufficient gradient
+prototypes to make at least one 64-sample monitoring batch even with
+`drop_last=True`; two-class stages may not. This incompatibility must
+be handled explicitly, without claiming original training semantics.
+Fidelity gate remains CLOSED.
+
+## Source proxy attached to accepted-only global server path
+
+`src/cafcl/upstream_native_proxy_server.py` now contains a production
+step that runs original-source `proxyServer.dataloader`,
+`reconstruction`, `monitor`/LGA `f_monitor`, and `model_back`
+after *accepted* model/gradient uploads, plus an explicit
+`original_source_teacher_slots` builder for subsequent original local
+`GLFC_model.train`/`LGA.train` calls.
+
+The two-class protocol can produce only 40 reconstructed images from two
+prototype receipts. The original proxy's `drop_last=True` loader of
+physical batch64 cannot monitor these. Rather than perform invalid
+zero-sample monitoring, the adapter accumulates accepted gradient receipts
+until >=4 are available. This is an **explicitly non-original** protocol
+compatibility rule; exact per-sync source behavior cannot be claimed. The
+original source 250 LBFGS inversion iterations and 20 images/prototype
+remain unchanged whenever enough receipts exist. No hidden client's
+receipt can enter the backlog before that client reconnects.
