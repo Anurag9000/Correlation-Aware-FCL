@@ -1,3 +1,13 @@
+> **2026-11-20 SCIENTIFIC-FIDELITY HOLD:** All four imported source trees are
+> byte-identical to their upstream repositories, but the existing FULL/OFFLINE
+> pilot runners DO NOT execute all original paper mechanisms. GLFC/LGA omit
+> proxy reconstruction and source exemplar selection; FEAT omits ETF geometry
+> and leverage-score selection; FedCLASS uses an adapted CE/FedAvg baseline,
+> not the original trainer execution path. Production launch is now
+> **blocked by default**; `--permit-adapted-legacy` explicitly runs only the
+> historically incomplete ablation, never a faithful paper benchmark.
+> See [the source-to-runtime audit](docs/ORIGINAL_SOURCE_FIDELITY_AUDIT.md).
+>
 > **CURRENT v16 (authoritative):** [Mandatory physical batch 64, Replay, SGD and evaluation audit](docs/V16_BATCH64_RESERVOIR_SGD_AUDIT.md). All active production model forwards used for training, Replay, EWC/MAS, gradient constraints and diagnostics use 64 inputs; scoring counts only non-padded examples. The dual ResNet-18/ViT-Base suite is two concurrent processes **on GPU 0**, 50/class global shared Replay, SGD momentum 0.9 persisted between tasks and across communication, nine learning/synchronization rounds plus terminal flush. The CIFAR-100 factorial ledger is frozen in [v16 manifest](configs/designs/stream_v16_batch64.json), 32,133 jobs/backbone. Previous v6–v15 split-batch and memory-policy descriptions below are historical; do not execute their command examples as current settings. Old result files and archived manifests remain intact for scientific provenance.
 
 > **CURRENT v15 dual pilot:** Physical batch 64 = effective batch 64 on both ResNet-18 and ViT-Base/16. No microbatching or gradient accumulation in the two-run campaign; the microbatch setting is explicitly tied to the requested batch size. The Python runner does one full logical-batch forward/backward before each SGD step (a final incomplete batch naturally contains fewer than 64 images). Job IDs and output roots are isolated from v14. The factorial research ledger is unchanged and still has its separately configured physical microbatch behavior. [Current launch settings](docs/V15_PHYSICAL_BATCH_PILOT.md).

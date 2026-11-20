@@ -1,3 +1,11 @@
+> **SOURCE-FIDELITY HOLD:** The original FedCLASS files are verified
+> byte-for-byte but this pilot's adapted CE/FedAvg trainer is NOT a direct
+> execution of `FedCLASS/models/ce.py:CE._train`. Standard production
+> launch now fails closed. `--plan-only` remains available.
+> `--permit-adapted-legacy` explicitly permits only the old adapted
+> baseline ablation, not the original CE/FedAvg implementation.
+> See [the audit](../../docs/ORIGINAL_SOURCE_FIDELITY_AUDIT.md).
+>
 # FedCLASS CE + FedAvg — fully connected versus round-robin offline pilot
 
 This is the **FedCLASS baseline port** into the v16 `Correlation-Aware-FCL`

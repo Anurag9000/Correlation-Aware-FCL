@@ -1,3 +1,16 @@
-# LGA — full vs rotating-offline pilot
+# LGA — source-fidelity hold
 
-Run from the repository root with `bash LGA/pilot/run.sh --plan-only` to inspect the frozen experiment schedule, then `bash LGA/pilot/run.sh` to launch the concurrent two-arm CUDA pilot. Read [method-fidelity caveats](../../docs/NATIVE_OFFLINE_FIDELITY.md) before interpreting accuracy. Both arms train all five clients and differ only in server communication availability.
+The original LGA repository is copied byte-for-byte under `LGA/`, but
+the existing pilot is a **partial adapted-loss ablation**, NOT the complete
+original published algorithm. Its source-specific mechanisms are inventoried
+in [ORIGINAL_SOURCE_FIDELITY_AUDIT.md](../../docs/ORIGINAL_SOURCE_FIDELITY_AUDIT.md).
+
+`bash LGA/pilot/run.sh --plan-only` is safe for configuration inspection.
+
+`bash LGA/pilot/run.sh` now **refuses** to claim original-method fidelity
+or launch expensive experimental training. For a historical incomplete
+ablation only, one can pass `--permit-adapted-legacy`, explicitly accepting
+that the original algorithm is NOT being run.
+
+The actual paper-faithful port remains to be implemented and independently
+validated before launching the requested fully faithful experiments.

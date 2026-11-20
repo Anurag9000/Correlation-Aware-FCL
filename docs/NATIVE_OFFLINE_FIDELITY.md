@@ -1,3 +1,11 @@
+> **FIDELITY HOLD:** These three suites currently execute adapted losses and
+> native backbones only; upstream proxy, exemplar and geometric algorithms
+> remain unimplemented. Default launch refuses execution. This page describes
+> the **legacy adapted ablations only**; see
+> [the exact source audit](ORIGINAL_SOURCE_FIDELITY_AUDIT.md).
+> An explicitly labelled old ablation may be run with
+> `--permit-adapted-legacy`, but MUST NOT be presented as GLFC/LGA/FEAT.
+>
 # Three native-method CIFAR-100 offline-client pilots
 
 ## Entry points

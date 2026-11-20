@@ -1,3 +1,9 @@
+> **FIDELITY BLOCKED:** The four original-paper algorithms are NOT yet
+> reproduced. This campaign supervisor will refuse to launch new GPU
+> experiments unless `--permit-adapted-legacy` is explicitly passed; doing
+> so runs the OLD incomplete adaptations, not valid published-method
+> reproductions. See [fidelity audit](ORIGINAL_SOURCE_FIDELITY_AUDIT.md).
+>
 # Four-suite eight-arm pilot campaign
 
 `python scripts/launch_four_fcil_pilots.py --plans-only` validates the four configured pairs without touching GPU state. `--preflight-only` also checks CUDA, GPU 0 availability, free VRAM, and compute-process use. GPU admission and post-smoke free-VRAM thresholds default to zero, so the run can use all available memory. If shared-GPU execution is authorized, `--allow-shared-gpu` permits current occupants and measures their combined peak. The default `--client-training-concurrency 1` trains one of each run's five persistent clients at a time in waves separated by the existing task barriers and reuses one CUDA stream within each run; all eight experiment processes still run concurrently and each physical batch remains 64. Before training, the smoke mirrors this concurrency using each production backbone/loss, five client models, the server model, and native teacher copies; it records peak device and per-process allocator memory. A CUDA out-of-memory failure stops the smoke and identifies the actual capacity limit. The smoke uses random inputs and does not create experiment checkpoints.
