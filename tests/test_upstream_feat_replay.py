@@ -50,7 +50,7 @@ def test_private_feat_retention_uses_exact_source_and_preserves_tickets():
     from cafcl.continual import LocalState
     torch.manual_seed(3)
     state=LocalState(0)
-    cfg=SimpleNamespace(batch_size=64,memory_per_class=3,seed=4)
+    cfg=SimpleNamespace(batch_size=64,memory_per_class=3,seed=4,dataset='synthetic')
     chosen=source_feat_select_local(
         FakeModel(),state,FakeBank(),cfg,torch.device('cpu'),
         list(range(12)),(0,1))
