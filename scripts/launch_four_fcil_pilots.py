@@ -19,6 +19,7 @@ import time
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+from cafcl.upstream_fidelity import require_all_verified
 SUITES = ("glfc", "lga", "feat", "fedclass")
 
 
@@ -213,6 +214,8 @@ def main() -> int:
     parser.add_argument("--startup-timeout", type=int, default=180)
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument("--plans-only", action="store_true", help="validate all four job plans without GPU checks")
+    parser.add_argument("--permit-adapted-legacy", action="store_true",
+                        help="Explicitly run four known-incomplete adapted-loss suites, not faithful papers")
     parser.add_argument("--wait-for-gpu", action="store_true",
                         help="inside tmux, check GPU admission every --poll-seconds until it is available")
     parser.add_argument("--resume", action="store_true",
@@ -230,6 +233,12 @@ def main() -> int:
     env["CUDA_VISIBLE_DEVICES"] = "0"
     env.setdefault("OMP_NUM_THREADS", "1")
     env.setdefault("MKL_NUM_THREADS", "1")
+    if not (args.preflight_only or args.plans_only):
+        try:
+            require_all_verified(permit_legacy=args.permit_adapted_legacy)
+        except RuntimeError as exc:
+            print(f'FIDELITY_BLOCKED: {exc}',file=sys.stderr,flush=True)
+            return 2
     if args.wait_for_gpu and (args.preflight_only or args.plans_only):
         print("PREFLIGHT_BLOCKED: --wait-for-gpu cannot be combined with a preflight-only mode", file=sys.stderr)
         return 2
@@ -413,6 +422,8 @@ def main() -> int:
                            "--epochs", str(args.epochs), "--client-training-concurrency",
                            str(args.client_training_concurrency), "--gpu", "0", "--data-root", str(args.data_root),
                            "--no-download", "--output-dir", str(args.output_dir / "native")]
+            if args.permit_adapted_legacy:
+                command.append('--permit-adapted-legacy')
             log = (logs / f"{suite}.log").open("w")
             proc = subprocess.Popen(command, cwd=ROOT, env=env, stdout=log,
                                     stderr=subprocess.STDOUT, start_new_session=True)

@@ -140,7 +140,7 @@ def test_fedclass_launcher_starts_two_workers_before_wait_and_both_gpu0(
         return {"mock_success":True}
     monkeypatch.setattr(runner.subprocess,"Popen",popen)
     monkeypatch.setattr(runner,"build_report",report)
-    runner.main(["--no-download","--output-dir",str(tmp_path),"--memory-mode","reservoir"])
+    runner.main(["--no-download","--output-dir",str(tmp_path),"--memory-mode","reservoir","--permit-adapted-legacy"])
     assert len(created)==2
     assert [cmd[-2:] for cmd,_ in created]==[
         ["--worker","0"],["--worker","1"]]

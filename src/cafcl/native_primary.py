@@ -11,6 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 from .primary_probe import make_jobs,audited_plan,build_report
 from .simulator import run_experiment,atomic_json
+from .upstream_fidelity import fidelity_report, require_verified
 
 SUITES={
     'glfc':('native_glfc','native_glfc_cbam'),
@@ -42,6 +43,8 @@ def main(argv=None):
     p.add_argument('--data-root',default='data')
     p.add_argument('--output-dir',default='results/native_offline_pilots')
     p.add_argument('--plan-only',action='store_true')
+    p.add_argument('--permit-adapted-legacy',action='store_true',
+                   help='Explicitly run the OLD incomplete native-loss adaptation, NOT the original algorithm')
     p.add_argument('--no-download',action='store_true')
     p.add_argument('--worker',type=int,choices=(0,1),default=None,help=argparse.SUPPRESS)
     args=p.parse_args(argv)
@@ -52,13 +55,15 @@ def main(argv=None):
     plan.update(suite=args.suite,native_method=SUITES[args.suite][0],
                 native_upstream_model=SUITES[args.suite][1],experiment='native_compatible_port',
                 full_and_offline_same_gpu=0,concurrent_processes=2,
-                source_fidelity='native_losses_and_backbones; see FIDELITY.md for deviations')
+                source_fidelity='UNVERIFIED_PARTIAL_ADAPTATION',
+                upstream_fidelity=fidelity_report(args.suite))
     root=Path(args.output_dir)/args.suite/('seed'+str(args.seed))
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',plan)
     if args.plan_only:
         print(json.dumps(plan,indent=2))
         return
+    require_verified(args.suite, permit_legacy=args.permit_adapted_legacy)
     import torch
     if not torch.cuda.is_available():
         raise RuntimeError('CUDA required; production pilots cannot silently run on CPU')
@@ -74,6 +79,7 @@ def main(argv=None):
           '--client-training-concurrency',str(args.client_training_concurrency),
           '--gpu','0','--data-root',args.data_root,'--output-dir',args.output_dir,
           '--no-download']
+    if args.permit_adapted_legacy:base.append('--permit-adapted-legacy')
     handles=[]
     codes=[]
     try:

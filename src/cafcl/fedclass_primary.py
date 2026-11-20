@@ -22,6 +22,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 from .primary_probe import make_jobs, audited_plan, build_report
 from .simulator import atomic_json, run_experiment
+from .upstream_fidelity import fidelity_report, require_verified
 
 SOURCE_COMMIT="e03e30653165b76ddf980393794f395f838ee967"
 MEMORY_MODES=("reservoir","none")
@@ -121,6 +122,8 @@ def main(argv=None):
     p.add_argument("--data-root",default="data")
     p.add_argument("--output-dir",default="results/fedclass_pilot")
     p.add_argument("--plan-only",action="store_true")
+    p.add_argument("--permit-adapted-legacy",action="store_true",
+                   help="Explicitly run the OLD CE/FedAvg adapted trainer, NOT the original CE._train path")
     p.add_argument("--no-download",action="store_true")
     p.add_argument("--worker",type=int,choices=(0,1),default=None,help=argparse.SUPPRESS)
     args=p.parse_args(argv)
@@ -132,10 +135,13 @@ def main(argv=None):
     root=_output_root(args)
     root.mkdir(exist_ok=True,parents=True)
     design=make_design(jobs,mode=args.memory_mode,replay_ratio=args.replay_ratio)
+    design['upstream_fidelity']=fidelity_report('fedclass')
+    design['source_fidelity']='UNVERIFIED_PARTIAL_ADAPTATION'
     atomic_json(root/"design.json",design)
     if args.plan_only:
         print(json.dumps(design,indent=2),flush=True)
         return
+    require_verified('fedclass',permit_legacy=args.permit_adapted_legacy)
     import torch
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA GPU 0 required; the production pilot never silently falls back to CPU")
@@ -153,6 +159,7 @@ def main(argv=None):
         "--client-training-concurrency",str(args.client_training_concurrency),
         "--gpu","0","--data-root",args.data_root,"--output-dir",args.output_dir,
         "--no-download"]
+    if args.permit_adapted_legacy:command.append('--permit-adapted-legacy')
     processes=[]
     codes=[]
     try:

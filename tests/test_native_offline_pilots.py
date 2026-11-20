@@ -193,7 +193,7 @@ def test_pilot_dispatch_spawns_both_arms_concurrently_on_gpu_zero(monkeypatch,tm
         launched.append((cmd,kwargs))
         return FakeProcess()
     monkeypatch.setattr(n.subprocess,'Popen',fake_popen)
-    n.main(['--suite','glfc','--output-dir',str(tmp_path),'--no-download'])
+    n.main(['--suite','glfc','--output-dir',str(tmp_path),'--no-download','--permit-adapted-legacy'])
     assert len(launched)==2
     assert [cmd[-2:] for cmd,_ in launched]==[['--worker','0'],['--worker','1']]
     assert all(kwargs['env']['CUDA_VISIBLE_DEVICES']=='0' for _,kwargs in launched)
