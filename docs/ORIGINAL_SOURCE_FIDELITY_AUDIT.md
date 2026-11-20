@@ -201,3 +201,19 @@ These identities prevent silent reuse of earlier completed partial ports.
 
 **No change to the fidelity gate:** all four are still incomplete until
 all original mechanisms and per-stage source calls are implemented.
+
+## FEAT ETF geometry reconstruction (NOT author-source parity)
+
+The source-backed FEAT pilot now uses the original vendored FEAT ResNet18
+feature extractor paired with a deterministic unit-norm simplex ETF classifier
+rather than a trainable linear classifier. This head is reconstructed from the
+CVPR 2026 paper's fixed-ETF geometry because `utils/inc_net.py` is absent from
+the authors' official repository and its git history. An orthonormal embedding
+gives all off-diagonal prototype inner products exactly `-1/(C-1)`; the
+prototypes are frozen parameters, shared by model state. The source GSA function
+is still executed.
+
+The output is marked `paper_reconstructed_fixed_ETF` and **not** the
+unpublished authors' `IncrementalNet_CausalETF`. FEAT V3 job IDs distinguish
+the fixed-ETF model from the earlier trainable-head native-loss pilot.
+The inference energy correction and exemplar scheduling are still missing.

@@ -214,10 +214,39 @@ def _fedclass_original_linear(in_features,out_features):
     return module.SimpleLinear(in_features,out_features,bias=True)
 
 
+class FixedSimplexETFHead(nn.Module):
+    """Fixed C-class simplex ETF using a d-dimensional orthonormal embedding.
+
+    This reproduces the *paper's geometry*, not the unpublished FEAT
+    IncrementalNet_CausalETF source. Each row has unit norm; pairwise
+    inner products equal -1/(C-1). The prototypes stay fixed across local
+    tasks and federated synchronizations as FEAT requires.
+
+    A requires_grad=False Parameter preserves the existing canonical
+    classifier introspection and leaves the fixed prototype tensor in
+    model.state_dict for full state synchronization.
+    """
+    def __init__(self,features,classes):
+        super().__init__()
+        if not (2<=classes<=features):
+            raise ValueError('Nondegenerate simplex ETF needs 2<=C<=d')
+        basis,_=torch.linalg.qr(torch.randn(features,classes),mode='reduced')
+        center=torch.eye(classes)-torch.ones(classes,classes)/classes
+        etf=(classes/(classes-1))**.5*(basis@center).T.contiguous()
+        self.in_features=features
+        self.out_features=classes
+        self.weight=nn.Parameter(etf,requires_grad=False)
+        self.register_buffer('source_model_reconstruction',torch.tensor(1,dtype=torch.int8))
+
+    def forward(self,features):
+        return F.linear(features,self.weight,None)
+
+
 FEATURE_FACTORIES={VIT_ID:ViTBaseFeature,CNN_ID:CIFARResNet18Feature,
     'native_glfc_cbam':lambda:NativePublishedFeature('native_glfc_cbam'),
     'native_lga_cbam':lambda:NativePublishedFeature('native_lga_cbam'),
     'native_feat_resnet':lambda:NativePublishedFeature('native_feat_resnet'),
+    'native_feat_etf':lambda:NativePublishedFeature('native_feat_resnet'),
     'fedclass_resnet8':FedCLASSResNet8Feature}
 MODEL_IDS=tuple(FEATURE_FACTORIES)
 
@@ -228,6 +257,8 @@ class CanonicalClassifier(nn.Module):
         self.features=FEATURE_FACTORIES[backbone_name]()
         self.classifier=(_fedclass_original_linear(self.features.num_features,classes)
                          if backbone_name=='fedclass_resnet8'
+                         else FixedSimplexETFHead(self.features.num_features,classes)
+                         if backbone_name=='native_feat_etf'
                          else nn.Linear(self.features.num_features,classes))
         self.backbone_description=dict(model_id=backbone_name,model_family='vit' if backbone_name==VIT_ID else 'cnn',
             input_size=32,classes=classes,pretrained=False,initialization='seeded_random',
@@ -235,9 +266,14 @@ class CanonicalClassifier(nn.Module):
             patch_size=16 if backbone_name==VIT_ID else None,
             vit_variant='ViT-Base/16' if backbone_name==VIT_ID else None,
             classifier=('FedCLASS/convs/linears.py:SimpleLinear'
-                        if backbone_name=='fedclass_resnet8' else 'canonical_class_indexed'),
+                        if backbone_name=='fedclass_resnet8' else
+                        'fixed_simplex_etf_paper_derived_missing_author_source'
+                        if backbone_name=='native_feat_etf' else
+                        'canonical_class_indexed'),
             implementation=('vendored_original_FedCLASS_architecture'
-                            if backbone_name=='fedclass_resnet8' else 'native_torch'),
+                            if backbone_name=='fedclass_resnet8' else
+                            'vendored_FEAT_resnet18_plus_paper_reconstructed_fixed_ETF'
+                            if backbone_name=='native_feat_etf' else 'native_torch'),
             upstream_source=('FedCLASS/convs/resnet_client.py:resnet8 + FedCLASS/convs/linears.py:SimpleLinear'
                              if backbone_name=='fedclass_resnet8' else None))
     def forward(self,x):return self.classifier(self.features(x))

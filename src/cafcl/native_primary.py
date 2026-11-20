@@ -16,7 +16,7 @@ from .upstream_fidelity import fidelity_report, require_verified
 SUITES={
     'glfc':('native_glfc','native_glfc_cbam'),
     'lga': ('native_lga','native_lga_cbam'),
-    'feat':('native_feat','native_feat_resnet'),
+    'feat':('native_feat','native_feat_etf'),
 }
 
 def make_native_jobs(suite,*,seed=0,lr=.03,epochs=10,client_training_concurrency=0):
@@ -25,9 +25,9 @@ def make_native_jobs(suite,*,seed=0,lr=.03,epochs=10,client_training_concurrency
     full,_=make_jobs(backbone='cnn',seed=seed,lr=lr,epochs=epochs,replay_fraction=1/9)
     full=replace(full,method=method,model=model,
                  client_training_concurrency=client_training_concurrency,
-                 job_id=f'{suite.upper()}_PILOT_SOURCE_CORE_V2_FULL_SEED{seed}')
+                 job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V3' if suite=='feat' else 'V2'}_FULL_SEED{seed}")
     offline=replace(full,participation=.8,stream_offline_policy='rotate_once',
-                    job_id=f'{suite.upper()}_PILOT_SOURCE_CORE_V2_ROTATING_OFFLINE_SEED{seed}')
+                    job_id=f"{suite.upper()}_PILOT_SOURCE_CORE_{'V3' if suite=='feat' else 'V2'}_ROTATING_OFFLINE_SEED{seed}")
     for cfg in (full,offline):cfg.validate()
     return full,offline
 
