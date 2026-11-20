@@ -46,7 +46,7 @@ def original_feat_selector():
     return namespace['FLDataSelector']
 
 
-def _source_att_features(model,bank,indices,device,batch_size):
+def _source_att_features(model,bank,indices,device,batch_size,*,synthetic_fixture=False):
     """Authors' FEAT._extract_client_features obtains network()['att'].
 
     The FEAT upstream backbone returns ['features'] and ['att']; the latter
@@ -74,7 +74,7 @@ def _source_att_features(model,bank,indices,device,batch_size):
                     if not isinstance(source,dict) or 'att' not in source:
                         raise RuntimeError('Source FEAT backbone did not expose att')
                     feats=source['att']
-                elif bank.num_classes==4 and hasattr(model,'features'):
+                elif synthetic_fixture and hasattr(model,'features'):
                     # Tiny synthetic unit-test fixture only, never production.
                     feats=model.features(raw)
                 else:
@@ -106,7 +106,8 @@ def source_feat_select_local(model,client,bank,cfg,device,indices,active_classes
         candidates=sorted(int(i) for i in indices if int(bank.train.targets[i])==cls)
         if not candidates:
             raise RuntimeError('FEAT source selection received empty class')
-        feats=_source_att_features(model,bank,candidates,device,cfg.batch_size)
+        feats=_source_att_features(model,bank,candidates,device,cfg.batch_size,
+                                   synthetic_fixture=(cfg.dataset=='synthetic'))
         capacity=min(int(cfg.memory_per_class),len(candidates))
         if capacity<=0:
             continue
