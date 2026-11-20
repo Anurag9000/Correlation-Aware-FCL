@@ -137,7 +137,35 @@ class CIFARResNet18Feature(nn.Module):
 # Feature-builder registry: registering a new CNN or ViT is a single, explicit
 # factory addition. Public CLI aliases remain intentionally limited to the
 # requested two production variants until another architecture is approved.
-FEATURE_FACTORIES={VIT_ID:ViTBaseFeature,CNN_ID:CIFARResNet18Feature}
+# Native GLFC/LGA/FEAT backbones are loaded from frozen, byte-identical
+# vendored upstream files. No modifications to those upstream directories.
+class NativePublishedFeature(nn.Module):
+    num_features=512
+    def __init__(self,method):
+        super().__init__()
+        import importlib.util
+        from pathlib import Path
+        directory={'native_glfc_cbam':'GLFC/src/ResNet.py',
+                   'native_lga_cbam':'LGA/ResNet.py',
+                   'native_feat_resnet':'FEAT/convs/resnet.py'}[method]
+        path=Path(__file__).resolve().parents[2]/directory
+        if not path.is_file():raise FileNotFoundError(f'Original upstream source unavailable: {path}')
+        name='_cafcl_upstream_'+method
+        spec=importlib.util.spec_from_file_location(name,path)
+        module=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.method=method
+        self.original=(module.resnet18(pretrained=False) if method=='native_feat_resnet'
+                       else module.resnet18_cbam(pretrained=False))
+
+    def forward(self,x):
+        out=self.original(x)
+        return out['features'] if self.method=='native_feat_resnet' else out
+
+FEATURE_FACTORIES={VIT_ID:ViTBaseFeature,CNN_ID:CIFARResNet18Feature,
+    'native_glfc_cbam':lambda:NativePublishedFeature('native_glfc_cbam'),
+    'native_lga_cbam':lambda:NativePublishedFeature('native_lga_cbam'),
+    'native_feat_resnet':lambda:NativePublishedFeature('native_feat_resnet')}
 MODEL_IDS=tuple(FEATURE_FACTORIES)
 
 class CanonicalClassifier(nn.Module):
