@@ -160,7 +160,16 @@ class NativePublishedFeature(nn.Module):
 
     def forward(self,x):
         out=self.original(x)
-        return out['features'] if self.method=='native_feat_resnet' else out
+        if self.method=='native_feat_resnet':
+            return out['features']
+        # LGA's upstream feature extractor deliberately returns [N,512,4,4];
+        # its original myNetwork.network applies AvgPool2d(4) and flattening
+        # before the classifier. The port must reproduce that projection.
+        if out.ndim==4:
+            out=torch.nn.functional.adaptive_avg_pool2d(out,1).flatten(1)
+        if out.ndim!=2 or out.shape[1]!=self.num_features:
+            raise RuntimeError(f'Unexpected published backbone features: {out.shape}')
+        return out
 
 FEATURE_FACTORIES={VIT_ID:ViTBaseFeature,CNN_ID:CIFARResNet18Feature,
     'native_glfc_cbam':lambda:NativePublishedFeature('native_glfc_cbam'),
