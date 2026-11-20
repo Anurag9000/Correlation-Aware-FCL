@@ -188,3 +188,16 @@ prototype-relation target `logPP`. Thus GSA gradients flow into student
 features but NOT into the target prototype/classifier weights. The regression
 tests assert this original behavior (rather than incorrectly demanding a
 prototype gradient).
+
+## 2026-11-20 source-v2 experiment identities
+
+GLFC, LGA and FEAT use new `PILOT_SOURCE_CORE_V2` job IDs, and their
+source runner outputs live in `seedN/source_v2`. FedCLASS now has explicit
+`authors_exemplars` and `none` modes, uses `SOURCE_V2` job IDs, and has
+`*_source_v2` output folders. The old FedCLASS CLI flag `reservoir` is
+rejected so its source first-k exemplars cannot be mislabeled as Algorithm R.
+Its original CE optimizer resets; there is no source 50/50 replay ratio.
+These identities prevent silent reuse of earlier completed partial ports.
+
+**No change to the fidelity gate:** all four are still incomplete until
+all original mechanisms and per-stage source calls are implemented.

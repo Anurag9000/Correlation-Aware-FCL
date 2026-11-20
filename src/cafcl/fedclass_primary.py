@@ -25,14 +25,14 @@ from .simulator import atomic_json, run_experiment
 from .upstream_fidelity import fidelity_report, require_verified
 
 SOURCE_COMMIT="e03e30653165b76ddf980393794f395f838ee967"
-MEMORY_MODES=("reservoir","none")
+MEMORY_MODES=("authors_exemplars","none")
 
 
-def make_fedclass_jobs(*,seed=0,lr=.03,epochs=10,memory_mode="reservoir",
+def make_fedclass_jobs(*,seed=0,lr=.03,epochs=10,memory_mode="authors_exemplars",
                        replay_ratio=1.,client_training_concurrency=0):
     """Build matched FedCLASS CE/FedAvg class-IL jobs.
 
-    reservoir: the v16 50-TRAIN-exemplars/class Algorithm R ER protocol;
+    authors_exemplars: execute original FedCLASS BaseLearner first-k selection;
     none: original CE/FedAvg without memory or historical replay.
     In either case, only communication visibility differs across the pair.
     """
@@ -40,27 +40,28 @@ def make_fedclass_jobs(*,seed=0,lr=.03,epochs=10,memory_mode="reservoir",
         raise ValueError(f"Unknown memory mode: {memory_mode}")
     if not (0. <= replay_ratio <= 10.):
         raise ValueError("Replay ratio must be finite and between 0 and 10")
-    if memory_mode=="reservoir" and replay_ratio<=0:
-        raise ValueError("Reservoir mode needs positive replay_ratio")
+    if memory_mode=="authors_exemplars" and replay_ratio!=1.:
+        raise ValueError("The original source CE does not have a tunable replay ratio; only compatibility value 1 is accepted")
     if memory_mode=="none" and replay_ratio!=1.:
         raise ValueError("No-replay mode must use the default replay ratio")
-    has_replay=memory_mode=="reservoir"
-    fraction=1./9. if has_replay else 0.
+    has_replay=memory_mode=="authors_exemplars"
+    fraction=0. # No Algorithm R in the FedCLASS source; author picks first k.
     baseline,_=make_jobs(backbone="cnn",seed=seed,lr=lr,epochs=epochs,
                          replay_fraction=fraction)
-    tag="ER50" if has_replay else "VANILLA_NO_REPLAY"
+    tag="AUTHORS_FIRST50" if has_replay else "AUTHORS_NO_REPLAY"
     baseline=replace(
         baseline,model="fedclass_resnet8",
         method=("replay" if has_replay else "sgd"),
         memory_per_class=(50 if has_replay else 0),
-        replay_reservoir_fraction=fraction,
-        replay_ratio=(replay_ratio if has_replay else 0.),
+        replay_reservoir_fraction=0.,
+        replay_ratio=0., # Source CE uses concatenation, not 50/50 mixed replay.
+        optimizer_state_policy="reset", # Original CE._train recreates SGD.
         aggregator="fedavg",classwise_head_merge=False,
         client_training_concurrency=client_training_concurrency,
-        job_id=f"FEDCLASS_CE_{tag}_FULL_SEED{seed}")
+        job_id=f"FEDCLASS_CE_{tag}_SOURCE_V2_FULL_SEED{seed}")
     rotating=replace(baseline,participation=.8,
                      stream_offline_policy="rotate_once",
-                     job_id=f"FEDCLASS_CE_{tag}_ROTATING_OFFLINE_SEED{seed}")
+                     job_id=f"FEDCLASS_CE_{tag}_SOURCE_V2_ROTATING_OFFLINE_SEED{seed}")
     for cfg in (baseline,rotating):cfg.validate()
     # The treatment cannot silently change anything beyond participation.
     a,b=baseline.to_dict(),rotating.to_dict()
@@ -72,7 +73,7 @@ def make_fedclass_jobs(*,seed=0,lr=.03,epochs=10,memory_mode="reservoir",
 
 def _output_root(args):
     tag=(f"seed{args.seed}_lr{args.lr:g}_epochs{args.epochs}"
-         +(f"_rr{args.replay_ratio:g}" if args.memory_mode=="reservoir" else ""))
+         +"_source_v2")
     return Path(args.output_dir)/args.memory_mode/tag
 
 
@@ -89,10 +90,11 @@ def make_design(jobs,*,mode,replay_ratio):
         local_loss="original FedCLASS/models/ce.py:CE._train, compact all-locally-known CE",
         client_class_history="last-synchronized global classes plus privately acquired classes",
         memory_mode=mode,
-        replay_ratio=(replay_ratio if mode=="reservoir" else 0.),
-        per_class_reservoir_capacity=(50 if mode=="reservoir" else 0),
-        replay_policy=("ORIGINAL FedCLASS BaseLearner._construct_exemplar_unified first-k/class; accepted global archive; legacy CLI label reservoir"
-                       if mode=="reservoir" else "disabled"),
+        replay_ratio=None, # Not an original-source hyperparameter.
+        original_first_k_per_class=(50 if mode=="authors_exemplars" else 0),
+        per_class_reservoir_capacity=0,
+        replay_policy=("AUTHORS original BaseLearner._construct_exemplar_unified first-k per class; archives synchronized under experimental protocol"
+                       if mode=="authors_exemplars" else "disabled"),
         upstream_fidelity="FedCLASS original ResNet8 + SimpleLinear + CE/FedAvg; v16 asynchronous class-IL adaptation",
         aggregation_on_return="v18 noncanonical G+alpha*(local-anchor), alpha=1/(1+version lag), BN-safe, single-stale terminal-flush cap 1/num_clients",
         fully_connected="5/5 clients upload and receive every synchronization",
@@ -114,8 +116,8 @@ def main(argv=None):
     p.add_argument("--epochs",type=int,default=10)
     p.add_argument("--client-training-concurrency",type=int,default=0,
                    help="max active clients per simulation process; 0 means all five")
-    p.add_argument("--memory-mode",choices=MEMORY_MODES,default="reservoir",
-                   help="reservoir=50 examples/class, or none=vanilla CE/FedAvg")
+    p.add_argument("--memory-mode",choices=MEMORY_MODES,default="authors_exemplars",
+                   help="authors_exemplars=original first-50/class source selection; none=source CE without exemplars")
     p.add_argument("--replay-ratio",type=float,default=1.)
     p.add_argument("--gpu",type=int,default=0,
                    help="Physical GPU 0 is mandatory for both concurrent workers")
@@ -204,8 +206,8 @@ def main(argv=None):
         raise RuntimeError("A worker returned success without both final summaries")
     report=root/"comparison"/"comparison.md"
     narrative=report.read_text()
-    label=("FedCLASS CE + 50/class Algorithm R replay + FedAvg"
-           if args.memory_mode=="reservoir"
+    label=("FedCLASS source CE + authors original first-50/class exemplars + original FedAvg"
+           if args.memory_mode=="authors_exemplars"
            else "FedCLASS vanilla CE + FedAvg (zero replay)")
     narrative=narrative.replace("Two matched Replay/FedAvg runs,",f"Two matched {label} runs,")
     narrative+=(

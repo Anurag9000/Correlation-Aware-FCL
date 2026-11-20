@@ -53,6 +53,11 @@ def audited_plan(jobs):
             offline_classes=sorted({c for rr,cid,_,labels,_ in stream if rr==r and cid==offline[r] for c in labels}),
             online_clients=[c for c in range(5) if c!=offline[r]]))
         assert len(by_round[-1]['offline_classes'])==(4 if r==0 else 2)
+    source_fedclass=baseline.model=='fedclass_resnet8'
+    per_class_source=(baseline.memory_per_class if source_fedclass and baseline.method=='replay'
+                      else ceil(450*baseline.replay_reservoir_fraction))
+    source_selection=('authors_original_first_k' if source_fedclass and baseline.method=='replay'
+                      else 'none' if source_fedclass else 'independent_classwise_algorithm_r')
     plan=dict(dataset='cifar100',seed=baseline.seed,backbone=baseline.model,batch_size=baseline.batch_size,sgd_momentum=baseline.momentum,sgd_weight_decay=baseline.weight_decay,
         client_execution_mode=('parallel_task_barriers' if not baseline.client_training_concurrency
                                else 'bounded_concurrent_task_barriers'),
@@ -60,9 +65,10 @@ def audited_plan(jobs):
         canonical_whole_model_aggregation=not baseline.classwise_head_merge,
         process_topology='two_independent_runs_on_one_gpu',
         replay_reservoir_fraction=baseline.replay_reservoir_fraction,
-        replay_sampling='independent_classwise_algorithm_r',
-        training_images_per_class=450,private_reservoir_per_class=ceil(450*baseline.replay_reservoir_fraction),
-        expected_server_exemplars_after_flush=100*ceil(450*baseline.replay_reservoir_fraction),
+        replay_sampling=source_selection,
+        source_memory_count_per_class=per_class_source,
+        training_images_per_class=450,private_reservoir_per_class=per_class_source,
+        expected_server_exemplars_after_flush=100*per_class_source,
         clients=5,classes_per_local_task=2,initial_local_tasks=2,
         subsequent_local_tasks=1,initial_new_classes_per_client=4,
         subsequent_new_classes_per_client=2,training_intervals=rounds,

@@ -88,3 +88,7 @@ The eight-arm campaign supervisor and its GPU admission/monitoring policy are do
 functions now execute for GLFC, LGA and FEAT, including source-uniform
 rather than shared sample-size weighting. Their other original mechanisms
 remain incomplete; the method-fidelity gate remains active.
+
+**New source-v2 job identity:** Native pilots have `SOURCE_CORE_V2` job
+identifiers and `seedN/source_v2` output roots. This prevents completed
+V1 adapted-loss results from being returned as a newly executed method.

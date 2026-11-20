@@ -98,12 +98,12 @@ def preflight(args, env: dict[str, str], *, plans_only: bool = False) -> tuple[l
             if suite != "fedclass":
                 command += ["--suite", suite]
             else:
-                command += ["--memory-mode", "reservoir", "--replay-ratio", "1.0"]
+                command += ["--memory-mode", "authors_exemplars", "--replay-ratio", "1.0"]
             plan = run_json(command, cwd=ROOT, env=env)
             if plan.get("total_jobs") != 2 or plan.get("clients") != 5:
                 raise RuntimeError(f"{suite} plan did not produce the required paired five-client jobs")
-            if plan.get("private_reservoir_per_class") != 50:
-                raise RuntimeError(f"{suite} plan does not retain exactly 50 examples/class")
+            if plan.get("source_memory_count_per_class") != 50:
+                raise RuntimeError(f"{suite} plan does not retain exactly 50 source-eligible examples/class")
             if plan.get("batch_size") != 64 or plan.get("sgd_momentum") != .9 or plan.get("sgd_weight_decay") != .0005:
                 raise RuntimeError(f"{suite} plan has an unexpected physical batch or SGD setting")
             if plan.get("client_training_concurrency") != args.client_training_concurrency:
@@ -414,7 +414,7 @@ def main() -> int:
             if suite == "fedclass":
                 command = ["bash", str(launcher), "--seed", str(args.seed), "--lr", str(args.lr),
                            "--epochs", str(args.epochs), "--client-training-concurrency",
-                           str(args.client_training_concurrency), "--gpu", "0", "--memory-mode", "reservoir",
+                           str(args.client_training_concurrency), "--gpu", "0", "--memory-mode", "authors_exemplars",
                            "--replay-ratio", "1.0", "--data-root", str(args.data_root), "--no-download",
                            "--output-dir", str(args.output_dir / "fedclass")]
             else:

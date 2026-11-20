@@ -25,9 +25,9 @@ def make_native_jobs(suite,*,seed=0,lr=.03,epochs=10,client_training_concurrency
     full,_=make_jobs(backbone='cnn',seed=seed,lr=lr,epochs=epochs,replay_fraction=1/9)
     full=replace(full,method=method,model=model,
                  client_training_concurrency=client_training_concurrency,
-                 job_id=f'{suite.upper()}_PILOT_FULL_V1_SEED{seed}')
+                 job_id=f'{suite.upper()}_PILOT_SOURCE_CORE_V2_FULL_SEED{seed}')
     offline=replace(full,participation=.8,stream_offline_policy='rotate_once',
-                    job_id=f'{suite.upper()}_PILOT_ROTATING_OFFLINE_V1_SEED{seed}')
+                    job_id=f'{suite.upper()}_PILOT_SOURCE_CORE_V2_ROTATING_OFFLINE_SEED{seed}')
     for cfg in (full,offline):cfg.validate()
     return full,offline
 
@@ -57,7 +57,7 @@ def main(argv=None):
                 full_and_offline_same_gpu=0,concurrent_processes=2,
                 source_fidelity='UNVERIFIED_PARTIAL_ADAPTATION',
                 upstream_fidelity=fidelity_report(args.suite))
-    root=Path(args.output_dir)/args.suite/('seed'+str(args.seed))
+    root=Path(args.output_dir)/args.suite/('seed'+str(args.seed))/'source_v2'
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',plan)
     if args.plan_only:

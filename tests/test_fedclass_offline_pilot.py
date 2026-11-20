@@ -15,7 +15,7 @@ from cafcl.models import create_model
 
 
 @pytest.mark.parametrize("mode,method,count",[
-    ("reservoir","replay",50),
+    ("authors_exemplars","replay",50),
     ("none","sgd",0),
 ])
 def test_paired_fedclass_configs_and_schedule(mode,method,count):
@@ -32,9 +32,9 @@ def test_paired_fedclass_configs_and_schedule(mode,method,count):
     assert full.epochs==hidden.epochs==10
     assert full.momentum==hidden.momentum==.9
     assert full.weight_decay==hidden.weight_decay==.0005
-    assert full.optimizer_state_policy==hidden.optimizer_state_policy=="persist"
+    assert full.optimizer_state_policy==hidden.optimizer_state_policy=="reset"
     assert full.memory_per_class==hidden.memory_per_class==count
-    assert full.replay_reservoir_fraction==(1/9 if count else 0)
+    assert full.replay_reservoir_fraction==0  # Authors source does not use Algorithm R.
     assert full.share_continual_state and hidden.share_continual_state
     assert full.learning_setting=="class_il" and hidden.learning_setting=="class_il"
     assert full.class_pair_protocol=="strict" and hidden.class_pair_protocol=="strict"
@@ -99,21 +99,20 @@ def test_original_fedclass_modules_exact_feature_head_forward():
 
 
 def test_fedclass_cli_generates_both_plans_without_cuda(tmp_path,capsys):
-    for mode in ("reservoir","none"):
+    for mode in ("authors_exemplars","none"):
         main(["--memory-mode",mode,"--plan-only","--output-dir",str(tmp_path)])
-        location=tmp_path/mode/("seed0_lr0.03_epochs10_rr1"
-                                if mode=="reservoir" else "seed0_lr0.03_epochs10")
+        location=tmp_path/mode/"seed0_lr0.03_epochs10_source_v2"
         data=json.loads((location/"design.json").read_text())
         assert data["suite"]=="FedCLASS"
         assert data["concurrent_processes"]==2
         assert data["full_and_offline_same_gpu"]==0
         assert data["total_jobs"]==2
         assert data["training_intervals"]==9
-        assert data["per_class_reservoir_capacity"]==(50 if mode=="reservoir" else 0)
+        assert data["original_first_k_per_class"]==(50 if mode=="authors_exemplars" else 0)
     with pytest.raises(SystemExit):
         main(["--gpu","1","--plan-only","--output-dir",str(tmp_path)])
     with pytest.raises(ValueError):
-        make_fedclass_jobs(memory_mode="reservoir",replay_ratio=0)
+        make_fedclass_jobs(memory_mode="authors_exemplars",replay_ratio=0)
 
 
 def test_fedclass_launcher_starts_two_workers_before_wait_and_both_gpu0(
@@ -140,14 +139,14 @@ def test_fedclass_launcher_starts_two_workers_before_wait_and_both_gpu0(
         return {"mock_success":True}
     monkeypatch.setattr(runner.subprocess,"Popen",popen)
     monkeypatch.setattr(runner,"build_report",report)
-    runner.main(["--no-download","--output-dir",str(tmp_path),"--memory-mode","reservoir","--permit-adapted-legacy"])
+    runner.main(["--no-download","--output-dir",str(tmp_path),"--memory-mode","authors_exemplars","--permit-adapted-legacy"])
     assert len(created)==2
     assert [cmd[-2:] for cmd,_ in created]==[
         ["--worker","0"],["--worker","1"]]
     assert all(kwargs["env"]["CUDA_VISIBLE_DEVICES"]=="0" for _,kwargs in created)
     assert all(kwargs["stderr"]==runner.subprocess.STDOUT for _,kwargs in created)
-    assert "FedCLASS CE + 50/class Algorithm R" in (
-        tmp_path/"reservoir"/"seed0_lr0.03_epochs10_rr1"/
+    assert "FedCLASS source CE + authors original first-50/class exemplars" in (
+        tmp_path/"authors_exemplars"/"seed0_lr0.03_epochs10_source_v2"/
         "comparison"/"comparison.md").read_text()
 
 
