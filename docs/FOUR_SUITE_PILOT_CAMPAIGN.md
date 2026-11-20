@@ -1,6 +1,6 @@
 # Four-suite eight-arm pilot campaign
 
-`python scripts/launch_four_fcil_pilots.py --plans-only` validates the four configured pairs without touching GPU state. `--preflight-only` also checks CUDA, GPU 0 availability, free VRAM, and that no other compute process is using that GPU. The production run refuses to proceed if any unrelated GPU process exists or fewer than 28,672 MiB are free. This is a conservative admission gate, not a substitute for measured peak memory from a completed campaign.
+`python scripts/launch_four_fcil_pilots.py --plans-only` validates the four configured pairs without touching GPU state. `--preflight-only` also checks CUDA, GPU 0 availability, free VRAM, and that no other compute process is using that GPU. The production run refuses to proceed if any unrelated GPU process exists or fewer than 28,672 MiB are free. Before full training, it launches an eight-process batch-64 CUDA smoke using each production backbone/loss, five client models, the server model, and native teacher copies; it records peak device and per-process allocator memory and requires at least 4 GiB measured headroom. The smoke uses random inputs and does not create training results or checkpoints.
 
 Run the supervisor inside a persistent server `tmux` session:
 
@@ -11,7 +11,7 @@ cd /home/anurag24092/Projects/Correlation-Aware-FCL
   --data-root data --wait-for-gpu
 ```
 
-With `--wait-for-gpu`, the supervisor validates all paired plans first, then checks admission every five minutes until GPU 0 has no unrelated compute process and at least 28 GiB free. It must be started in tmux so the deferred launch survives a client disconnect.
+With `--wait-for-gpu`, the supervisor validates all paired plans first, then checks admission every five minutes until GPU 0 has no unrelated compute process and at least 28 GiB free. It then runs the eight-process memory smoke and rechecks admission before launching training. It must be started in tmux so the deferred launch survives a client disconnect.
 
 It validates seed-0 plans for GLFC, LGA, FEAT, and FedCLASS reservoir mode, then starts the four suite controllers without waiting between them. Each controller launches its FULL and ROTATING_OFFLINE workers concurrently. The campaign manifest records the commit, plan/config receipts, dataset counts, controller/worker PIDs, and five-minute GPU snapshots. If any controller fails or eight distinct CUDA worker contexts cannot be observed during startup, it terminates the campaign process groups and marks the manifest failed. Re-run the identical commit/config/output path with `--resume` only after a failed campaign; the supervisor verifies prior PIDs have exited and workers resume from per-round checkpoints. Each retry gets a separate log directory and the manifest retains attempt history. A successful campaign requires all four paired controllers to exit successfully; each writes its own comparison artifacts.
 

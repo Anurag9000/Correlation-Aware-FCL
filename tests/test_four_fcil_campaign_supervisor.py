@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from scripts.launch_four_fcil_pilots import metrics_progress, verify_results
+from scripts.gpu_memory_smoke_four_fcil import smoke_worker_specs
 
 
 def _write_campaign(root: Path, *, complete=True):
@@ -42,3 +43,11 @@ def test_metrics_progress_records_terminal_and_accuracy(tmp_path):
     assert first["rows"] == 10
     assert first["terminal_flush"] is True
     assert first["test_accuracy"] == 0.1
+
+
+def test_memory_smoke_covers_all_four_suites_in_both_arms():
+    specs = smoke_worker_specs()
+    assert len(specs) == 8
+    assert {suite for _, suite, *_ in specs} == {"glfc", "lga", "feat", "fedclass"}
+    assert {arm for *_, arm in specs} == {"full", "offline"}
+    assert len({worker_id for worker_id, *_ in specs}) == 8

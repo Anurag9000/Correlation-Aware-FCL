@@ -169,6 +169,24 @@ def worker_pids(log_path: Path) -> list[int]:
     return [int(value) for value in re.findall(r"(?:PID=|pid=)(\d+)", text)]
 
 
+def run_gpu_smoke(args, env: dict[str, str], smoke_dir: Path) -> dict:
+    command = [sys.executable, str(ROOT / "scripts" / "gpu_memory_smoke_four_fcil.py"),
+               "--gpu", "0", "--reserve-mib", str(args.smoke_reserve_mib),
+               "--output-dir", str(smoke_dir)]
+    result = subprocess.run(command, cwd=ROOT, env=env, text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    (smoke_dir / "supervisor.log").write_text(result.stdout)
+    report_path = smoke_dir / "gpu_smoke.json"
+    if result.returncode != 0 or not report_path.is_file():
+        failure_path = smoke_dir / "gpu_smoke_failed.json"
+        failure = failure_path.read_text() if failure_path.is_file() else result.stdout[-4000:]
+        raise RuntimeError(f"Eight-process CUDA memory smoke failed (exit {result.returncode}): {failure}")
+    report = json.loads(report_path.read_text())
+    if report.get("status") != "passed":
+        raise RuntimeError(f"Eight-process CUDA memory smoke lacks the required VRAM margin: {report}")
+    return report
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=0)
@@ -179,6 +197,8 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--min-free-mib", type=int, default=28672,
                         help="minimum free GPU memory before launch; default reserves 4 GiB on a 32-GiB card")
+    parser.add_argument("--smoke-reserve-mib", type=int, default=4096,
+                        help="minimum measured free VRAM after the eight-process smoke")
     parser.add_argument("--poll-seconds", type=int, default=300)
     parser.add_argument("--startup-timeout", type=int, default=180)
     parser.add_argument("--preflight-only", action="store_true")
@@ -251,10 +271,13 @@ def main() -> int:
                          and previous.get("epochs") == args.epochs
                          and previous.get("gpu") == args.gpu
                          and previous.get("data_root") == str(args.data_root))
-        if previous.get("status") != "failed" or not same_identity:
-            print("PREFLIGHT_BLOCKED: --resume requires a failed campaign with identical commit/config/data root", file=sys.stderr)
+        resumable = {"failed", "preflight_failed", "preflight",
+                     "waiting_for_gpu_smoke_admission", "waiting_for_gpu_after_smoke"}
+        if previous.get("status") not in resumable or not same_identity:
+            print("PREFLIGHT_BLOCKED: --resume requires a failed or safely waiting campaign with identical commit/config/data root", file=sys.stderr)
             return 2
-        prior_pids = [item.get("pid") for item in previous.get("controllers", {}).values()]
+        prior_pids = [previous.get("supervisor_pid")]
+        prior_pids += [item.get("pid") for item in previous.get("controllers", {}).values()]
         prior_pids += [pid for pids in previous.get("worker_pids", {}).values() for pid in pids]
         active = []
         for pid in set(filter(None, prior_pids)):
@@ -276,6 +299,73 @@ def main() -> int:
     attempt_number = int(previous.get("attempt_number", 1)) + 1 if previous else 1
     logs = args.output_dir / "logs" / f"attempt_{attempt_number:02d}"
     logs.mkdir(parents=True, exist_ok=False)
+    smoke_attempts = []
+    manifest_path = args.output_dir / "campaign.json"
+    preflight_manifest = {"status": "preflight", "commit": commit,
+                          "started_at_utc": utc_now(), "seed": args.seed,
+                          "lr": args.lr, "epochs": args.epochs, "batch_size": 64,
+                          "gpu": args.gpu, "data_root": str(args.data_root),
+                          "dataset_partition": bank_check, "plans": plans,
+                          "hardware": hardware, "output_dir": str(args.output_dir),
+                          "logs_dir": str(logs), "attempt_number": attempt_number,
+                          "supervisor_pid": os.getpid(),
+                          "attempt_history": list(previous.get("attempt_history", [])) if previous else [],
+                          "gpu_smoke_attempts": smoke_attempts,
+                          "controllers": {}, "worker_pids": {}}
+    if previous:
+        preflight_manifest["attempt_history"].append({key: previous.get(key) for key in
+            ("status", "started_at_utc", "finished_at_utc", "controller_exit_codes",
+             "worker_pids", "failure", "logs_dir", "gpu_smoke_attempts")})
+    atomic_manifest(manifest_path, preflight_manifest)
+
+    def save_preflight_failure(message: str) -> int:
+        preflight_manifest["status"] = "preflight_failed"
+        preflight_manifest["failure"] = message
+        preflight_manifest["finished_at_utc"] = utc_now()
+        preflight_manifest["gpu_smoke_attempts"] = smoke_attempts
+        atomic_manifest(manifest_path, preflight_manifest)
+        print(f"PREFLIGHT_BLOCKED: {message}", file=sys.stderr, flush=True)
+        return 2
+
+    while True:
+        try:
+            pre_smoke_hardware = hardware_preflight(args, env)
+        except Exception as exc:
+            if not args.wait_for_gpu:
+                return save_preflight_failure(f"before GPU smoke: {exc}")
+            preflight_manifest["status"] = "waiting_for_gpu_smoke_admission"
+            atomic_manifest(manifest_path, preflight_manifest)
+            print(f"GPU_ADMISSION_WAIT before smoke: {exc}; next check in {args.poll_seconds}s", flush=True)
+            time.sleep(args.poll_seconds)
+            continue
+        smoke_number = len(smoke_attempts) + 1
+        smoke_dir = logs / f"gpu_memory_smoke_attempt_{smoke_number:02d}"
+        try:
+            smoke_report = run_gpu_smoke(args, env, smoke_dir)
+        except Exception as exc:
+            smoke_attempts.append({"directory": str(smoke_dir), "status": "failed", "failure": str(exc)})
+            if args.wait_for_gpu and "Unrelated GPU compute processes appeared" in str(exc):
+                preflight_manifest["status"] = "waiting_for_gpu_smoke_admission"
+                preflight_manifest["gpu_smoke_attempts"] = smoke_attempts
+                atomic_manifest(manifest_path, preflight_manifest)
+                print(f"GPU_ADMISSION_WAIT during smoke: {exc}; next check in {args.poll_seconds}s", flush=True)
+                time.sleep(args.poll_seconds)
+                continue
+            return save_preflight_failure(f"{exc}; smoke evidence: {smoke_dir}")
+        smoke_attempts.append({"directory": str(smoke_dir), "status": "passed",
+                               "peak_device_used_mib": smoke_report["peak_device_used_mib"],
+                               "measured_free_at_peak_mib": smoke_report["measured_free_at_peak_mib"]})
+        try:
+            hardware = hardware_preflight(args, env)
+            hardware["gpu_memory_smoke"] = smoke_report
+            break
+        except Exception as exc:
+            if not args.wait_for_gpu:
+                return save_preflight_failure(f"after GPU smoke: {exc}")
+            preflight_manifest["status"] = "waiting_for_gpu_after_smoke"
+            atomic_manifest(manifest_path, preflight_manifest)
+            print(f"GPU_ADMISSION_WAIT after smoke: {exc}; next check in {args.poll_seconds}s", flush=True)
+            time.sleep(args.poll_seconds)
     history = list(previous.get("attempt_history", [])) if previous else []
     if previous:
         history.append({key: previous.get(key) for key in
@@ -287,7 +377,8 @@ def main() -> int:
                 "dataset_partition": bank_check, "plans": plans, "hardware": hardware,
                 "controllers": {}, "worker_pids": {}, "snapshots": [],
                 "output_dir": str(args.output_dir), "logs_dir": str(logs),
-                "attempt_history": history, "attempt_number": attempt_number}
+                "attempt_history": history, "attempt_number": attempt_number,
+                "gpu_smoke_attempts": smoke_attempts, "supervisor_pid": os.getpid()}
     atomic_manifest(manifest_path, manifest)
     processes: dict[str, tuple[subprocess.Popen, object]] = {}
     failed = None
@@ -359,6 +450,11 @@ def main() -> int:
             atomic_manifest(manifest_path, manifest)
             if nonzero:
                 failed = f"suite controller failure: {nonzero}"
+                raise RuntimeError(failed)
+            expected_pids = set(workers)
+            unexpected_gpu_pids = {item["pid"] for item in snapshot["compute_processes"]} - expected_pids
+            if unexpected_gpu_pids:
+                failed = f"unrelated GPU compute process appeared during campaign: {sorted(unexpected_gpu_pids)}"
                 raise RuntimeError(failed)
             time.sleep(args.poll_seconds)
         codes = {suite: proc.wait() for suite, (proc, _) in processes.items()}
