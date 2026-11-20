@@ -89,6 +89,10 @@ class FederatedCLState:
     native_lga_radius:float|None=None
     native_prototype_gradients:dict[tuple[int,int,int],dict]=field(default_factory=dict)
     native_latest_accepted_prototypes:list[tuple[int,int,int]]=field(default_factory=list)
+    # Durable accepted-receipt proxy lifecycle state for original GLFC/LGA.
+    native_proxy_pending_receipts:list[dict]=field(default_factory=list)
+    native_proxy_state:dict|None=None
+    native_proxy_history:list[dict]=field(default_factory=list)
 
     def merge_clients(self,uploaded_clients,bank,method,teacher_model,version):
         """Merge ONLY selected/uploaded private contributions once per source."""
