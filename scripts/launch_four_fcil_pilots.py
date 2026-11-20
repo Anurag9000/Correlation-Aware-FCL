@@ -71,7 +71,7 @@ def hardware_preflight(args, env: dict[str, str]) -> dict:
     if not cuda["available"] or cuda["count"] < 1:
         raise RuntimeError(f"CUDA device 0 unavailable in {sys.executable}: {cuda}")
     gpu = gpu_snapshot(args.gpu)
-    if gpu["compute_processes"]:
+    if gpu["compute_processes"] and not args.allow_shared_gpu:
         raise RuntimeError("GPU 0 has unrelated compute processes; preserving them and refusing launch: "
                            + json.dumps(gpu["compute_processes"]))
     if gpu["free_mib"] < args.min_free_mib:
@@ -173,6 +173,8 @@ def run_gpu_smoke(args, env: dict[str, str], smoke_dir: Path) -> dict:
     command = [sys.executable, str(ROOT / "scripts" / "gpu_memory_smoke_four_fcil.py"),
                "--gpu", "0", "--reserve-mib", str(args.smoke_reserve_mib),
                "--output-dir", str(smoke_dir)]
+    if args.allow_shared_gpu:
+        command.append("--allow-shared-gpu")
     result = subprocess.run(command, cwd=ROOT, env=env, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     (smoke_dir / "supervisor.log").write_text(result.stdout)
@@ -199,6 +201,8 @@ def main() -> int:
                         help="minimum free GPU memory before launch; default reserves 4 GiB on a 32-GiB card")
     parser.add_argument("--smoke-reserve-mib", type=int, default=4096,
                         help="minimum measured free VRAM after the eight-process smoke")
+    parser.add_argument("--allow-shared-gpu", action="store_true",
+                        help="measure and allow the currently active GPU jobs to share GPU 0")
     parser.add_argument("--poll-seconds", type=int, default=300)
     parser.add_argument("--startup-timeout", type=int, default=180)
     parser.add_argument("--preflight-only", action="store_true")
@@ -452,9 +456,14 @@ def main() -> int:
                 failed = f"suite controller failure: {nonzero}"
                 raise RuntimeError(failed)
             expected_pids = set(workers)
-            unexpected_gpu_pids = {item["pid"] for item in snapshot["compute_processes"]} - expected_pids
+            shared_pids = {item["pid"] for item in hardware["gpu"].get("compute_processes", [])}
+            unexpected_gpu_pids = {item["pid"] for item in snapshot["compute_processes"]} - expected_pids - shared_pids
             if unexpected_gpu_pids:
                 failed = f"unrelated GPU compute process appeared during campaign: {sorted(unexpected_gpu_pids)}"
+                raise RuntimeError(failed)
+            if snapshot["free_mib"] < args.smoke_reserve_mib:
+                failed = (f"GPU free memory fell below the measured smoke reserve: "
+                          f"{snapshot['free_mib']} < {args.smoke_reserve_mib} MiB")
                 raise RuntimeError(failed)
             time.sleep(args.poll_seconds)
         codes = {suite: proc.wait() for suite, (proc, _) in processes.items()}

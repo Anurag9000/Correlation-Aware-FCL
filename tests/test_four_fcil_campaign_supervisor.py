@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.launch_four_fcil_pilots import metrics_progress, verify_results
+from scripts.launch_four_fcil_pilots import hardware_preflight, metrics_progress, verify_results
 from scripts.gpu_memory_smoke_four_fcil import smoke_worker_specs
 
 
@@ -51,3 +51,20 @@ def test_memory_smoke_covers_all_four_suites_in_both_arms():
     assert {suite for _, suite, *_ in specs} == {"glfc", "lga", "feat", "fedclass"}
     assert {arm for *_, arm in specs} == {"full", "offline"}
     assert len({worker_id for worker_id, *_ in specs}) == 8
+
+
+def test_shared_gpu_admission_requires_explicit_flag_and_memory_reserve(monkeypatch):
+    import types
+    import scripts.launch_four_fcil_pilots as campaign
+    gpu = {"free_mib": 11000, "compute_processes": [{"pid": 77, "used_mib": 20000}]}
+    monkeypatch.setattr(campaign, "gpu_snapshot", lambda _: gpu)
+    monkeypatch.setattr(campaign, "run_json", lambda *a, **k: {"available": True, "count": 1})
+    ordinary = types.SimpleNamespace(gpu=0, allow_shared_gpu=False, min_free_mib=10000)
+    with pytest.raises(RuntimeError, match="unrelated compute processes"):
+        hardware_preflight(ordinary, {})
+    shared = types.SimpleNamespace(gpu=0, allow_shared_gpu=True, min_free_mib=10000)
+    receipt = hardware_preflight(shared, {})
+    assert receipt["gpu"]["compute_processes"][0]["pid"] == 77
+    shared.min_free_mib = 12000
+    with pytest.raises(RuntimeError, match="requires 12000 MiB"):
+        hardware_preflight(shared, {})

@@ -136,6 +136,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--reserve-mib", type=int, default=4096)
+    parser.add_argument("--allow-shared-gpu", action="store_true",
+                        help="include currently allocated compute processes in the measured baseline")
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--worker", type=int, choices=range(8), default=None,
@@ -160,8 +162,9 @@ def main():
     workers = []
     logs = []
     initial_usage = gpu_usage(args.gpu)
-    if initial_usage["compute_processes"]:
+    if initial_usage["compute_processes"] and not args.allow_shared_gpu:
         raise RuntimeError(f"Refusing memory smoke while GPU has existing compute PIDs: {initial_usage['compute_processes']}")
+    baseline_pids = {item["pid"] for item in initial_usage["compute_processes"]}
     peak = initial_usage["used_mib"]
     baseline_used = initial_usage["used_mib"]
     sampled = [initial_usage]
@@ -192,15 +195,17 @@ def main():
             raise TimeoutError(f"Only {len(list(start_dir.glob('ready_*')))} of eight smoke workers initialized")
         expected_pids = {int(json.loads(path.read_text())["pid"]) for path in ready_files}
         ready_snapshot = gpu_usage(args.gpu)
-        if {item["pid"] for item in ready_snapshot["compute_processes"]} != expected_pids:
-            raise RuntimeError("GPU compute PID set did not match exactly the eight isolated smoke workers: "
-                               f"expected={sorted(expected_pids)} actual={ready_snapshot['compute_processes']}")
+        actual_ready_pids = {item["pid"] for item in ready_snapshot["compute_processes"]}
+        if not expected_pids <= actual_ready_pids or actual_ready_pids - expected_pids - baseline_pids:
+            raise RuntimeError("GPU compute PID set includes missing smoke workers or a new unrelated process: "
+                               f"expected={sorted(expected_pids)} baseline={sorted(baseline_pids)} "
+                               f"actual={ready_snapshot['compute_processes']}")
         (start_dir / "start").write_text(utc_now())
         while any(proc.poll() is None for proc, _, _ in workers):
             snapshot = gpu_usage(args.gpu)
             sampled.append(snapshot)
             peak = max(peak, snapshot["used_mib"])
-            unexpected = {item["pid"] for item in snapshot["compute_processes"]} - expected_pids
+            unexpected = {item["pid"] for item in snapshot["compute_processes"]} - expected_pids - baseline_pids
             if unexpected:
                 raise RuntimeError(f"Unrelated GPU compute processes appeared during smoke: {sorted(unexpected)}")
             for proc, suite, arm in workers:
@@ -228,6 +233,7 @@ def main():
             "started_at_utc": sampled[0]["at_utc"] if sampled else utc_now(),
             "finished_at_utc": utc_now(), "gpu": usage,
             "baseline_device_used_mib": baseline_used,
+            "baseline_compute_processes": initial_usage["compute_processes"],
             "peak_device_used_mib": peak, "allocator_peak_estimate_mib": allocator_estimate,
             "measured_free_at_peak_mib": reserve_available,
             "required_free_margin_mib": args.reserve_mib,
