@@ -191,6 +191,12 @@ def original_before_local_task(method,model,client,bank,cfg,device,active_pair):
     obj.last_class=list(last_classes) if last_classes else None
     obj.current_class=list(new)
     obj.train_loader=loader
+    # Both original __init__ functions create this unaugmented exemplar
+    # feature transform. The protocol adapter's compute_class_mean applies
+    # the identical affine normalization directly to the saved uint8 arrays.
+    obj.transform=transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((.5071,.4867,.4408),(.2675,.2565,.2761))])
     obj.learned_numclass=len(learned_classes)
     obj.learned_classes=list(learned_classes)
     obj.memory_size=cfg.memory_per_class*max(1,len(learned_classes)+len(last_classes))
