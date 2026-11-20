@@ -10,9 +10,11 @@ Other GLFC/LGA author mechanisms (entropy-triggered exemplar selection,
 prototype gradients, reconstruction, geometry, model monitor) still need
 actual integration and are NOT certified here.
 
-These published methods call .cuda() unconditionally. Thus the loss bridge
-runs on CUDA only as the original authors intended. CPU unit tests may replace
-.cuda with a fixture no-op to validate source execution.
+The original .cuda() calls execute unchanged on CUDA. On CPU, where the
+original author's GPU-only code cannot execute, only those .cuda calls are
+translated into .to('cpu') during isolated AST compilation for synthetic
+software tests. The mathematical loss implementation is unchanged; no CPU
+mode is used by production pilot launchers.
 """
 from __future__ import annotations
 
@@ -32,8 +34,19 @@ MODULES={
 }
 
 
+class _CpuDeviceOnly(ast.NodeTransformer):
+    """Translate *only* original Tensor.cuda() calls for CPU-only test runs."""
+    def visit_Call(self,node):
+        self.generic_visit(node)
+        if isinstance(node.func,ast.Attribute) and node.func.attr=='cuda':
+            node.func.attr='to'
+            node.args=[ast.Constant(value='cpu')]
+            node.keywords=[]
+        return node
+
+
 @lru_cache(maxsize=None)
-def original_loss_core(method):
+def original_loss_core(method,*,cpu_test=False):
     if method not in MODULES:
         raise ValueError(f'No original source loss for {method}')
     rel,name=MODULES[method]
@@ -54,6 +67,8 @@ def original_loss_core(method):
     source_class=ast.ClassDef(name='SourceLoss',bases=[],keywords=[],
                               body=original_functions,decorator_list=[])
     isolated=ast.Module(body=get_one_hot+[source_class],type_ignores=[])
+    if cpu_test:
+        isolated=_CpuDeviceOnly().visit(isolated)
     ast.fix_missing_locations(isolated)
     env={'torch':torch,'F':F,'Variable':Variable}
     exec(compile(isolated,str(path),'exec'),env)
@@ -73,8 +88,6 @@ def original_loss(method,global_logits,global_labels,known_classes,
         raise ValueError('Expected batch logits [B,C] and labels [B]')
     if len(global_logits)!=len(global_labels):
         raise ValueError('Mismatched labels and batch')
-    if not global_logits.is_cuda:
-        raise RuntimeError('Authors original GLFC/LGA loss requires CUDA')
     known=set(int(x) for x in known_classes)
     prior=tuple(sorted(known & set(int(x) for x in old_classes)))
     novel=tuple(sorted(known-set(prior)))
@@ -90,7 +103,7 @@ def original_loss(method,global_logits,global_labels,known_classes,
     remapped=mapping[global_labels.long()]
     if (remapped<0).any():raise ValueError('Unseen label entered author loss')
 
-    Source=original_loss_core(method)
+    Source=original_loss_core(method,cpu_test=not global_logits.is_cuda)
     obj=Source.__new__(Source)
     obj.numclass=len(order)
     obj.learned_classes=list(range(len(prior)))

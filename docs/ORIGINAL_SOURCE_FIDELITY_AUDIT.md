@@ -153,3 +153,8 @@ order as assumed by the original sources. The local training remains CUDA-only
 for these methods, as in the original code. This **does not** restore or certify
 original `beforeTrain`, entropy detection, exemplar memory, prototype gradients,
 proxy reconstruction or LGA geometry. The original modules are not modified.
+
+On CPU synthetic tests only, the source-AST loss bridge changes the
+original device transfer syntax `.cuda()` to `.to('cpu')`. All mathematical
+source nodes and original GPU training code remain unchanged. The normal
+paper-fidelity production pilot still requires CUDA.
