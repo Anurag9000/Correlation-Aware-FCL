@@ -457,3 +457,22 @@ prototypes to make at least one 64-sample monitoring batch even with
 `drop_last=True`; two-class stages may not. This incompatibility must
 be handled explicitly, without claiming original training semantics.
 Fidelity gate remains CLOSED.
+
+## Source proxy attached to accepted-only global server path
+
+`src/cafcl/upstream_native_proxy_server.py` now contains a production
+step that runs original-source `proxyServer.dataloader`,
+`reconstruction`, `monitor`/LGA `f_monitor`, and `model_back`
+after *accepted* model/gradient uploads, plus an explicit
+`original_source_teacher_slots` builder for subsequent original local
+`GLFC_model.train`/`LGA.train` calls.
+
+The two-class protocol can produce only 40 reconstructed images from two
+prototype receipts. The original proxy's `drop_last=True` loader of
+physical batch64 cannot monitor these. Rather than perform invalid
+zero-sample monitoring, the adapter accumulates accepted gradient receipts
+until >=4 are available. This is an **explicitly non-original** protocol
+compatibility rule; exact per-sync source behavior cannot be claimed. The
+original source 250 LBFGS inversion iterations and 20 images/prototype
+remain unchanged whenever enough receipts exist. No hidden client's
+receipt can enter the backlog before that client reconnects.
