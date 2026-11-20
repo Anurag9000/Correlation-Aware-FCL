@@ -1,9 +1,11 @@
-"""Concurrent client learning with a hard barrier between task ordinals.
+"""Client learning with hard barriers between task ordinals.
 
-Five independent client model instances can submit work simultaneously on one
-GPU using independent CUDA streams. In the two-arm probe, two Python processes
-share that same GPU. CUDA decides whether individual kernels overlap physically;
-the contract guaranteed here is concurrent client execution and task barriers.
+Five independent client models persist on the GPU. By default they submit work
+simultaneously on independent CUDA streams. A bounded concurrency setting runs
+clients in waves; concurrency one shares a CUDA stream to reuse allocator pools.
+CUDA decides whether kernels from the eight experiment processes overlap
+physically; the campaign contract is simultaneous live workers and intact
+per-client batch, optimizer, and synchronization semantics.
 
 FedAvg and CL-state synchronization remain in simulator.py *after* this function
 returns, so disconnected clients still train but cannot upload or download.
@@ -27,7 +29,11 @@ class ClientRuntime:
 
 
 def create_client_runtimes(cfg, bank, clients, device):
-    """Create a distinct persistent model object and CUDA stream per client.
+    """Create one persistent model per client and the configured CUDA streams.
+
+    Default execution uses a distinct CUDA stream per client. Bounded
+    single-client waves share one stream so the caching allocator can reuse
+    blocks between independent clients.
 
     New random model instances have their weights replaced with each client's
     own persistent weights. Preserve the simulator's global RNG to keep other
@@ -36,6 +42,9 @@ def create_client_runtimes(cfg, bank, clients, device):
     cpu_rng = torch.get_rng_state()
     cuda_rng = torch.cuda.get_rng_state_all() if device.type == 'cuda' else None
     runtimes = {}
+    shared_stream = None
+    if device.type == 'cuda' and cfg.client_training_concurrency == 1:
+        shared_stream = torch.cuda.Stream(device=device)
     try:
         for cid, client in sorted(clients.items()):
             model = create_model(
@@ -44,7 +53,8 @@ def create_client_runtimes(cfg, bank, clients, device):
             if client.shared_weights is None:
                 raise RuntimeError(f'Client {cid} has no initialized local weights')
             model.load_state_dict(client.shared_weights)
-            stream = torch.cuda.Stream(device=device) if device.type == 'cuda' else None
+            stream = (shared_stream if shared_stream is not None else
+                      torch.cuda.Stream(device=device) if device.type == 'cuda' else None)
             if stream is not None:
                 stream.wait_stream(torch.cuda.current_stream(device))
             runtimes[cid] = ClientRuntime(model, stream)

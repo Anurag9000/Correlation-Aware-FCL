@@ -60,7 +60,7 @@ Native 32×32 ViT-Tiny/16 and CIFAR-stem ResNet-18 remain selectable. The primar
 
 ## v10 single-GPU concurrent training (not yet GPU-benchmarked)
 
-All active CIFAR-100 simulator modes maintain one live independent model and CUDA stream per client, submit the first task concurrently across clients, wait for a full task barrier, and repeat for the second task. Server aggregation and the shared CL-state broadcast happen only after every local task completes. Two independent 5-client pilot runs launch as simultaneous processes on GPU 0. The primary run uses physical microbatch four by default and supports effective batch 64 or 1024; the active full-factorial suite retains its configured batch. GPU occupancy, memory, and accuracy require empirical server runs.
+All active CIFAR-100 simulator modes maintain one live independent model per client, submit local tasks across clients, and preserve a barrier between task ordinals. Default runs use a distinct CUDA stream per client; bounded client concurrency may schedule independent clients in waves, and concurrency one shares a CUDA stream for allocator reuse. Server aggregation and the shared CL-state broadcast happen only after every local task completes. Eight-arm GPU campaigns keep all eight experiment processes live concurrently. The primary run uses physical microbatch four by default and supports effective batch 64 or 1024; the active full-factorial suite retains its configured batch. GPU occupancy, memory, and accuracy require empirical server runs.
 
 The previous v9 checkpoint protocol is incompatible with v10. No silent serialized fallback is provided; adjust microbatch size if GPU VRAM is insufficient.
 

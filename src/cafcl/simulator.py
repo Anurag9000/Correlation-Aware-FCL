@@ -451,10 +451,10 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             torch.set_rng_state(saved['torch_rng'])
             if torch.cuda.is_available() and saved['cuda_rng']:
                 torch.cuda.set_rng_state_all(saved['cuda_rng'])
-        # Keep one *live independent* model and CUDA stream per client.
+        # Keep one *live independent* model per client and configured streams.
         # The global server remains a sixth, separately held model object.
         # A single-GPU pilot launches two independent simulations as two
-        # simultaneous processes; each process has five client workers.
+        # simultaneous processes; each process retains five client models.
         client_runtimes=create_client_runtimes(cfg,bank,clients,device)
         client_executor=ThreadPoolExecutor(
             max_workers=(cfg.client_training_concurrency or cfg.num_clients),

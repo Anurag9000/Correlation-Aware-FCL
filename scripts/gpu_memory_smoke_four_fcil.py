@@ -83,7 +83,11 @@ def worker(suite, method, model_id, start_dir, timeout, client_concurrency):
             teachers.append(teacher)
     else:
         teachers = [None] * 5
-    streams = [torch.cuda.Stream(device=device) for _ in clients]
+    if client_concurrency == 1:
+        shared_stream = torch.cuda.Stream(device=device)
+        streams = [shared_stream] * len(clients)
+    else:
+        streams = [torch.cuda.Stream(device=device) for _ in clients]
     inputs = [torch.randn(64, 3, 32, 32, device=device) for _ in clients]
     labels = [torch.randint(0, 4, (64,), device=device) for _ in clients]
     torch.cuda.synchronize(device)
