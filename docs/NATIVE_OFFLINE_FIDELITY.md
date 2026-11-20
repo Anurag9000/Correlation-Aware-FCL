@@ -71,3 +71,7 @@ are not proxies for published SOTA baselines.
 - The test set supplies audit metrics only and must not guide optimization.
 - A passed CPU plan test does **not** imply GPU/VRAM suitability or
   scientifically acceptable accuracy.
+
+## Four-suite campaign supervision
+
+The eight-arm campaign supervisor and its GPU admission/monitoring policy are documented in `FOUR_SUITE_PILOT_CAMPAIGN.md`. The supervisor runs all three adapted native-loss pilots plus the FedCLASS CE+FedAvg reservoir arm as four concurrent paired controllers.

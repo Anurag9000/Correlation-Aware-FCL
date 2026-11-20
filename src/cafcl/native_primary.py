@@ -4,7 +4,7 @@ Each suite launches BOTH arms as independent concurrent processes on GPU 0.
 All five clients train in both arms. Only communication eligibility differs.
 """
 from __future__ import annotations
-import argparse,json,os,subprocess,sys
+import argparse,json,os,subprocess,sys,time
 # The physical CUDA device selection is fixed before any torch/CUDA import.
 os.environ['CUDA_VISIBLE_DEVICES']='0'
 from dataclasses import replace
@@ -83,10 +83,24 @@ def main(argv=None):
                                      stdout=log,stderr=subprocess.STDOUT)
             handles.append((process,log))
             print(f'Launched {cfg.job_id} PID={process.pid} GPU=0 log={target}',flush=True)
+        while any(process.poll() is None for process,_ in handles):
+            failed=[process for process,_ in handles if process.poll() not in (None,0)]
+            if failed:
+                for sibling,_ in handles:
+                    if sibling.poll() is None:sibling.terminate()
+                for sibling,_ in handles:
+                    if sibling.poll() is None:
+                        try:sibling.wait(timeout=10)
+                        except subprocess.TimeoutExpired:sibling.kill();sibling.wait()
+                break
+            time.sleep(.25)
         codes=[process.wait() for process,_ in handles]
     finally:
         for process,log in handles:
             if process.poll() is None:process.terminate()
+            if process.poll() is None:
+                try:process.wait(timeout=10)
+                except subprocess.TimeoutExpired:process.kill();process.wait()
             log.close()
     if any(code!=0 for code in codes):
         raise RuntimeError(f'Native {args.suite} paired workers failed: {codes}. Inspect {root}/job_*.log')

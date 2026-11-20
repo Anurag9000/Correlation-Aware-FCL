@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -165,12 +166,24 @@ def main(argv=None):
                 raise
             processes.append((proc,handle))
             print(f"Launched {job.job_id}: pid={proc.pid} GPU=0 log={log}",flush=True)
+        while any(proc.poll() is None for proc,_ in processes):
+            failed=[proc for proc,_ in processes if proc.poll() not in (None,0)]
+            if failed:
+                for sibling,_ in processes:
+                    if sibling.poll() is None:sibling.terminate()
+                for sibling,_ in processes:
+                    if sibling.poll() is None:
+                        try:sibling.wait(timeout=10)
+                        except subprocess.TimeoutExpired:sibling.kill();sibling.wait()
+                break
+            time.sleep(.25)
         codes=[proc.wait() for proc,_ in processes]
     finally:
         for proc,handle in processes:
             if proc.poll() is None:
                 proc.terminate()
-                proc.wait()
+                try:proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:proc.kill();proc.wait()
             handle.close()
     if any(c!=0 for c in codes):
         raise RuntimeError(f"FedCLASS paired pilot failed {codes}; inspect {root}/job_*.log")
