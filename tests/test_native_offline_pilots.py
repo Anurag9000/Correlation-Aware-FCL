@@ -212,5 +212,5 @@ def test_pilot_dispatch_spawns_both_arms_concurrently_on_gpu_zero(monkeypatch,tm
     assert [cmd[-2:] for cmd,_ in launched]==[['--worker','0'],['--worker','1']]
     assert all(kwargs['env']['CUDA_VISIBLE_DEVICES']=='0' for _,kwargs in launched)
     assert all(kwargs['stderr']==n.subprocess.STDOUT for _,kwargs in launched)
-    assert 'GLFC native-loss/FedAvg adapted' in (
+    assert 'GLFC source-method adapter/FedAvg' in (
         tmp_path/'glfc'/'seed0'/'source_v3'/'comparison'/'comparison.md').read_text()
