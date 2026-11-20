@@ -184,5 +184,4 @@ def test_pilot_dispatch_spawns_both_arms_concurrently_on_gpu_zero(monkeypatch,tm
     assert len(launched)==2
     assert [cmd[-2:] for cmd,_ in launched]==[['--worker','0'],['--worker','1']]
     assert all(kwargs['env']['CUDA_VISIBLE_DEVICES']=='0' for _,kwargs in launched)
-    assert all(kwargs['stdout'] is kwargs['stderr'] if False else
-               kwargs['stderr']==n.subprocess.STDOUT for _,kwargs in launched)
+    assert all(kwargs['stderr']==n.subprocess.STDOUT for _,kwargs in launched)
