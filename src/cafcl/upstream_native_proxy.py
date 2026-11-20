@@ -52,6 +52,15 @@ class _CPUDeviceOnly(ast.NodeTransformer):
             node.func.attr='to'
             node.args=[ast.Constant(value='cpu')]
             node.keywords=[]
+        elif (isinstance(node.func,ast.Attribute) and node.func.attr=='to'
+              and len(node.args)==1 and
+              isinstance(node.args[0],ast.Attribute)
+              and isinstance(node.args[0].value,ast.Name)
+              and node.args[0].value.id=='self'
+              and node.args[0].attr=='device'):
+            # CPU software test ONLY; author's .to(cuda_index) is valid
+            # on CUDA but must not initialize a GPU on a CPU runner.
+            node.args=[ast.Constant(value='cpu')]
         return node
 
 
@@ -151,9 +160,34 @@ def original_proxy_test_transform(method):
     return ns['test_transform']
 
 
+class _ProxyArrayList(list):
+    """Only a container interface fix for original Proxy_Data.__len__.
+
+    Source Proxy_Data uses both `self.TestData != []` and
+    `self.TestData.shape[0]`. Current NumPy raises on ndarray != [].
+    Convert to a list that retains the one requested `.shape[0]` API.
+    All original source getTestData/getTestItem/__len__ math and image
+    transforms remain untouched and are still invoked.
+    """
+    @property
+    def shape(self):
+        return (len(self),)
+
+
+@lru_cache(maxsize=None)
+def proxy_dataset_adapter_class(method):
+    source=original_proxy_data_class(method)
+    class SourceContainerCompat(source):
+        def getTestData(self,*args,**kwargs):
+            super().getTestData(*args,**kwargs)
+            if isinstance(self.TestData,np.ndarray):
+                self.TestData=_ProxyArrayList(self.TestData)
+    return SourceContainerCompat
+
+
 def restore_source_monitor(proxy,method):
     """Restore original Proxy_Data+DataLoader from persisted reconstructed images."""
-    proxy.monitor_dataset=original_proxy_data_class(method)(
+    proxy.monitor_dataset=proxy_dataset_adapter_class(method)(
         original_proxy_test_transform(method))
     if proxy.new_set:
         proxy.monitor_dataset.getTestData(proxy.new_set,proxy.new_set_label)

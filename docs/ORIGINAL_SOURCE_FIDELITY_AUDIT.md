@@ -512,3 +512,16 @@ No GPU/full CIFAR-100 source proxy inversion has been run by CI;
 CI exercises the original source entrypoints and mocked orchestration
 but cannot certify 250-step, multi-prototype CUDA runs or original-paper
 accuracy. The independent scientific-fidelity gate remains CLOSED.
+
+## Original Proxy_Data source NumPy-array compatibility
+
+The original `Proxy_Data.getTestData` concatenates samples into an ndarray
+but its original `__len__` and `__getitem__` test
+`self.TestData != []`. Modern NumPy cannot broadcast an array of image
+tensors against an empty Python list and raises `ValueError`. The
+separate `proxy_dataset_adapter_class` executes original `getTestData`
+unchanged, then converts the source ndarray to a list with a
+`.shape[0]` property. Thus both original downstream accessors also
+execute unchanged. This is explicitly recorded as an upstream
+compatibility repair, not a claim that the original repository runs
+unmodified. Original source blobs are still immutable.
