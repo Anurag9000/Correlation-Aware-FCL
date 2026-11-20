@@ -137,8 +137,10 @@ def test_fresh_upload_is_exact_local_model_and_stale_is_labeled_and_rebased():
     current={'w':torch.tensor([10.,20.])}
     delayed=anchored_upload(client,current,current_version=1)
     assert delayed['stale_rebased'] is True
-    assert delayed['aggregation_input_semantics']=='stale_delta_rebase_noncanonical'
-    assert torch.allclose(delayed['weights']['w'],torch.tensor([11.,23.]))
+    assert delayed['staleness_versions']==1
+    assert delayed['stale_update_scale']==pytest.approx(.5)
+    assert delayed['aggregation_input_semantics']=='stale_delta_damped_bn_safe'
+    assert torch.allclose(delayed['weights']['w'],torch.tensor([10.5,21.5]))
     with pytest.raises(RuntimeError,match='ahead'):
         anchored_upload(client,current,current_version=-1)
 

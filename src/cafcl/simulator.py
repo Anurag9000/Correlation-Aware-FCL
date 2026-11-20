@@ -30,7 +30,7 @@ from .diagnostics import (diagnostic_gradient_relationships,
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v16_batch64_mixed_replay_momentum'
+PROTOCOL_VERSION = 'cifar100_native32_v18_terminal_stale_flush_guard'
 
 
 def _classwise_fedavg_contribution(uploads):
@@ -90,12 +90,14 @@ def _normalization_aggregation_diagnostics(previous,committed,uploads):
 
 
 def anchored_upload(client, global_state, *, current_version=None):
-    """Rebase *all* locally accumulated learning since the last download.
+    """Rebase delayed parameter updates without treating buffers as parameters.
 
     For a client last synchronized at anchor A with current private model L,
-    the current-server contribution is G+(L-A). If A==G (no staleness), this
-    equals ordinary FedAvg weight aggregation. Otherwise it is explicitly a
-    stale-delta FedAvg adaptation, NOT identical to synchronous FedAvg.
+    a delayed learned-parameter contribution is G+alpha*(L-A), where alpha
+    decays with server-version lag. BatchNorm running moments and other buffers
+    are state, not learned parameters, so a stale client cannot rebase them;
+    retain the current server values for those keys. Fresh uploads remain the
+    exact local model and follow canonical FedAvg aggregation.
     Neither model weights nor privacy-sensitive raw memory are sent separately.
     """
     if client.shared_weights is None or client.sync_anchor is None:
@@ -107,6 +109,8 @@ def anchored_upload(client, global_state, *, current_version=None):
                                            for key,gv in global_state.items())))
     if current_version is not None and client.model_version>current_version:
         raise RuntimeError('Client model version ahead of server')
+    staleness=max(0,int(current_version-client.model_version)) if current_version is not None else int(stale)
+    stale_scale=1.0/(1.0+staleness) if stale else 1.0
     if not stale and not all(torch.equal(client.sync_anchor[key],gv)
                              for key,gv in global_state.items()):
         raise RuntimeError('Fresh FedAvg client anchor differs from current global model')
@@ -118,13 +122,16 @@ def anchored_upload(client, global_state, *, current_version=None):
             raise RuntimeError('Client/server state shape mismatch')
         if not stale:
             candidate[key]=lv.detach().cpu().clone()   # exact canonical FedAvg model
+        elif key.endswith('running_mean') or key.endswith('running_var') or key.endswith('num_batches_tracked'):
+            # BN running moments are distribution estimates rather than
+            # optimizer parameters. Never rebase them as G+(L-A).
+            candidate[key]=gv.detach().cpu().clone()
         elif gv.is_floating_point():
-            # NONCANONICAL delayed/stale update adapter, preserves offline
-            # learning but is not synchronous FedAvg.
-            candidate[key]=(gv.to(torch.float64)+lv.to(torch.float64)
-                            -anchor.to(torch.float64)).to(gv.dtype)
+            # Delayed FedAvg adaptation, attenuated by server-version lag.
+            candidate[key]=(gv.to(torch.float64)+stale_scale*(lv.to(torch.float64)
+                            -anchor.to(torch.float64))).to(gv.dtype)
         else:
-            candidate[key]=lv.detach().cpu().clone()
+            candidate[key]=gv.detach().cpu().clone() if stale else lv.detach().cpu().clone()
     if not check_finite(candidate):
         raise RuntimeError('Nonfinite accumulated client update')
     return {'weights':candidate,'examples':client.pending_upload_examples,
@@ -134,7 +141,27 @@ def anchored_upload(client, global_state, *, current_version=None):
             'accumulated_classes':sorted(client.pending_upload_classes),
             'anchor_version':client.model_version,
              'stale_rebased':bool(stale),
-             'aggregation_input_semantics':('stale_delta_rebase_noncanonical' if stale else 'fresh_local_model')}
+             'staleness_versions':staleness,
+             'stale_update_scale':stale_scale,
+             'aggregation_input_semantics':('stale_delta_damped_bn_safe' if stale else 'fresh_local_model')}
+
+
+def _guard_single_stale_terminal_flush(candidate, base, uploads, cfg, *, terminal_flush):
+    """Limit a sole stale uploader's influence at the communication-only flush."""
+    if not (terminal_flush and cfg.aggregator=='fedavg' and len(uploads)==1
+            and uploads[0].get('stale_rebased',False)):
+        return candidate,1.0
+    scale=1.0/max(1,int(cfg.num_clients))
+    guarded={}
+    for key,previous in base.items():
+        if previous.is_floating_point():
+            guarded[key]=(previous.to(torch.float64)+scale*(candidate[key].to(torch.float64)
+                         -previous.to(torch.float64))).to(previous.dtype)
+        else:
+            guarded[key]=previous.detach().clone()
+    if not check_finite(guarded):
+        raise RuntimeError('Nonfinite terminal stale-update guard result')
+    return guarded,scale
 
 
 def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None,class_history_counts=None):
@@ -584,6 +611,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                                class_history_counts=server_cl_state.class_sample_exposure)
                 candidate,new_server_state=server_optimizer_step(
                     global_state,mean,cfg.aggregator,cfg,server_optimizer_state)
+                is_terminal_flush=bool(cfg.stream_protocol and cfg.stream_terminal_flush and round_id==total_rounds-1)
+                candidate,terminal_stale_scale=_guard_single_stale_terminal_flush(
+                    candidate,global_state,accepted,cfg,terminal_flush=is_terminal_flush)
                 # Canonical methods MUST aggregate every classifier row with
                 # the same rule as every other model parameter.
                 custom_head_fusion=bool(cfg.classwise_head_merge and cfg.aggregator in
@@ -805,7 +835,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'client_unsent_steps':{str(cid):c.pending_upload_steps for cid,c in clients.items()},
                            'protocol_version':PROTOCOL_VERSION,
                            'aggregation_algorithm':cfg.aggregator,
-                           'aggregation_family':('stale_delta_adapter_noncanonical' if any(u['stale_rebased'] for u in accepted)
+                           'aggregation_family':('stale_delta_damped_bn_safe' if any(u['stale_rebased'] for u in accepted)
                                 else ('uniform_mean_ablation' if cfg.aggregator=='uniform'
                                 else ('canonical_full_model' if cfg.aggregator in
                                       {'fedavg','fedavgm','fedadam'} else 'repository_specific_custom'))),
@@ -813,6 +843,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'canonical_fedavg_reference_class_contributions':_classwise_fedavg_contribution(accepted),
                            'aggregation_norm_diagnostics':aggregation_norm_diagnostics,
                            'stale_rebased_client_ids':[u['client_id'] for u in accepted if u['stale_rebased']],
+                           'stale_upload_lag_versions':{str(u['client_id']):u.get('staleness_versions',0) for u in accepted},
+                           'stale_upload_scales':{str(u['client_id']):u.get('stale_update_scale',1.0) for u in accepted},
+                           'terminal_stale_flush_scale':terminal_stale_scale if accepted else 1.0,
                            'upload_model_origins':{str(u['client_id']):u['aggregation_input_semantics'] for u in accepted},
                            'server_class_sample_exposure':{str(k):int(v) for k,v in sorted(server_cl_state.class_sample_exposure.items())},
                            'server_integrated_class_count':len(server_cl_state.integrated_classes),
