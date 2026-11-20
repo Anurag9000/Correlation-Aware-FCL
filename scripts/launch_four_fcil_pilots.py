@@ -198,8 +198,8 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--lr", type=float, default=.03)
     parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--client-training-concurrency", type=int, default=2,
-                        help="max active clients per run at once; defaults to 2 for eight workers")
+    parser.add_argument("--client-training-concurrency", type=int, default=1,
+                        help="max active clients per run at once; defaults to 1 for eight workers")
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--data-root", type=Path, default=ROOT / "data")
     parser.add_argument("--output-dir", type=Path, default=None)
