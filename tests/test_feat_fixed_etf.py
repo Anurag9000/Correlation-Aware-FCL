@@ -42,4 +42,4 @@ def test_native_feat_pilot_now_selects_etf_not_trainable_linear():
     from cafcl.native_primary import make_native_jobs
     full,offline=make_native_jobs('feat')
     assert full.model==offline.model=='native_feat_etf'
-    assert 'SOURCE_CORE_V4' in full.job_id and 'SOURCE_CORE_V4' in offline.job_id
+    assert 'SOURCE_CORE_V5' in full.job_id and 'SOURCE_CORE_V5' in offline.job_id

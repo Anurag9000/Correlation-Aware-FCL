@@ -83,8 +83,7 @@ def main(argv=None):
         training_augmentation=('authors_FEAT_cifar_crop_flip_jitter'
                                if is_feat else
                                'authors_GLFC_LGA_cifar_crop_flip_jitter'),
-        mathematical_source_training_optimizer_complete=(
-            args.suite in {'glfc','lga'}),
+        mathematical_source_training_optimizer_complete=True,
         author_optimizer_source=('GLFC/src/GLFC.py:GLFC_model.train'
                                  if args.suite=='glfc' else
                                  'LGA/LGA.py:LGA.train'
@@ -92,9 +91,6 @@ def main(argv=None):
         sgd_momentum=(0. if args.suite in {'glfc','lga'} else jobs[0].momentum),
         sgd_weight_decay=(.00001 if args.suite in {'glfc','lga'}
                           else jobs[0].weight_decay),
-        optimizer_state_policy=(
-            'authors_fresh_optimizer_per_task'
-            if args.suite in {'glfc','lga'} else jobs[0].optimizer_state_policy),
         ignored_generic_optimizer_policy_config=(
             jobs[0].optimizer_state_policy if args.suite in {'glfc','lga'}
             else None),

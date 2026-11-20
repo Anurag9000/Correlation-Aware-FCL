@@ -179,7 +179,7 @@ def test_all_three_pilot_entrypoints_write_audited_plans(tmp_path):
     for name in SUITES:
         native_primary.main(['--suite',name,'--seed','0',
                              '--output-dir',str(tmp_path),'--plan-only'])
-        design=json.loads((tmp_path/name/'seed0'/'source_v4'/'design.json').read_text())
+        design=json.loads((tmp_path/name/'seed0'/('source_v5' if name=='feat' else 'source_v4')/'design.json').read_text())
         assert design['training_intervals']==9
         assert design['terminal_communication_only_flush'] is True
         assert design['full_and_offline_same_gpu']==0
