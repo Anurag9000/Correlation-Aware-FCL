@@ -5,6 +5,8 @@ All five clients train in both arms. Only communication eligibility differs.
 """
 from __future__ import annotations
 import argparse,json,os,subprocess,sys
+# The physical CUDA device selection is fixed before any torch/CUDA import.
+os.environ['CUDA_VISIBLE_DEVICES']='0'
 from dataclasses import replace
 from pathlib import Path
 from .primary_probe import make_jobs,audited_plan,build_report
