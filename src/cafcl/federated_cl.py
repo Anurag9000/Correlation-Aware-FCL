@@ -87,6 +87,8 @@ class FederatedCLState:
     feat_ecc_history:list[dict]=field(default_factory=list)
     source_method_artifacts:dict[int,dict]=field(default_factory=dict)
     native_lga_radius:float|None=None
+    native_prototype_gradients:dict[tuple[int,int,int],dict]=field(default_factory=dict)
+    native_latest_accepted_prototypes:list[tuple[int,int,int]]=field(default_factory=list)
 
     def merge_clients(self,uploaded_clients,bank,method,teacher_model,version):
         """Merge ONLY selected/uploaded private contributions once per source."""
@@ -107,6 +109,22 @@ class FederatedCLState:
                     local_experience=int(client.local_experience),
                     received_at_server_version=int(version),
                 )
+        self.native_latest_accepted_prototypes=[]
+        for client in uploaded_clients:
+            if client.last_learning_method not in {'native_glfc','native_lga'}:
+                continue
+            for receipt in client.pending_native_prototypes:
+                key=(int(receipt['client']),int(receipt['local_experience']),
+                     int(receipt['cls']))
+                if int(receipt['client'])!=int(client.client_id):
+                    raise RuntimeError('Forged GLFC/LGA prototype sender')
+                if key in self.native_prototype_gradients:
+                    raise RuntimeError('Duplicate original prototype receipt')
+                if any(not torch.isfinite(t).all()
+                       for t in receipt['gradients']):
+                    raise RuntimeError('Nonfinite original proto gradient')
+                self.native_prototype_gradients[key]=copy.deepcopy(receipt)
+                self.native_latest_accepted_prototypes.append(key)
         method_by_client={int(c.client_id):(c.last_learning_method or method)
                           for c in uploaded_clients}
         if any(m in MEMORY_METHODS for m in method_by_client.values()):
@@ -204,6 +222,7 @@ class FederatedCLState:
         client.received_lwf_teacher_version=self.teacher_version
         client.received_native_artifacts=copy.deepcopy(self.source_method_artifacts)
         client.received_lga_radius=self.native_lga_radius
+        client.received_native_prototypes=copy.deepcopy(self.native_prototype_gradients)
         if method=='native_feat':
             from .upstream_feat_geometry import clone_feat_ecc
             client.received_feat_ecc=clone_feat_ecc(self.feat_ecc)
@@ -299,6 +318,16 @@ class FederatedCLState:
                         raise RuntimeError('Corrupted FEAT original ECC projector')
                 if client.received_feat_ecc['energy']!=self.feat_ecc['energy']:
                     raise RuntimeError('Corrupted FEAT original ECC energy')
+        if set(client.received_native_prototypes)!=set(self.native_prototype_gradients):
+            raise RuntimeError('Client missed acknowledged gradient prototypes')
+        for key,receipt in self.native_prototype_gradients.items():
+            local=client.received_native_prototypes[key]
+            if int(local['cls'])!=int(receipt['cls']) or len(
+                    local['gradients'])!=len(receipt['gradients']):
+                raise RuntimeError('Corrupt original prototype receipt')
+            if any(not torch.equal(x,y) for x,y in zip(
+                    local['gradients'],receipt['gradients'])):
+                raise RuntimeError('Corrupt GLFC/LGA source gradient tensors')
         if client.received_lga_radius!=self.native_lga_radius:
             raise RuntimeError('Client missing original LGA radius')
         if client.received_native_artifacts!=self.source_method_artifacts:
@@ -323,6 +352,7 @@ class FederatedCLState:
             'feat_ecc_history_entries':len(self.feat_ecc_history),
             'source_method_artifact_clients':len(self.source_method_artifacts),
             'native_lga_radius':self.native_lga_radius,
+            'original_proto_gradient_receipts':len(self.native_prototype_gradients),
             'contributing_clients':sorted(self.uploaded_clients),
             'integrated_classes':len(self.integrated_classes)}
 

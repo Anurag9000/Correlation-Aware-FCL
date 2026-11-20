@@ -87,6 +87,8 @@ class LocalState:
     native_memory_state:dict=field(default_factory=dict)
     received_native_artifacts:dict[int,dict]=field(default_factory=dict)
     received_lga_radius:float|None=None
+    pending_native_prototypes:list[dict]=field(default_factory=list)
+    received_native_prototypes:dict=field(default_factory=dict)
     pending_feat_ecc:list[dict]=field(default_factory=list)
     feat_selection_tickets:dict[int,list[int]]=field(default_factory=dict)
     feat_selection_receipts:list[dict]=field(default_factory=list)
@@ -106,6 +108,7 @@ class LocalState:
         self.pending_class_update_steps={}
         self.pending_importance={}
         self.pending_feat_ecc=[]
+        self.pending_native_prototypes=[]
     def arrival(self,indices,labels,stage):
         if stage > self.current_stage:
             self.current_indices=[]

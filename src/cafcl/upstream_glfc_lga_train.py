@@ -41,6 +41,14 @@ def train_original_glfc_lga(model,client,bank,cfg,device,round_id,task_classes,
     # that mechanism is NOT yet wired. Both slots use the last legit local
     # teacher as an explicitly labelled protocol-compatibility approximation.
     source.train(round_id,[teacher,teacher])
+    if experience_end and source.signal:
+        # The actual 50-step author mask and original auxiliary encoder
+        # gradients are generated only when its unchanged entropy trigger
+        # fires. Disconnected clients hold receipts privately until upload.
+        from .upstream_native_prototypes import source_prototype_gradients
+        receipts=source_prototype_gradients(
+            cfg.method,source,cfg,client,model,device)
+        client.pending_native_prototypes.extend(receipts)
     steps=int(cfg.epochs)*len(source.train_loader)
     if steps<=0:
         raise RuntimeError('Original GLFC/LGA train performed no updates')

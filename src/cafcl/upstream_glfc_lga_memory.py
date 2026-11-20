@@ -71,7 +71,7 @@ def original_memory_methods(method,*,cpu_test=False):
         raise RuntimeError("Authors original learner class unavailable")
     names={"update_new_set","entropy_signal","_construct_exemplar_set",
            "_reduce_exemplar_sets","train","_compute_loss",
-           "efficient_old_class_weight"}
+           "efficient_old_class_weight","proto_grad_sharing","prototype_mask"}
     subset=[n for n in candidates[0].body
             if isinstance(n,ast.FunctionDef) and n.name in names]
     if {n.name for n in subset}!=names:
@@ -86,9 +86,14 @@ def original_memory_methods(method,*,cpu_test=False):
     if cpu_test:
         bridge=_CPUDeviceOnly().visit(bridge)
     ast.fix_missing_locations(bridge)
+    import copy
+    from PIL import Image
+    from torchvision import transforms
+    from torch import optim
     from torch.autograd import Variable
     namespace={"torch":torch,"nn":nn,"np":np,"F":F,
-               "Variable":Variable,"optim":torch.optim,
+               "Variable":Variable,"optim":optim,"Image":Image,
+               "transforms":transforms,"copy":copy,
                "model_to_device":lambda m,p,d:m.to(
                    "cpu" if cpu_test else f"cuda:{int(d)}")}
     exec(compile(bridge,str(path),"exec"),namespace)

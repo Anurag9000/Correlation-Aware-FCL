@@ -407,3 +407,31 @@ author-source behavior and is explicitly recorded in the per-task output.
 The FEAT ETF head and geometric correction remain unverified
 paper/third-party reconstructions. The original `_fl_train` aggregation
 loop still needs protocol integration; the fidelity gate stays CLOSED.
+
+## Original GLFC/LGA auxiliary-encoder prototype gradients
+
+`src/cafcl/upstream_native_prototypes.py` now executes the official
+`proto_grad_sharing`/`prototype_mask` source bodies **when**
+the unchanged author entropy condition is true. It constructs the exact
+original auxiliary LeNet architecture and `weights_init` from the
+immutable author files, then applies the original 50-step prototype
+input optimization and extracts the source CE encoder gradients.
+
+Sparse client class coordinates are mapped by permuting the ORIGINAL
+100-way encoder output logits (not changing the CE denominator),
+so `ProxyServer.gradient2label` can infer the true global class
+from the original last encoder weight gradients. Source model forwards
+are padded to physical batch64 then sliced back to their logical
+single-prototype input, preserving the original single-example loss
+gradient. This is a disclosed user-protocol input-shape adapter.
+Only client-local already arrived TRAIN images are used.
+
+Generated gradient receipts are stored during hidden local execution
+and enter the server acknowledged gradient archive **only** on actual
+upload. Synchronized clients download their union and verify source
+gradient tensor identity. An entropy trigger that never fires generates
+NO prototypes, exactly as the source prescribes. Note that threshold
+`1.2` was calibrated to different class increments; it may remain
+dormant under 2-class local additions. The original server
+reconstruction/monitor/model_back is still outstanding. The complete
+pilot is NOT yet fully paper faithful, gate CLOSED.
