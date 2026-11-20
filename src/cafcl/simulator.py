@@ -650,6 +650,14 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 if cfg.share_continual_state:
                     server_cl_state.merge_clients([clients[u['client_id']] for u in accepted],
                         bank,cfg.method,candidate,version+1)
+                    if cfg.method in {'native_glfc','native_lga'}:
+                        # Execute original source proxy inversion, monitor,
+                        # and model_back on accepted gradients only.
+                        # This precedes selected-client broadcast; hidden
+                        # clients cannot receive it before reconnection.
+                        from .upstream_native_proxy_server import source_proxy_server_step
+                        source_proxy_server_step(server_cl_state,cfg.method,
+                            model,candidate,cfg,device,round_id)
                     for upload in accepted:
                         for cls,n in upload['class_counts'].items():
                             cls=int(cls)

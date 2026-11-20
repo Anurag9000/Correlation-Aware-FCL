@@ -28,19 +28,13 @@ def train_original_glfc_lga(model,client,bank,cfg,device,round_id,task_classes,
         cfg.method,model,client,bank,cfg,device,active_pair_classes,
         return_source=True)
     order=tuple(source.source_global_order)
-    teacher=None
-    old_classes=tuple(sorted(set(client.native_teacher_classes) & set(order)))
-    if old_classes and client.native_teacher is not None:
-        teacher_core=copy.deepcopy(model)
-        teacher_core.load_state_dict(client.native_teacher)
-        teacher_core.to(device).eval()
-        for param in teacher_core.parameters():
-            param.requires_grad_(False)
-        teacher=_CompactLogits(teacher_core,old_classes).to(device).eval()
-    # model_back is original proxy server's two selected teacher snapshots;
-    # that mechanism is NOT yet wired. Both slots use the last legit local
-    # teacher as an explicitly labelled protocol-compatibility approximation.
-    source.train(round_id,[teacher,teacher])
+    # The actual authors' TWO proxy-selected historical models are
+    # independently reconstructed from the last acknowledged broadcast.
+    # Never fabricate a pair by duplicating a local teacher.
+    from .upstream_native_proxy_server import original_source_teacher_slots
+    teacher_slots=original_source_teacher_slots(
+        client,model,device,order,active_pair_classes)
+    source.train(round_id,teacher_slots)
     if experience_end and source.signal:
         # The actual 50-step author mask and original auxiliary encoder
         # gradients are generated only when its unchanged entropy trigger
@@ -78,5 +72,7 @@ def train_original_glfc_lga(model,client,bank,cfg,device,round_id,task_classes,
                        if cfg.method=='native_glfc'
                        else 'LGA/LGA.py:LGA.train'),
         source_memory='authors.update_new_set',
-        source_teacher='LOCAL_TEACHER_APPROX_NOT_ORIGINAL_PROXY_MODEL_BACK',
+        source_teacher=('AUTHORS_ORIGINAL_PROXY_MODEL_BACK'
+                        if client.received_native_proxy is not None
+                        else 'AUTHORS_PROXY_UNAVAILABLE_NO_OLD_TEACHER'),
     )

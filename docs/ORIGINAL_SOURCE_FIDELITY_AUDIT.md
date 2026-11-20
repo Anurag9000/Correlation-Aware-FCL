@@ -482,3 +482,33 @@ compatibility rule; exact per-sync source behavior cannot be claimed. The
 original source 250 LBFGS inversion iterations and 20 images/prototype
 remain unchanged whenever enough receipts exist. No hidden client's
 receipt can enter the backlog before that client reconnects.
+
+## GLFC/LGA original proxy server now in the *actual* training run
+
+The `simulator.run_experiment` accepted-upload branch now invokes
+`source_proxy_server_step` after accepted client model/prototype
+merging and before any client downloads. It invokes actual original
+`ProxyServer.dataloader`, LBFGS `reconstruction`, monitor/LGA
+`f_monitor`, and `model_back`, when the source has sufficient
+accepted reconstructed gradients. New and buffered accepted source
+prototype receipts are the **only** inputs; unsent offline-client
+gradients cannot leak to the server.
+
+The original `GLFC_model.train`/`LGA.train` call now receives
+**two separate, source-selected historical teacher snapshots** from
+the last acknowledged server broadcast, not the former fabricated
+`[local_teacher,local_teacher]` pair. The original entropy signal
+continues to choose which slot to use.
+
+The source monitor's `drop_last=True` batch64 assumption is incompatible
+with a single 2-class task that reconstructs only 40 proxy images.
+The protocol explicitly buffers accepted gradient receipts until
+at least 4 prototypes produce at least 80 reconstructions. This
+delayed proxy-monitor trigger is **not from the original papers**.
+It must be treated as an experimental setting adaptation, never
+as proof of exact original synchronized per-round behavior.
+
+No GPU/full CIFAR-100 source proxy inversion has been run by CI;
+CI exercises the original source entrypoints and mocked orchestration
+but cannot certify 250-step, multi-prototype CUDA runs or original-paper
+accuracy. The independent scientific-fidelity gate remains CLOSED.
