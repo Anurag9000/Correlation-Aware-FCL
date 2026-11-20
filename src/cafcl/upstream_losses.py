@@ -122,3 +122,41 @@ def original_loss(method,global_logits,global_labels,known_classes,
     else:
         obj.old_model=None
     return obj._compute_loss(None,inputs,remapped)
+
+
+@lru_cache(maxsize=1)
+def original_feat_gsa_source():
+    """Compile authors' exact FEAT.py:gsa_distill_loss function body."""
+    path=ROOT/'FEAT/methods/FEAT.py'
+    mod=ast.parse(path.read_text(),filename=str(path))
+    definitions=[n for n in mod.body if isinstance(n,ast.FunctionDef)
+                 and n.name=='gsa_distill_loss']
+    if len(definitions)!=1:
+        raise RuntimeError('Published FEAT source missing gsa_distill_loss')
+    isolated=ast.Module(body=definitions,type_ignores=[])
+    ast.fix_missing_locations(isolated)
+    env={'torch':torch,'F':F}
+    # The source function has Torch type annotations evaluated on definition.
+    exec(compile(isolated,str(path),'exec'),env)
+    return env['gsa_distill_loss']
+
+
+def original_feat_gsa(features,labels,weight,known_classes,tau=.07,eps=1e-8):
+    """Run original relation-KL body with compact class-id compatibility.
+
+    The imported FEAT ETF head is unavailable from the official source.
+    This compatibility call transposes our standard Linear classifier [C,d]
+    into the published relation loss's documented [d,C] prototype orientation.
+    This does NOT reproduce the original ETF classifier or whole FEAT method.
+    """
+    known=tuple(sorted(set(int(c) for c in known_classes)))
+    if not known:
+        raise ValueError('FEAT cannot compute GSA without known classes')
+    ids=torch.as_tensor(known,device=labels.device,dtype=torch.long)
+    mapped=torch.full((weight.shape[0],),-1,dtype=torch.long,device=labels.device)
+    mapped[ids]=torch.arange(len(ids),device=labels.device)
+    y=mapped[labels.long()]
+    if (y<0).any():
+        raise ValueError('FEAT GSA labels must all be locally known')
+    compact_w=weight.index_select(0,ids).t().contiguous()
+    return original_feat_gsa_source()(features,y,compact_w,tau=tau,eps=eps)

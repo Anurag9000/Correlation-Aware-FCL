@@ -158,3 +158,13 @@ On CPU synthetic tests only, the source-AST loss bridge changes the
 original device transfer syntax `.cuda()` to `.to('cpu')`. All mathematical
 source nodes and original GPU training code remain unchanged. The normal
 paper-fidelity production pilot still requires CUDA.
+
+## Original FEAT relation loss now executed
+
+The `native_feat` local objective now calls the exact original
+`FEAT/methods/FEAT.py:gsa_distill_loss` body via `original_feat_gsa_source`.
+The integration maps sparse class IDs to contiguous labels and transposes the
+standard Linear classifier's `[C,d]` weights into the expected `[d,C]` form.
+This is a **protocol/model-shape adaptation**, not proof of original FEAT
+network parity. The official `IncrementalNet_CausalETF` remains absent, as do
+the original retention selection and inference correction in the active runner.

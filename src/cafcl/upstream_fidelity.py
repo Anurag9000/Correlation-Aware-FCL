@@ -54,7 +54,7 @@ COMPONENTS={
  ),
  'feat':(
   ('FEAT/convs/resnet.py','resnet18','imported'),
-  ('FEAT/methods/FEAT.py','gsa_distill_loss','adapted'),
+  ('FEAT/methods/FEAT.py','gsa_distill_loss','original_invoked'),
   ('FEAT/methods/FEAT.py','FLDataSelector.mask_local_data','omitted'),
   ('FEAT/methods/FEAT.py','FLDataSelector.compute_local_leverage_scores','omitted'),
   ('FEAT/methods/FEAT.py','FLDataSelector.aggregate_leverage_scores','omitted'),

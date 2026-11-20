@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import torch
 import torch.nn.functional as F
-from .upstream_losses import original_loss
+from .upstream_losses import original_loss,original_feat_gsa
 
 NATIVE_METHODS=frozenset({"native_glfc","native_lga","native_feat"})
 
@@ -64,25 +64,12 @@ def weighted_bce(logits,labels,classes,old_classes,teacher_logits=None,method="n
 
 
 def feat_gsa(features,labels,weight,known_classes,tau=.07,eps=1e-8):
-    """FEAT/methods/FEAT.py:gsa_distill_loss, using explicitly transposed FC W.
+    """Run original FEAT GSA math, with sparse-global-ID and FC shape adapter.
 
-    Upstream passes fc.weight (C,d) while gsa_distill_loss indexes W[:, labels]
-    and therefore expects (d,C). This port passes a corrected transpose.
+    Published source itself is compiled directly from frozen FEAT/methods/FEAT.py.
+    The original ETF classifier is still unavailable from the published repo.
     """
-    z,y,ids=_subset(weight.new_zeros((len(labels),weight.shape[0])),labels,known_classes)
-    f=F.normalize(features,dim=1)
-    W=F.normalize(weight.index_select(0,ids).t(),dim=0)
-    MF=f @ f.t()
-    P=F.normalize(W.index_select(1,y).t(),dim=1)
-    MP=P @ P.t()
-    logPF=F.log_softmax(MF/max(tau,eps),dim=1)
-    PF=logPF.exp()
-    logPP=F.log_softmax(MP/max(tau,eps),dim=1).detach()
-    row_kl=(PF*(logPF-logPP)).sum(dim=1)
-    uniq,inv=torch.unique(y,return_inverse=True)
-    total=torch.zeros(len(uniq),device=features.device).scatter_add_(0,inv,row_kl)
-    counts=torch.zeros(len(uniq),device=features.device).scatter_add_(0,inv,torch.ones_like(row_kl))
-    return (total/(counts+eps)).mean()
+    return original_feat_gsa(features,labels,weight,known_classes,tau=tau,eps=eps)
 
 
 def native_loss(method,model,inputs,labels,known_classes,teacher=None,old_classes=(),feat_kd=.1):
