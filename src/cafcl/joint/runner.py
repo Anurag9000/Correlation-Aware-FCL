@@ -47,8 +47,15 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
                 jobs.append({'job_id':job_id,'family':design.family,'metadata':design.metadata,
                     'learning_setting':setting,'epochs':5,'seed':seed,'plan_file':'plans/'+filename,
                     'plan_hash':plan['plan_hash'],'atomic_hash':plan['atomic_hash'],'status':'planned',
-                    'low_support_warning':plan['allocation_audit']['minimum_samples_per_occurrence']<16})
-        write_json(root/'manifest.json',{'dataset':'cifar100','jobs':jobs,'infeasible':blocked,
+                    'low_support_warning':plan['allocation_audit']['minimum_samples_per_class_occurrence']<8})
+        unique={};aliases=[]
+        for job in jobs:
+            key=(job['plan_hash'],job['learning_setting'],job['epochs'])
+            if key in unique:
+                aliases.append({'job_id':job['job_id'],'canonical_job_id':unique[key]['job_id']})
+            else:unique[key]=job
+        jobs=list(unique.values())
+        write_json(root/'manifest.json',{'dataset':'cifar100','jobs':jobs,'aliases':aliases,'infeasible':blocked,
                    'implementation_blocked':['P: raw sample overlap and domain allocation']})
         return jobs
     for item in foundational_registry(depths,seed=seed):
@@ -83,7 +90,7 @@ def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evalua
             counts[(r['interval_id'],lookup[oid]['client_id'])]+=1
     cfg=RunConfig(dataset='cifar100',model='resnet18_cifar32',stream_protocol=True,
         num_clients=plan['num_clients'],epochs=job['epochs'],batch_size=64,
-        participation=1.,selector='random',scenario='disjoint',
+        participation=1.,selector='random',scenario='overlap',
         stages=1,rounds_per_stage=1,learning_setting=job['learning_setting'],
         local_tasks_per_round=max(counts.values()),method='replay',
         aggregator='fedavg',memory_per_class=50,classwise_head_merge=False,

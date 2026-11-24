@@ -1,0 +1,27 @@
+name: Joint FCL isolated validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/cafcl/**'
+      - 'tests/test_joint_*.py'
+      - '.github/workflows/joint-tests.yml'
+  workflow_dispatch:
+jobs:
+  joint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU dependencies and repository
+        run: |
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test]'
+      - name: Run joint-specific unit and synthetic integration tests
+        run: pytest -q tests/test_joint_*.py

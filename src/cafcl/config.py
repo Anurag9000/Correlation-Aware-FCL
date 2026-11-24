@@ -133,7 +133,7 @@ class RunConfig:
         assert 0 <= self.client_training_concurrency <= self.num_clients
         assert self.training_augmentation in {'none','cifar_crop_flip'}
         if self.training_augmentation != 'none':
-            assert self.dataset == 'cifar100' and self.stream_protocol and self.scenario == 'disjoint'
+            assert self.dataset == 'cifar100' and self.stream_protocol and (self.scenario == 'disjoint' or (self.joint_plan_path and self.scenario=='overlap'))
         assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
         if self.joint_plan_path:
             assert self.joint_plan_hash and len(self.joint_plan_hash)==64

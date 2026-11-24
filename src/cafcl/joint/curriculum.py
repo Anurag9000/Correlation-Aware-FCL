@@ -288,6 +288,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
     allocation = {"unique_assigned": len(set(all_indices)), "assignments": len(all_indices),
                   "unused_training_indices": sorted(set(range(len(train_targets)))-set(all_indices)),
                   "minimum_samples_per_occurrence": min(len(x.train_indices) for x in tasks),
+                  "minimum_samples_per_class_occurrence": min(len(pool[c])//n for c,n in counts.items()),
                   "raw_sample_overlap": 0.0,
                   "allocation_order": allocation_order,
                   "training_target_hash": digest(list(map(int, train_targets)))}

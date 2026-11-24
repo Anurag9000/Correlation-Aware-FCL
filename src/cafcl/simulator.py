@@ -663,6 +663,14 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'interval':round_id,'server_version_during_local_learning':version,
                     'server_state_digest_before':boundary_before,'server_state_digest_after':boundary_after,
                     'atomic_barriers':task_barriers,'local_occurrences':local_details})
+            if cfg.joint_plan_path and cfg.joint_local_evaluation and local_details:
+                # Use the same planned, all-observed evaluation context before
+                # and after aggregation. This cannot affect selection.
+                model.load_state_dict(global_state)
+                joint_global_before,_=evaluate(model,bank,observed,cfg.batch_size,device,
+                    task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,
+                    split='validation',loader_seed=0)
+            else:joint_global_before=None
             class_relationships=None
             if cfg.selector in {'feature_max','feature_min','gradient_align','gradient_conflict'}:
                 # Simulation-privileged: historical data that have *arrived*,
@@ -859,6 +867,33 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 clients[cid].selection_count+=1
             model.load_state_dict(global_state)
             model.to(device)
+            if cfg.joint_plan_path and cfg.joint_local_evaluation:
+                joint_global_after,_=evaluate(model,bank,observed,cfg.batch_size,device,
+                    task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,
+                    split='validation',loader_seed=0)
+                if cfg.learning_setting=='task_il':
+                    from .joint.task_evaluation import evaluate_task_conditioned
+                    joint_global_after['task_conditioned']=evaluate_task_conditioned(
+                        model,bank,active_task_sets,cfg.batch_size,device)
+                # The final local measurement in each interval is the pre-upload
+                # model. Selected clients received exactly the committed state;
+                # evaluate it with their unchanged pre-upload competitor set.
+                last_local={d['client']:d for d in local_details}
+                broadcast_metrics={}
+                for cid in selected:
+                    prior=last_local.get(cid,{}).get('local_validation_post_task')
+                    if prior is None:continue
+                    labels=set(prior['observed_classes'])
+                    groups=prior.get('evaluation_task_heads') if cfg.learning_setting=='task_il' else None
+                    after,_=evaluate(model,bank,labels,cfg.batch_size,device,
+                        task_class_groups=groups,split='validation',loader_seed=0)
+                    broadcast_metrics[cid]={'pre_upload':prior,'post_broadcast':after,
+                        'accuracy_change':after['accuracy']-prior['accuracy']}
+                atomic_json(run_dir/f'joint_communication_{round_id:05d}.json',{
+                    'interval':round_id,'server_version':version,'selected_clients':selected,
+                    'accepted_clients':[u['client_id'] for u in accepted],
+                    'global_validation_before':joint_global_before,'global_validation_after':joint_global_after,
+                    'broadcast_validation':broadcast_metrics})
             causal=None
             if cfg.causal_diagnostics and len(accepted)>=2 and cfg.aggregator in {'fedavg','uniform'}:
                 # Use the pre-aggregation base model and the exact accepted

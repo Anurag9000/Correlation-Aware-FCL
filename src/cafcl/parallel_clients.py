@@ -86,6 +86,10 @@ def _train_one(runtime, client, bank, cfg, device, round_id, event,
         result,_=evaluate(runtime.model,bank,labels,cfg.batch_size,device,
                           task_class_groups=groups,split='validation',
                           loader_seed=0)
+        if groups is not None:
+            from .joint.task_evaluation import evaluate_task_conditioned
+            result['task_conditioned']=evaluate_task_conditioned(runtime.model,bank,groups,cfg.batch_size,device)
+            result['evaluation_task_heads']=groups
         return result
     def measure_before():
         runtime.model.load_state_dict(client.shared_weights)
