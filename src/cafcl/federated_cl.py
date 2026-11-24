@@ -82,6 +82,8 @@ class FederatedCLState:
     acknowledged_train_indices:set[int]=field(default_factory=set)
     acknowledged_optimized_indices:set[int]=field(default_factory=set)
     last_archive_upload_bytes:int=0
+    independent_archive_version:int=0
+    archive_source_heads:dict[int,set[str]]=field(default_factory=dict)
     joint_source_heads:dict[int,set[str]]=field(default_factory=dict)
     joint_occurrence_receipts:dict[str,dict]=field(default_factory=dict)
     memory_provenance:dict[int,set[int]]=field(default_factory=dict)
@@ -242,6 +244,57 @@ class FederatedCLState:
         self.teacher_version=int(version)
         self.uploaded_clients.update(int(c.client_id) for c in uploaded_clients)
         self.version=int(version)
+
+    def merge_replay_only(self,clients,bank,*,capacity=0,seed=0):
+        """Independent raw-image upload. Never acknowledge model updates."""
+        from hashlib import sha256
+        from .models import NORMALIZATION_MEAN,NORMALIZATION_STD
+        pool=_clone_memory(self.memory)
+        known={i for group in pool.values() for i in group}
+        mean=torch.tensor(NORMALIZATION_MEAN).view(3,1,1)
+        std=torch.tensor(NORMALIZATION_STD).view(3,1,1)
+        self.last_archive_upload_bytes=0
+        for client in clients:
+            for cls,indices in client.private_memory.items():
+                for idx in indices:
+                    idx=int(idx)
+                    if not 0<=idx<len(bank.train) or int(bank.train.targets[idx])!=int(cls):
+                        raise ValueError('Independent archive sample/label mismatch')
+                    heads=client.joint_local_source_heads.get(idx,set())
+                    self.archive_source_heads.setdefault(idx,set()).update(heads)
+                    self.memory_provenance.setdefault(idx,set()).add(int(client.client_id))
+                    self.memory_origins.setdefault(idx,(int(client.client_id),int(client.sample_first_local_experience.get(idx,client.local_experience))))
+                    if idx in known:continue
+                    x,y=bank.train[idx]
+                    pixels=((x.detach().cpu()*std+mean).clamp(0,1)*255).round().to(torch.uint8)
+                    self.exemplar_payloads[idx]=(pixels,int(y))
+                    self.last_archive_upload_bytes+=pixels.numel()*pixels.element_size()
+                    pool.setdefault(int(cls),[]).append(idx);known.add(idx)
+        if capacity:
+            for cls,group in pool.items():
+                pool[cls]=sorted(group,key=lambda i:(sha256(f'{seed}:{cls}:{i}'.encode()).digest(),i))[:capacity]
+            keep={i for group in pool.values() for i in group}
+            for table in (self.exemplar_payloads,self.archive_source_heads,self.memory_provenance,self.memory_origins):
+                for i in list(table):
+                    if i not in keep:del table[i]
+        self.memory=pool
+        self.independent_archive_version+=1
+
+    def receive_model_metadata(self,client):
+        """Metadata associated with a model download, not a replay download."""
+        client.remotely_received_classes.update(self.integrated_classes)
+        client.observed_classes.update(self.integrated_classes)
+        client.received_server_class_sample_exposure=dict(self.class_sample_exposure)
+
+    def broadcast_replay_only(self,client):
+        """Receive the independent archive without replacing weights or momentum."""
+        client.received_memory=_clone_memory(self.memory)
+        client.memory=combined_memory(client.private_memory,client.received_memory)
+        client.received_example_payloads={i:(x.clone(),y) for i,(x,y) in self.exemplar_payloads.items()}
+        client.received_sample_origins=dict(self.memory_origins)
+        client.received_replay_version=self.independent_archive_version
+        client.joint_received_source_heads={i:set(heads) for i,heads in self.archive_source_heads.items()
+                                           if i in self.exemplar_payloads}
 
     def broadcast_to(self,client,method):
         """Receive the whole server state only at actual model synchronization."""

@@ -140,6 +140,8 @@ class RunConfig:
     audit_test_every_sync: bool = True
     # Opt-in joint protocol. Empty values preserve legacy signatures.
     joint_plan_path: str = ''
+    joint_archive_upload_policy: str = 'selected'
+    joint_archive_download_policy: str = 'selected'
     joint_plan_hash: str = ''
     joint_local_evaluation: bool = False
     joint_allow_partial_coverage: bool = False
@@ -251,6 +253,11 @@ class RunConfig:
             _require(not self.reset_memory_on_sync, 'Synchronized history must remain available')
             _require(not (self.full_sync and self.participation<1), 'Hidden clients cannot receive server broadcasts')
         if self.stream_protocol and not self.joint_plan_path:_require(self.share_continual_state, 'Legacy streams synchronize method-specific CL state')
+        if self.joint_archive_upload_policy not in {'selected','all'} or self.joint_archive_download_policy not in {'selected','all','none'}:
+            raise ValueError('Unknown archive exchange policy')
+        if (self.joint_archive_upload_policy,self.joint_archive_download_policy)!=('selected','selected'):
+            if not self.joint_plan_path or not self.share_continual_state or self.method!='replay' or self.joint_control_kind!='federated':
+                raise ValueError('Independent archive exchange requires federated joint shared Replay')
         if self.server_memory_per_class<0:raise ValueError('Negative server replay capacity')
         if self.server_memory_per_class and not self.share_continual_state:raise ValueError('Server replay cap requires a shared archive')
         if self.stale_update_policy not in {'damped_delta','undamped_delta','direct_model'}:raise ValueError('Unknown stale update policy')
@@ -353,6 +360,8 @@ class RunConfig:
     def to_dict(self):
         data=asdict(self)
         if data['audit_test_every_sync'] is True:data.pop('audit_test_every_sync')
+        if data['joint_archive_upload_policy']=='selected':data.pop('joint_archive_upload_policy')
+        if data['joint_archive_download_policy']=='selected':data.pop('joint_archive_download_policy')
         if data['physical_batch_policy']=='fixed_pad':data.pop('physical_batch_policy')
         if data['replay_class_sampling_policy']=='distinct_first':data.pop('replay_class_sampling_policy')
         for key,default in (('server_memory_per_class',0),('stale_update_policy','damped_delta'),('terminal_stale_guard',True),('aggregation_weight_policy','fresh_examples')):

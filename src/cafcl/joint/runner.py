@@ -134,6 +134,8 @@ def job_config(job,plan,path,concurrency=1,local_evaluation=False,mechanistic_pr
         replay_update_policy=job.get('replay_update_policy','sampled_mixed'),
         replay_class_sampling_policy=job.get('replay_class_sampling_policy','distinct_first'),
         share_continual_state=job.get('share_continual_state',True),
+        joint_archive_upload_policy=job.get('joint_archive_upload_policy','selected'),
+        joint_archive_download_policy=job.get('joint_archive_download_policy','selected'),
         server_memory_per_class=job.get('server_memory_per_class',0),
         stale_update_policy=job.get('stale_update_policy','damped_delta'),
         terminal_stale_guard=job.get('terminal_stale_guard',True),

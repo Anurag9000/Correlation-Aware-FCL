@@ -31,11 +31,11 @@ from .task_ids import task_instance_id
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v11'
+PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v12'
 
 def protocol_version_for(cfg):
     if getattr(cfg,'joint_plan_path',''):
-        return 'joint_spatiotemporal_fcl_v12_audit_'+cfg.learning_setting
+        return 'joint_spatiotemporal_fcl_v13_audit_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -831,6 +831,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             aggregation_norm_diagnostics=None
             custom_head_fusion=False
             server_cl_state.last_archive_upload_bytes=0
+            independent_archive=(cfg.joint_archive_upload_policy,cfg.joint_archive_download_policy)!=('selected','selected')
+            archive_download_clients=list(selected) if cfg.share_continual_state else []
             if accepted:
                 old_gradient=None
                 if cfg.aggregator in {'retention_aware'} and old:
@@ -874,7 +876,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     raise RuntimeError('Nonfinite joint aggregation candidate')
                 # Accepted client-private historical state is merged before
                 # the model/state acknowledgement; inactive clients are untouched.
-                if cfg.share_continual_state:
+                if cfg.share_continual_state and not independent_archive:
                     server_cl_state.merge_clients([clients[u['client_id']] for u in accepted],
                         bank,cfg.method,candidate,version+1,
                         task_ids_by_index=task_ids_by_index,server_memory_per_class=cfg.server_memory_per_class,seed=cfg.seed)
@@ -902,11 +904,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 for cid in selected:
                     clients[cid].receive(candidate,version+1,
                         clear_memory=cfg.reset_memory_on_sync,reset_optimizer=cfg.optimizer_state_policy=='reset_on_sync')
-                    if cfg.share_continual_state:
+                    if cfg.share_continual_state and not independent_archive:
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
                         server_cl_state.assert_complete_download(clients[cid])
-                    if cfg.learning_setting=='task_il':
+                    if independent_archive:
+                        server_cl_state.receive_model_metadata(clients[cid])
+                    elif cfg.learning_setting=='task_il':
                         from .joint.provenance import download_provenance
                         download_provenance(server_cl_state,clients[cid])
                     assert all(torch.equal(clients[cid].shared_weights[k],v) for k,v in candidate.items())
@@ -918,13 +922,25 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 for cid in selected:
                     clients[cid].receive(global_state,version,
                         clear_memory=cfg.reset_memory_on_sync,reset_optimizer=cfg.optimizer_state_policy=='reset_on_sync')
-                    if cfg.share_continual_state:
+                    if cfg.share_continual_state and not independent_archive:
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
                         server_cl_state.assert_complete_download(clients[cid])
-                    if cfg.learning_setting=='task_il':
+                    if independent_archive:
+                        server_cl_state.receive_model_metadata(clients[cid])
+                    elif cfg.learning_setting=='task_il':
                         from .joint.provenance import download_provenance
                         download_provenance(server_cl_state,clients[cid])
+            if independent_archive:
+                archive_upload_clients=list(clients) if cfg.joint_archive_upload_policy=='all' else list(selected)
+                archive_download_clients=(list(clients) if cfg.joint_archive_download_policy=='all' else list(selected) if cfg.joint_archive_download_policy=='selected' else [])
+                server_cl_state.merge_replay_only([clients[c] for c in archive_upload_clients],bank,capacity=cfg.server_memory_per_class,seed=cfg.seed)
+                for cid in archive_download_clients:server_cl_state.broadcast_replay_only(clients[cid])
+                atomic_json(run_dir/f'joint_archive_{round_id:05d}.json',{
+                    'interval':round_id,'archive_version':server_cl_state.independent_archive_version,
+                    'upload_clients':archive_upload_clients,'download_clients':archive_download_clients,
+                    'model_upload_clients':[u['client_id'] for u in accepted],'model_download_clients':list(selected),
+                    'archive_samples':server_cl_state.statistics()['shared_replay_samples']})
             if cfg.joint_plan_path:
                 atomic_json(run_dir/f'joint_knowledge_{round_id:05d}.json',{
                     'interval':round_id,'committed_version':version,
@@ -944,11 +960,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 for cid in clients:
                     clients[cid].receive(global_state,version,
                         clear_memory=cfg.reset_memory_on_sync,reset_optimizer=cfg.optimizer_state_policy=='reset_on_sync')
-                    if cfg.share_continual_state:
+                    if cfg.share_continual_state and not independent_archive:
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
                         server_cl_state.assert_complete_download(clients[cid])
-                    if cfg.learning_setting=='task_il':
+                    if independent_archive:
+                        server_cl_state.receive_model_metadata(clients[cid])
+                    elif cfg.learning_setting=='task_il':
                         from .joint.provenance import download_provenance
                         download_provenance(server_cl_state,clients[cid])
             for cid in selected:
@@ -1213,9 +1231,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'work_totals':{k:sum(w[k] for w in work) for k in ('current_draws_including_padding','current_draws_without_padding','current_padding_draws','replay_draws','optimization_microbatches','optimizer_steps')},
                     'model_upload_tensor_bytes':transmitted_bytes,
                     'model_download_tensor_bytes':len(selected)*sum(t.numel()*t.element_size() for t in global_state.values()),
-                    'archive_image_download_bytes':len(selected)*archive_bytes if cfg.share_continual_state else 0,
+                    'archive_image_download_bytes':len(archive_download_clients)*archive_bytes,
                     'archive_image_upload_bytes':server_cl_state.last_archive_upload_bytes,
-                    'total_model_and_archive_payload_bytes':transmitted_bytes+len(selected)*sum(t.numel()*t.element_size() for t in global_state.values())+(len(selected)*archive_bytes if cfg.share_continual_state else 0)+server_cl_state.last_archive_upload_bytes,
+                    'total_model_and_archive_payload_bytes':transmitted_bytes+len(selected)*sum(t.numel()*t.element_size() for t in global_state.values())+(len(archive_download_clients)*archive_bytes)+server_cl_state.last_archive_upload_bytes,
                     'accounting_scope':'model tensor and newly uploaded/delivered archive image payload sizes; excludes serialization, headers and metadata'})
             result.update({'round':round_id,'model_version':version,
                            'terminal_communication_only_flush':bool(cfg.stream_protocol and cfg.stream_terminal_flush and round_id==total_rounds-1),
