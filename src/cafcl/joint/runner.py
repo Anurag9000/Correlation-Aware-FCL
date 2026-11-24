@@ -110,6 +110,9 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
 def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evaluation=False):
     from ..config import RunConfig
     from ..simulator import run_experiment
+    if os.environ.get('CAFCL_REQUIRE_CUDA')=='1':
+        import torch
+        if not torch.cuda.is_available():raise RuntimeError('GPU worker cannot access CUDA; refusing CPU fallback')
     manifest=Path(manifest).resolve()
     catalog=json.loads(manifest.read_text());jobs=catalog['jobs']
     alias={a['job_id']:a['canonical_job_id'] for a in catalog.get('aliases',[])}
@@ -142,10 +145,17 @@ def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evalua
         stream_terminal_flush=plan['intervals'][-1]['terminal_flush'],
         checkpoint_every=1,job_id=job_id)
     job_dir=Path(output)/job_id
+    if (job_dir/'config.json').exists():
+        existing=json.loads((job_dir/'config.json').read_text())
+        expected=json.loads(json.dumps(cfg.to_dict(),default=str))
+        if existing!=expected:raise RuntimeError('Existing joint run configuration differs; use a new output root')
     try:
         head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
         dirty=bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],text=True).strip())
     except (OSError,subprocess.CalledProcessError):head=None;dirty=None
+    required_head=os.environ.get('CAFCL_EXPECT_GIT_HEAD')
+    if required_head and (head!=required_head or dirty):
+        raise RuntimeError('Worker source revision differs from clean campaign checkout')
     # Preserve the first launch receipt; retries have separate receipts.
     from time import time_ns
     write_json(job_dir/'launch_receipts'/f'{time_ns()}.json',
@@ -170,6 +180,12 @@ def main(argv=None):
     a.add_argument('--output',required=True);a.add_argument('--family')
     a.add_argument('--concurrency',type=int,default=1);a.add_argument('--gpu',type=int)
     a.add_argument('--local-evaluation',action='store_true')
+    a=sub.add_parser('broker');a.add_argument('--manifest',required=True);a.add_argument('--output',required=True)
+    a.add_argument('--gpus',type=int,nargs='+',required=True);a.add_argument('--min-free-mib',type=int,required=True)
+    a.add_argument('--min-disk-gib',type=float,default=20);a.add_argument('--retries',type=int,default=0)
+    a.add_argument('--family');a.add_argument('--limit',type=int,default=0)
+    a.add_argument('--concurrency',type=int,default=1);a.add_argument('--local-evaluation',action='store_true')
+    a.add_argument('--allow-shared-gpu',action='store_true')
     a=sub.add_parser('validate');a.add_argument('--manifest',required=True)
     a=sub.add_parser('audit');a.add_argument('--manifest',required=True);a.add_argument('--output',required=True)
     a=sub.add_parser('report');a.add_argument('--run-dir',required=True);a.add_argument('--output')
@@ -181,6 +197,11 @@ def main(argv=None):
     if a.command=='plan':
         jobs=plan_campaign(a.output,a.data_root,a.seed,not a.no_download,a.depths,a.suite)
         print(f'Planned {len(jobs)} conditions; no training launched')
+    elif a.command=='broker':
+        from .broker import run_broker
+        result=run_broker(a)
+        print(json.dumps(result,indent=2))
+        if result['failed'] or result['blocked']:raise SystemExit(1)
     elif a.command=='validate':
         from .result_audit import validate_manifest
         report=validate_manifest(a.manifest,a.data_root,not a.no_download)

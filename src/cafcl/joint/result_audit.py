@@ -28,43 +28,7 @@ def audit_campaign(manifest,output):
     jobs=json.loads(Path(manifest).read_text())['jobs']
     root=Path(output);root.mkdir(parents=True,exist_ok=True)
     rows=[]
-    for job in jobs:
-        directory=root/job['job_id'];row={'job_id':job['job_id'],'status':'not_started'}
-        try:
-            status=directory/'status.json'
-            if status.exists():row['status']=json.loads(status.read_text())['status']
-            if row['status']=='completed':
-                plan=json.loads((directory/'joint_plan.json').read_text())
-                if plan['plan_hash']!=job['plan_hash'] or digest({k:v for k,v in plan.items() if k!='plan_hash'})!=job['plan_hash']:
-                    raise ValueError('Run plan hash mismatch')
-                history=json.loads((directory/'metrics.json').read_text())
-                if len(history)!=len(plan['intervals']):raise ValueError('Incomplete metrics')
-                assert_sync_reports_complete(directory,history)
-                from .knowledge_audit import audit_knowledge
-                ledger=audit_knowledge(directory,plan)
-                row.update(acknowledged_occurrences=ledger['acknowledged'],pending_occurrences=ledger['pending'],
-                           committed_versions=ledger['commits'])
-                for r in plan['intervals']:
-                    record=json.loads((directory/f"joint_interval_{r['interval_id']:05d}.json").read_text())
-                    if record['server_state_digest_before']!=record['server_state_digest_after']:
-                        raise ValueError('Server mutated inside interval')
-                    if [t for x in record['atomic_barriers'] for t in x.get('atomic_steps',[x['atomic_step']])]!=r['atomic_steps']:
-                        raise ValueError('Executed atomic schedule mismatch')
-                    if {x['occurrence_id'] for x in record['local_occurrences']}!=set(r['occurrences']):
-                        raise ValueError('Executed occurrence mismatch')
-                if not (directory/'model_final.pt').exists():raise ValueError('Missing final model')
-                json.loads((directory/'summary.json').read_text())
-                row['status']='artifact_verified'
-                sync=directory/'per_sync_accuracy'/f'sync_{len(history):03d}.json'
-                terminal=json.loads(sync.read_text())
-                row.update(test_accuracy=terminal['test_accuracy'],
-                    validation_accuracy=terminal['validation_accuracy'],
-                    observed_classes=terminal['observed_class_count'],
-                    integrated_classes=terminal['server_integrated_class_count'],
-                    never_predicted=len(terminal['zero_prediction_classes']))
-        except Exception as exc:
-            row['status']='audit_failed';row['reason']=repr(exc)
-        rows.append(row)
+    for job in jobs:rows.append(audit_job(job,root))
     report={'counts':dict(Counter(x['status'] for x in rows)),'jobs':rows,
             'scope':'Artifact completeness, not causal validity or independent checkpoint inference'}
     write_json(root/'joint_campaign_audit.json',report)
@@ -72,3 +36,48 @@ def audit_campaign(manifest,output):
     with (root/'joint_campaign_audit.csv').open('w',newline='') as handle:
         writer=csv.DictWriter(handle,fieldnames=keys);writer.writeheader();writer.writerows(rows)
     return report
+
+
+def audit_job(job,root):
+    from ..stage_report import assert_sync_reports_complete
+    root=Path(root)
+    directory=root/job['job_id'];row={'job_id':job['job_id'],'status':'not_started'}
+    try:
+        status=directory/'status.json'
+        if status.exists():row['status']=json.loads(status.read_text())['status']
+        if row['status']=='completed':
+            plan=json.loads((directory/'joint_plan.json').read_text())
+            if plan['plan_hash']!=job['plan_hash'] or digest({k:v for k,v in plan.items() if k!='plan_hash'})!=job['plan_hash']:
+                raise ValueError('Run plan hash mismatch')
+            config=json.loads((directory/'config.json').read_text())
+            for key,expected in [('joint_plan_hash',job['plan_hash']),('learning_setting',job['learning_setting']),('seed',job['seed']),('epochs',job['epochs']),('method',job.get('method','replay')),('joint_domain_mode',job.get('domain_mode','none'))]:
+                if config.get(key)!=expected:raise ValueError('Run/manifest configuration mismatch: '+key)
+            history=json.loads((directory/'metrics.json').read_text())
+            if len(history)!=len(plan['intervals']):raise ValueError('Incomplete metrics')
+            assert_sync_reports_complete(directory,history)
+            from .knowledge_audit import audit_knowledge
+            ledger=audit_knowledge(directory,plan)
+            row.update(acknowledged_occurrences=ledger['acknowledged'],pending_occurrences=ledger['pending'],
+                       committed_versions=ledger['commits'])
+            for r in plan['intervals']:
+                record=json.loads((directory/f"joint_interval_{r['interval_id']:05d}.json").read_text())
+                if record['server_state_digest_before']!=record['server_state_digest_after']:
+                    raise ValueError('Server mutated inside interval')
+                if [t for x in record['atomic_barriers'] for t in x.get('atomic_steps',[x['atomic_step']])]!=r['atomic_steps']:
+                    raise ValueError('Executed atomic schedule mismatch')
+                if {x['occurrence_id'] for x in record['local_occurrences']}!=set(r['occurrences']):
+                    raise ValueError('Executed occurrence mismatch')
+            if not (directory/'model_final.pt').exists():raise ValueError('Missing final model')
+            json.loads((directory/'summary.json').read_text())
+            row['status']='artifact_verified'
+            sync=directory/'per_sync_accuracy'/f'sync_{len(history):03d}.json'
+            terminal=json.loads(sync.read_text())
+            row.update(test_accuracy=terminal['test_accuracy'],
+                validation_accuracy=terminal['validation_accuracy'],
+                observed_classes=terminal['observed_class_count'],
+                integrated_classes=terminal['server_integrated_class_count'],
+                never_predicted=len(terminal['zero_prediction_classes']))
+    except Exception as exc:
+        row['status']='audit_failed';row['reason']=repr(exc)
+
+    return row

@@ -112,3 +112,19 @@ forgetting by identical competitor sets. Resource receipts account for
 actual sampled-mixed/SGD current draws, padding, replay draws, optimization
 microbatches, optimizer steps, model tensor and archive image downloads;
 network overhead and archive upload bytes are explicitly excluded.
+
+## Multi-GPU campaign execution
+
+The broker subcommand launches at most one worker per GPU UUID, with host-local
+advisory GPU leases and an output-root lease, explicit free-memory and disk
+thresholds, no automatic CPU fallback, a clean source revision gate, serial
+manifest/dataset preflight and independent artifact verification. Attempt logs
+and receipts are retained. It does not kill unrelated jobs, estimate a GPU's
+required memory, or promise protection from non-cooperating external processes.
+The operator must measure workload memory and choose the threshold. Linux only.
+Existing completed or interrupted run configurations are never silently replaced.
+
+    PYTHONPATH=src python -m cafcl.joint.runner broker --manifest runs/joint_smoke/manifest.json --output runs/joint_smoke_results --gpus 0 1 --min-free-mib 16000 --local-evaluation --no-download
+
+The 16000 MiB figure is an illustrative operator threshold, not a verified
+measurement. No broker jobs were launched on actual GPUs by this change.
