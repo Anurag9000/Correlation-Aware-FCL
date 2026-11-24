@@ -126,17 +126,20 @@ class RunConfig:
     joint_plan_hash: str = ''
     joint_local_evaluation: bool = False
     joint_allow_partial_coverage: bool = False
+    joint_control_kind: str = 'federated'
 
     def validate(self):
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
         assert self.batch_size == 64 or self.dataset == "synthetic", "All production optimization must use physical batch 64"
-        assert self.num_clients >= 2
+        assert self.num_clients >= (1 if self.joint_plan_path and self.joint_control_kind=='centralized_sequential' else 2)
         assert 0 <= self.client_training_concurrency <= self.num_clients
         assert self.training_augmentation in {'none','cifar_crop_flip'}
         if self.training_augmentation != 'none':
             assert self.dataset == 'cifar100' and self.stream_protocol and (self.scenario == 'disjoint' or (self.joint_plan_path and self.scenario=='overlap'))
         assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
         if self.joint_plan_path:
+            assert self.joint_control_kind in {'federated','local_only','centralized_sequential'}
+            if self.joint_control_kind=='centralized_sequential':assert self.num_clients==1
             assert self.joint_plan_hash and len(self.joint_plan_hash)==64
             assert self.stream_protocol and not self.stream_client_chain
             assert not self.stream_sync_every_batch and self.stream_overlap_kind=='none'
@@ -149,7 +152,7 @@ class RunConfig:
             assert self.model in {'resnet18_cifar32','test_linear','test_mlp','test_smallcnn'}
             assert not self.gradient_diagnostics and not self.causal_diagnostics and not self.subset_diagnostics and not self.representation_diagnostics
         else:
-            assert not self.joint_plan_hash and not self.joint_local_evaluation and not self.joint_allow_partial_coverage
+            assert not self.joint_plan_hash and not self.joint_local_evaluation and not self.joint_allow_partial_coverage and self.joint_control_kind=='federated'
         if self.stream_client_chain:
             assert self.stream_protocol and self.class_pair_protocol == 'strict'
             assert self.num_clients == 5 and self.classes_per_local_task == 2
@@ -318,7 +321,7 @@ class RunConfig:
         if data['client_training_concurrency']==0:data.pop('client_training_concurrency')
         if data['training_augmentation']=='none':data.pop('training_augmentation')
         if not data['joint_plan_path']:
-            for key in ('joint_plan_path','joint_plan_hash','joint_local_evaluation','joint_allow_partial_coverage'):
+            for key in ('joint_plan_path','joint_plan_hash','joint_local_evaluation','joint_allow_partial_coverage','joint_control_kind'):
                 data.pop(key)
         return data
 

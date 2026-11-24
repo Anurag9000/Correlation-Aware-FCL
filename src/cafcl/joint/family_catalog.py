@@ -31,6 +31,9 @@ class Design:
     raw_sample_overlap: float = 0.0
     allow_cross_semantic_reuse: bool = False
     allocation_weights: dict = field(default_factory=dict)
+    control_kind: str = 'federated'
+    terminal_flush: bool = True
+    method: str = 'replay'
 
 
 def coverage_tail(events,k):

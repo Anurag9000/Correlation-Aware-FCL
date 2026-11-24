@@ -41,7 +41,8 @@ def load_plan(path, expected_hash, train_targets):
         raw_sample_overlap=saved['allocation_audit']['raw_sample_overlap'],
         allow_cross_semantic_reuse=saved['allocation_audit'].get('allow_cross_semantic_reuse',False),
         allocation_weights=saved['allocation_audit'].get('allocation_weights'),
-        minimum_samples=saved['allocation_audit'].get('allocation_minimum_samples',1))
+        minimum_samples=saved['allocation_audit'].get('allocation_minimum_samples',1),
+        control_kind=saved['allocation_audit'].get('control_kind','federated'))
     if rebuilt.to_dict()['plan_hash']!=claimed:
         raise ValueError('Joint plan reconstruction differs from saved plan')
     return saved
@@ -52,6 +53,8 @@ def compile_joint_scenario(bank,cfg):
     if (plan['num_clients'],plan['num_classes'],plan['seed'])!=(
             cfg.num_clients,bank.num_classes,cfg.seed):
         raise ValueError('Plan/config/dataset dimensions disagree')
+    if plan['allocation_audit'].get('control_kind','federated')!=cfg.joint_control_kind:
+        raise ValueError('Plan/config control identity mismatch')
     if plan['allocation_audit']['raw_sample_overlap']!=cfg.sample_overlap_fraction:
         raise ValueError('Plan/config raw sample overlap mismatch')
     if plan['intervals'][-1]['terminal_flush']!=cfg.stream_terminal_flush:

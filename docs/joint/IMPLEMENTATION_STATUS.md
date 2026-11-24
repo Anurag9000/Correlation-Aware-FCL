@@ -106,3 +106,14 @@ recombination motifs. Weighted partitioning preserves unique training
 support, but changes per-task sample count and optimizer work. No claim
 of matched compute or domain adaptation is made. The all suite includes
 these new designs; use generated manifests for counts.
+
+## Explicit non-federated controls
+
+The controls suite registers matched no-replay, local-only and centralized
+sequential arms. Local-only uses empty cohorts and no terminal upload;
+centralized sequential uses one learner and a single final export, with
+no shared archive during learning. These are clearly declared reference
+controls, not principal joint FL conditions. Private test results are
+saved separately from the untrained local-only server score. Detailed
+validation includes pre-upload snapshots of idle and reconnecting clients.
+Simultaneous-access pooled/multi-head training is not yet implemented.

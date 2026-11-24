@@ -149,7 +149,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
                  offline_clients=0, outage_duration=1, terminal_flush=True,
                  minimum_samples=1, require_all_classes=True,
                  interval_boundaries=None, upload_cohorts=None,
-                 allocation_order='timeline',raw_sample_overlap=0.0,allow_cross_semantic_reuse=False,allocation_weights=None):
+                 allocation_order='timeline',raw_sample_overlap=0.0,allow_cross_semantic_reuse=False,allocation_weights=None,control_kind='federated'):
     """Compile exact explicit events (atomic_step, client, class tuple).
 
     Fixed unique-data allocation: each observed class's entire TRAIN pool is
@@ -158,7 +158,11 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
     No automatic tail events, padding or class insertion.
     Explicit interval boundaries are exclusive atomic-step endpoints.
     """
-    if num_clients < 2 or num_classes < 2 or local_depth < 1:
+    if control_kind not in ('federated','local_only','centralized_sequential'):
+        raise ValueError('Unknown control kind')
+    if control_kind=='centralized_sequential' and num_clients!=1:
+        raise ValueError('Centralized sequential control uses exactly one learner')
+    if num_clients < (1 if control_kind=='centralized_sequential' else 2) or num_classes < 2 or local_depth < 1:
         raise ValueError("Invalid client/class/depth count")
     if not 0 <= offline_clients < num_clients or outage_duration < 1:
         raise ValueError("Invalid outage specification")
@@ -194,7 +198,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
         raise ValueError("Every declared client must have a task")
     if require_all_classes and set(counts) != set(range(num_classes)):
         raise ValueError("Incomplete class coverage")
-    if not any(len(v) > 1 for v in owners.values()):
+    if control_kind!='centralized_sequential' and not any(len(v) > 1 for v in owners.values()):
         raise ValueError("Primary joint curriculum must have cross-client overlap")
     if raw_sample_overlap and not allow_cross_semantic_reuse:
         # A raw image may recur only under one semantic class set, so its
@@ -291,7 +295,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
     for r, end in enumerate(ends):
         if upload_cohorts is not None:
             cohort = tuple(sorted(map(int, upload_cohorts[r])))
-            if len(cohort) != len(set(cohort)) or not cohort or not set(cohort) <= set(range(num_clients)):
+            if len(cohort) != len(set(cohort)) or (not cohort and control_kind=='federated') or not set(cohort) <= set(range(num_clients)):
                 raise ValueError("Invalid upload cohort")
         else:
             if r % outage_duration == 0:
@@ -301,6 +305,10 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
         occurrences = tuple(x.occurrence_id for x in tasks if start <= x.atomic_step < end)
         intervals.append(Interval(r, tuple(range(start, end)), occurrences, cohort))
         start = end
+    if control_kind=='local_only' and (terminal_flush or any(r.upload_clients for r in intervals)):
+        raise ValueError('Local-only control forbids all uploads and flushes')
+    if control_kind=='centralized_sequential' and (not terminal_flush or any(r.upload_clients for r in intervals)):
+        raise ValueError('Centralized control trains privately until one final export')
     if terminal_flush:
         intervals.append(Interval(len(intervals), (), (), tuple(range(num_clients)), True))
     by_step = defaultdict(list)
@@ -344,6 +352,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
                   "raw_sample_overlap": float(raw_sample_overlap),
                   "allocation_order": allocation_order,
                   "training_target_hash": digest(list(map(int, train_targets)))}
+    if control_kind!='federated':allocation['control_kind']=control_kind
     if weights:
         allocation['allocation_weights']={k:float(v) for k,v in sorted(weights.items())}
         allocation['allocation_minimum_samples']=minimum_samples

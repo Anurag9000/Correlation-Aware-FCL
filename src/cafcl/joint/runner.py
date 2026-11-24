@@ -29,7 +29,7 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
     bank=get_data_bank('cifar100',data_root,download=download,seed=seed)
     root=Path(output).resolve()
     jobs=[]
-    if suite in ('screening','interactions','short','extensions','all'):
+    if suite in ('screening','interactions','short','extensions','controls','all'):
         from .family_catalog import screening_designs,Design
         from .interactions import interaction_designs,short_designs
         generators=[]
@@ -42,6 +42,9 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
         if suite=='all':
             generators.append((Design(f'H-{s}-O{o}-L{l}','H',foundational_stream(s,o),local_depth=l)
                 for s in ('S1','S2','S3') for o in (0,1) for l in depths))
+        if suite in ('controls','all'):
+            from .controls import control_designs
+            generators.append(control_designs())
         blocked=[]
         for design in chain.from_iterable(generators):
             try:
@@ -54,7 +57,8 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
                     allocation_order=design.allocation_order,
                     raw_sample_overlap=design.raw_sample_overlap,
                     allow_cross_semantic_reuse=design.allow_cross_semantic_reuse,
-                    allocation_weights=design.allocation_weights).to_dict()
+                    allocation_weights=design.allocation_weights,control_kind=design.control_kind,
+                    terminal_flush=design.terminal_flush).to_dict()
             except ValueError as exc:
                 blocked.append({'design':design.name,'reason':str(exc),'status':'infeasible'})
                 continue
@@ -65,13 +69,13 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
                 job_id='J-'+design.name+'-'+setting
                 filename=job_id+'.json';write_json(root/'plans'/filename,plan)
                 jobs.append({'job_id':job_id,'family':design.family,'metadata':design.metadata,
-                    'learning_setting':setting,'epochs':design.epochs,'seed':seed,'plan_file':'plans/'+filename,
+                    'learning_setting':setting,'epochs':design.epochs,'method':design.method,'seed':seed,'plan_file':'plans/'+filename,
                     'allow_partial_coverage':not design.require_all_classes,
                     'plan_hash':plan['plan_hash'],'atomic_hash':plan['atomic_hash'],'status':'planned',
                     'low_support_warning':plan['allocation_audit']['minimum_samples_per_class_occurrence']<8})
         unique={};aliases=[]
         for job in jobs:
-            key=(job['plan_hash'],job['learning_setting'],job['epochs'])
+            key=(job['plan_hash'],job['learning_setting'],job['epochs'],job.get('method','replay'))
             if key in unique:
                 aliases.append({'job_id':job['job_id'],'canonical_job_id':unique[key]['job_id']})
             else:unique[key]=job
@@ -113,14 +117,15 @@ def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evalua
         num_clients=plan['num_clients'],epochs=job['epochs'],batch_size=64,
         participation=1.,selector='random',scenario='overlap',
         stages=1,rounds_per_stage=1,learning_setting=job['learning_setting'],
-        local_tasks_per_round=max(counts.values()),method='replay',
-        aggregator='fedavg',memory_per_class=50,classwise_head_merge=False,
-        replay_ratio=1.,training_augmentation='cifar_crop_flip',
+        local_tasks_per_round=max(counts.values()),method=job.get('method','replay'),
+        aggregator='fedavg',memory_per_class=50 if job.get('method','replay')=='replay' else 0,classwise_head_merge=False,
+        replay_ratio=1. if job.get('method','replay')=='replay' else 0.,training_augmentation='cifar_crop_flip',
         sample_overlap_fraction=plan['allocation_audit']['raw_sample_overlap'],
         client_training_concurrency=concurrency,seed=job['seed'],
         joint_plan_path=str(path),joint_plan_hash=job['plan_hash'],
         joint_local_evaluation=local_evaluation,
         joint_allow_partial_coverage=job.get('allow_partial_coverage',False),
+        joint_control_kind=plan['allocation_audit'].get('control_kind','federated'),
         stream_terminal_flush=plan['intervals'][-1]['terminal_flush'],
         checkpoint_every=1,job_id=job_id)
     job_dir=Path(output)/job_id
@@ -141,7 +146,7 @@ def main(argv=None):
     sub=p.add_subparsers(dest='command',required=True)
     a=sub.add_parser('plan');a.add_argument('--output',required=True)
     a.add_argument('--seed',type=int,default=0)
-    a.add_argument('--suite',choices=['foundational','screening','interactions','short','extensions','all'],default='foundational')
+    a.add_argument('--suite',choices=['foundational','screening','interactions','short','extensions','controls','all'],default='foundational')
     a.add_argument('--depths',type=int,nargs='+',default=[1,2,3,5])
     a=sub.add_parser('run');a.add_argument('--manifest',required=True)
     a.add_argument('--job-id',required=True);a.add_argument('--output',required=True)

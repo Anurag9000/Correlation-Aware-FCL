@@ -663,7 +663,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'interval':round_id,'server_version_during_local_learning':version,
                     'server_state_digest_before':boundary_before,'server_state_digest_after':boundary_after,
                     'atomic_barriers':task_barriers,'local_occurrences':local_details})
+            joint_pre_upload={}
             if cfg.joint_plan_path and cfg.joint_local_evaluation:
+                from .joint.private_evaluation import private_metrics
+                # Include disconnected/idle clients with accumulated pending work.
+                for cid,c in sorted(clients.items()):
+                    if c.pending_upload_steps>0:
+                        joint_pre_upload[cid]=private_metrics(model,c,bank,cfg,device)
                 # Use the same planned, all-observed evaluation context before
                 # and after aggregation. This cannot affect selection.
                 model.load_state_dict(global_state)
@@ -895,13 +901,11 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     from .joint.task_evaluation import evaluate_task_conditioned
                     joint_global_after['task_conditioned']=evaluate_task_conditioned(
                         model,bank,active_task_sets,cfg.batch_size,device)
-                # The final local measurement in each interval is the pre-upload
-                # model. Selected clients received exactly the committed state;
-                # evaluate it with their unchanged pre-upload competitor set.
-                last_local={d['client']:d for d in local_details}
+                # Selected clients received the committed state; evaluate it
+                # with their unchanged pre-upload competitor set.
                 broadcast_metrics={}
                 for cid in selected:
-                    prior=last_local.get(cid,{}).get('local_validation_post_task')
+                    prior=joint_pre_upload.get(cid)
                     if prior is None:continue
                     labels=set(prior['observed_classes'])
                     groups=prior.get('evaluation_task_heads') if cfg.learning_setting=='task_il' else None
@@ -913,7 +917,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'interval':round_id,'server_version':version,'selected_clients':selected,
                     'accepted_clients':[u['client_id'] for u in accepted],
                     'global_validation_before':joint_global_before,'global_validation_after':joint_global_after,
-                    'broadcast_validation':broadcast_metrics})
+                    'private_pre_upload_validation':joint_pre_upload,'broadcast_validation':broadcast_metrics})
             causal=None
             if cfg.causal_diagnostics and len(accepted)>=2 and cfg.aggregator in {'fedavg','uniform'}:
                 # Use the pre-aggregation base model and the exact accepted
@@ -1152,6 +1156,14 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         if cfg.stream_protocol:
             from .stage_report import assert_sync_reports_complete
             assert_sync_reports_complete(run_dir,history)
+        if cfg.joint_plan_path and (cfg.joint_local_evaluation or cfg.joint_control_kind!='federated'):
+            from .joint.private_evaluation import private_metrics
+            final_private={cid:private_metrics(model,c,bank,cfg,device,split='test')
+                           for cid,c in sorted(clients.items())}
+            atomic_json(run_dir/'joint_final_private_test.json',{
+                'control_kind':cfg.joint_control_kind,'client_metrics':final_private,
+                'server_version':version,'test_only_no_feedback':True})
+            model.load_state_dict(global_state)
         save_checkpoint(run_dir/'model_final.pt',global_state,cfg,version,clients,full_state=True,server_cl_state=server_cl_state)
         atomic_json(run_dir/'summary.json',{'job_id':job,'dataset':cfg.dataset,
                     'fork_source':str(fork_from_checkpoint) if fork_from_checkpoint else None,
