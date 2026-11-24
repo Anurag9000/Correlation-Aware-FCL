@@ -59,3 +59,46 @@ PYTHONPATH=src python -m cafcl.diagnostic_campaign run --all --ready-only --devi
 
 CPU synthetic integration tests and deterministic allocation/budget tests are included.
 Real-data/GPU execution has not been validated by the authoring session.
+
+
+## Optional historical reconstruction v1
+
+The remaining 71 historical-protocol-dependent slots now have a separate
+**explicitly opt-in** reconstruction binding. The original 14 reproduction
+intentions remain unverified. The exact archived runtime variants were not
+available in the main tree. Do not label these outcomes as historical
+reproductions; compare reconstructed intervention arms against reconstructed
+baseline arms using the same source revision.
+
+```bash
+PYTHONPATH=src python -m cafcl.diagnostic_campaign preflight --all --allow-reconstruction
+PYTHONPATH=src python -m cafcl.diagnostic_campaign run --all --allow-reconstruction --device cuda:0
+```
+
+The opt-in path binds all 142 fixed jobs; ten reserved slots are skipped.
+Without the flag the suite continues to fail closed on historical fidelity.
+Reconstructed jobs use the archived Block-A class sequence, the joint chain
+(including the final duplicated pair), exact archived 40%/60% cohort lists,
+or the explicit OF balanced cycles. Data is deterministically partitioned
+into nonoverlapping occurrence subsets, but exact original sample order is
+not claimed. Replay cap is 50 per class occurrence, independent task-instance
+heads and restricted local-known competition for the original CIL objective.
+Global-seen CIL is a separate objective. Repeated communications keep the
+parent stage and uploader cohort fixed. Physical batch 64 with paired
+current-padding and class-uniform replay; independently implemented
+crop/flip augmentation. Task-ID evaluation and class-membership union
+evaluation are reported separately.
+
+ST interventions: beta 0/2, fresh-only (reject stale model and pending
+upload, refresh selected client from server; retain private replay), pre-train
+download (discard unsent displacement, retain private replay), reset SGD
+momentum after sync, TRAIN-only BN recalibration using received indices and
+shared replay. These are new diagnostic controls, not exact original policy
+implementations. Full-model averaging, replay allocation and optimizer
+state semantics may differ from the historical runtime. The original source
+hashes are preserved in the historical archive. No test metric influences
+selection or stopping.
+
+CPU tests cover schedule geometry and synthetic CIL/TIL execution. The
+explicit flag records the execution fidelity in each job config; results
+are not treated as verified historical reproductions.

@@ -23,7 +23,8 @@ from torch.utils.data import DataLoader, Subset
 from .data import get_data_bank, data_partition_manifest
 from .models import create_model, copy_cpu_state
 from .diagnostic_campaign import atomic_json
-from .diagnostic_designs import compile_matched, batch_stream, plan_audit, stable_seed
+from .diagnostic_designs import (compile_matched, compile_reconstructed, batch_stream,
+    plan_audit, stable_seed, head_labels, model_head)
 from .stationary_diagnostic import average
 
 
@@ -43,10 +44,11 @@ def records(units):
     return [(i,tuple(u["head"])) for u in units for i in u["indices"]]
 
 
-def capped_memory(items,labels,seed,budget=50):
+def capped_memory(items,labels,seed,budget=50,by_occurrence=False):
     by=defaultdict(dict)
     for i,h in items:
-        by[int(labels[i])][int(i)]=(int(i),tuple(h))
+        key=(int(labels[i]),tuple(h)) if by_occurrence else (int(labels[i]),)
+        by[key][int(i)]=(int(i),tuple(h))
     return [x for c in sorted(by) for x in sorted(by[c].values(),
             key=lambda x:(stable_seed(seed,"memory",x[0]),x[0]))[:budget]]
 
@@ -71,15 +73,16 @@ def classification_loss(model,x,y,heads,setting,observed):
     total=features.new_zeros(())
     for h in sorted(set(heads)):
         idx=torch.tensor([i for i,v in enumerate(heads) if v==h],device=x.device)
-        allowed=torch.tensor(h,device=x.device)
+        allowed=torch.tensor(head_labels(h),device=x.device)
         truth=y[idx,None]==allowed[None,:]
         if not truth.any(1).all():
             raise ValueError("Semantic head provenance mismatch")
-        total=total+F.cross_entropy(model.classifier(features[idx],h),truth.long().argmax(1),reduction="sum")
+        total=total+F.cross_entropy(model.classifier(features[idx],model_head(h)),truth.long().argmax(1),reduction="sum")
     return total/len(y)
 
 
 def train_block(model,state,opt_state,units,replay,bank,job,stage,cid,r,observed,device):
+    reconstructed=job["binding"]=="historical_reconstruction_v1"
     model.load_state_dict(state);model.train()
     opt=torch.optim.SGD(model.parameters(),lr=.03,momentum=.9,weight_decay=5e-4)
     if opt_state is not None:
@@ -90,8 +93,10 @@ def train_block(model,state,opt_state,units,replay,bank,job,stage,cid,r,observed
     for slot,group in enumerate(groups):
         epochs=job["local_epochs"]
         seed=stable_seed(job["seed"],"batch",stage,cid,slot)
-        for rows,real,current,history in batch_stream(group,replay,bank.train.targets,seed,epochs,r*epochs):
+        for rows,real,current,history in batch_stream(group,replay,bank.train.targets,seed,epochs,r*epochs,paired_padding=reconstructed):
             x,y,heads=load_records(bank.train,rows,device)
+            if reconstructed:
+                x=crop_flip(x,stable_seed(seed,r,counts["optimizer_steps"]))
             opt.zero_grad(set_to_none=True)
             loss=classification_loss(model,x,y,heads,job["il"],observed)
             if not torch.isfinite(loss):
@@ -114,7 +119,7 @@ def evaluate(model,state,dataset,heads,setting,observed,device,limit=None):
     if not heads:
         return {}
     model.load_state_dict(state);model.eval()
-    labels={c for h in heads for c in h}
+    labels={c for h in heads for c in head_labels(h)}
     by=defaultdict(list)
     for i,y in enumerate(dataset.targets):
         if int(y) in labels:
@@ -136,11 +141,11 @@ def evaluate(model,state,dataset,heads,setting,observed,device,limit=None):
                 a[0]+=int((pred[mask]==y[mask]).sum());a[1]+=int(mask.sum());a[2]+=float(losses[mask].sum())
         else:
             for h in sorted(heads):
-                classes=torch.tensor(h,device=device)
+                classes=torch.tensor(head_labels(h),device=device)
                 mask=(y[:,None]==classes[None,:]).any(1)
                 if not mask.any():
                     continue
-                logits=model.classifier(features[mask],h)
+                logits=model.classifier(features[mask],model_head(h))
                 truth=(y[mask,None]==classes[None,:]).long().argmax(1)
                 a=accum[head_key(h)]
                 a[0]+=int((logits.argmax(1)==truth).sum());a[1]+=int(mask.sum())
@@ -153,7 +158,7 @@ def head_key(h):
 
 
 def targets(heads,setting):
-    return {str(c) for h in heads for c in h} if setting=="class_il" else {head_key(h) for h in heads}
+    return {str(c) for h in heads for c in head_labels(h)} if setting=="class_il" else {head_key(h) for h in heads}
 
 
 def macro(values,keys,metric="accuracy"):
@@ -175,19 +180,19 @@ def candidate(base,local,anchor,lag,param_names,beta=1.):
             for k,v in base.items()}
 
 
-def aggregate(base,clients,cohort,version,param_names):
-    uploads=[c for c in cohort if clients[c]["pending"]]
+def aggregate(base,clients,cohort,version,param_names,beta=1.,fresh_only=False):
+    uploads=[c for c in cohort if clients[c]["pending"] and (not fresh_only or clients[c]["version"]==version)]
     if not uploads:
         return base,[]
     candidates=[candidate(base,clients[c]["state"],clients[c]["anchor"],
-                          version-clients[c]["version"],param_names) for c in uploads]
+                          version-clients[c]["version"],param_names,beta) for c in uploads]
     weights=[len(clients[c]["pending"]) for c in uploads]
     return average(candidates,weights),[{"client":c,"lag":version-clients[c]["version"],
-               "unique_pending_samples":w,"weight":w/sum(weights)}
+               "unique_pending_samples":w,"weight":w/sum(weights),"damping":(1+version-clients[c]["version"])**(-beta)}
                for c,w in zip(uploads,weights)]
 
 
-def grad_probe(model,base,bank,units,setting,observed,device,limit=32):
+def grad_probe(model,base,bank,units,setting,observed,device,limit=32,competitors=None):
     """Sampled TRAIN current-objective gradient at identical server weights.
 
     Per-client sample count weights estimate global gradient; not a claim
@@ -196,13 +201,13 @@ def grad_probe(model,base,bank,units,setting,observed,device,limit=32):
     params=[p for p in model.parameters() if p.requires_grad]
     grads=[];weights=[]
     model.load_state_dict(base);model.eval()
-    for us in units:
+    for cid,us in enumerate(units):
         rr=records(us)
         if not rr:
             continue
         sample=random.Random(stable_seed("gradient",len(rr))).sample(rr,min(limit,len(rr)))
         x,y,h=load_records(bank.train,sample,device)
-        loss=classification_loss(model,x,y,h,setting,observed)
+        loss=classification_loss(model,x,y,h,setting,competitors[cid] if competitors is not None else observed)
         g=torch.autograd.grad(loss,params,allow_unused=True)
         grads.append([v.detach().cpu() if v is not None else None for v in g]);weights.append(len(rr))
     total=sum(weights);norm=0.;pairs={}
@@ -223,41 +228,56 @@ def grad_probe(model,base,bank,units,setting,observed,device,limit=32):
             if b is not None:nj+=float(b.double().square().sum())
             if a is not None and b is not None:dot+=float((a.double()*b.double()).sum())
         pairs[f"{i}:{j}"]=dot/math.sqrt(ni*nj) if ni and nj else None
-    return {"sampled_global_current_gradient_norm_squared":norm,"pairwise_backbone_cosine":pairs,
-            "split":"train","max_examples_per_client":limit,"bn_mode":"eval","no_feedback":True}
+    return {"sampled_weighted_current_objective_gradient_norm_squared":norm,"pairwise_backbone_cosine":pairs,
+            "split":"train","objective":"local_competitor_union" if competitors is not None else "common_global","max_examples_per_client":limit,"bn_mode":"eval","no_feedback":True}
 
 
 def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",subset_probes=False):
-    if job.get("binding")!="matched_reference_v1":
-        raise ValueError("No matched reference binding")
+    if job.get("binding") not in ("matched_reference_v1","historical_reconstruction_v1"):
+        raise ValueError("No supported reference binding")
+    reconstructed=job["binding"]=="historical_reconstruction_v1"
+    intervention=job.get("intervention","none")
+    beta=0. if intervention=="no_damping_beta0" else 2. if intervention=="strong_damping_beta2" else 1.
+    fresh_only=intervention=="fresh_only"
     output=Path(output);output.mkdir(parents=True,exist_ok=True)
     seed=job["seed"];random.seed(seed);np.random.seed(seed);torch.manual_seed(seed)
-    stages=compile_matched(job,bank.train.targets,bank.num_classes)
+    stages=(compile_reconstructed if reconstructed else compile_matched)(job,bank.train.targets,bank.num_classes)
     all_heads={tuple(u["head"]) for s in stages for us in s["units"] for u in us}
     setting=job["il"]
     model=create_model(model_name,bank.num_classes,allow_test_model=model_name.startswith("test_"),
-        task_class_sets=sorted(all_heads) if setting=="task_il" else None,learning_setting=setting).to(device)
+        task_class_sets={model_head(h) if isinstance(model_head(h),str) else "task_"+"_".join(f"{c:03d}" for c in head_labels(h)):head_labels(h) for h in all_heads} if setting=="task_il" else None,learning_setting=setting).to(device)
     param_names={n for n,p in model.named_parameters()}
     server=copy_cpu_state(model);version=0
-    clients=[{"state":server,"anchor":server,"version":0,"optimizer":None,"memory":[],"shared":[],"pending":{}}
+    clients=[{"state":server,"anchor":server,"version":0,"optimizer":None,"memory":[],"shared":[],"pending":{},"known":set()}
              for _ in range(job["clients"])]
-    archive=[];prior=set();observed=set();peak={};rows=[];all_counts=defaultdict(int)
+    archive=[];prior=set();observed=set();integrated=set();peak={};rows=[];all_counts=defaultdict(int)
     audit=plan_audit(job,stages,bank.train.targets)
     atomic_json(output/"partition.json",{**audit,"split":data_partition_manifest(bank,"cifar100" if bank.num_classes==100 else "synthetic",.1,1.)})
     atomic_json(output/"schedule.json",stages)
     diagnostics=output/"per_round_metrics";diagnostics.mkdir(exist_ok=True)
     checkpoints=output/"checkpoints";checkpoints.mkdir(exist_ok=True)
     budget=job.get("replay_budget_per_class",50)
+    def cap(items):
+        return capped_memory(items,bank.train.targets,seed,budget,by_occurrence=reconstructed)
+    def own_classes(us):
+        return {c for u in us for c in head_labels(u["head"])}
+    def competitors(c,us):
+        if reconstructed and setting=="class_il" and job["objective"]=="original":
+            return c["known"]|own_classes(us)
+        return observed
     ctr=0
     def eval_panel(state,heads,limit=4):
         return evaluate(model,state,bank.validation,heads,setting,observed,device,limit)
     def commit(cohort,stage,current,flush=False,train_counts=None,local=None,gradient=None):
-        nonlocal server,version,archive,ctr
+        nonlocal server,version,archive,ctr,integrated
         ctr+=1
         base=server
         history_keys=targets(prior,setting);current_keys=targets(current,setting)
         before=eval_panel(base,prior|current)
-        updated,uploads=aggregate(base,clients,cohort,version,param_names)
+        updated,uploads=aggregate(base,clients,cohort,version,param_names,beta,fresh_only)
+        if intervention=="bn_recalibration" and uploads:
+            received=[i for u in uploads for i in clients[u["client"]]["pending"]]
+            updated=recalibrate_bn(model,updated,bank.train,received+[i for i,_ in archive],device,stable_seed(seed,ctr))
         after=eval_panel(updated,prior|current)
         hist_before=macro(before,history_keys);hist_after=macro(after,history_keys)
         current_before=macro(before,current_keys);current_after=macro(after,current_keys)
@@ -265,7 +285,10 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
         if subset_probes and len(clients)<=5 and not flush:
             for n in (2,3):
                 for ids in combinations(range(len(clients)),n):
-                    alt,_=aggregate(base,clients,ids,version,param_names)
+                    alt,alt_uploads=aggregate(base,clients,ids,version,param_names,beta,fresh_only)
+                    if intervention=="bn_recalibration" and alt_uploads:
+                        received=[i for u in alt_uploads for i in clients[u["client"]]["pending"]]
+                        alt=recalibrate_bn(model,alt,bank.train,received+[i for i,_ in archive],device,stable_seed(seed,ctr))
                     ev=eval_panel(alt,prior|current)
                     subsets.append({"cohort":list(ids),"history_accuracy":macro(ev,history_keys),
                         "current_accuracy":macro(ev,current_keys),"history_loss":macro(ev,history_keys,"loss")})
@@ -273,20 +296,25 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
         if uploads:version+=1
         actual=[u["client"] for u in uploads]
         for c in actual:
-            archive=capped_memory(archive+list(clients[c]["pending"].values()),bank.train.targets,seed,budget)
+            archive=cap(archive+list(clients[c]["pending"].values()))
+            integrated.update(int(bank.train.targets[i]) for i in clients[c]["pending"])
         sync=[]
-        for c in actual:
+        rejected=[c for c in cohort if fresh_only and clients[c]["pending"] and c not in actual]
+        for c in actual+rejected:
             state=clients[c]
             pre=eval_panel(state["state"],prior) if prior else {}
             sync.append({"client":c,"download_history_drop":difference(macro(pre,history_keys),hist_after)})
             state.update(state=server,anchor=server,version=version,shared=list(archive),pending={})
+            state["known"].update(integrated)
+            if intervention=="reset_momentum":state["optimizer"]=None
         row={"sync":ctr,"stage":stage,"flush":flush,"uploaders":actual,
              "history_before":hist_before,"history_after":hist_after,
              "aggregation_forgetting":difference(hist_before,hist_after),
              "current_before":current_before,"current_after":current_after,
              "history_loss_before":macro(before,history_keys,"loss"),"history_loss_after":macro(after,history_keys,"loss"),
              "current_loss_before":macro(before,current_keys,"loss"),"current_loss_after":macro(after,current_keys,"loss"),
-             "shared_replay_size":len(archive),"uploads":uploads,"local":local or [],
+             "shared_replay_size":len(archive),"uploads":uploads,"rejected_stale_clients":rejected,
+             "integrated_classes":sorted(integrated),"pending_classes":sorted(observed-integrated),"local":local or [],
              "download":sync,"counts":train_counts or {},"gradient":gradient,"counterfactual_subsets":subsets,
              "diagnostic_split":"validation","panel_examples_per_class":4}
         atomic_json(diagnostics/f"sync_{ctr:04d}.json",row)
@@ -296,27 +324,42 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
         observed.update(s["classes"])
         # Freeze replay at parent-stage start: compute matched arms process
         # identical current and replay draws under different sync frequency.
-        frozen=[capped_memory(c["memory"]+c["shared"],bank.train.targets,seed,budget) for c in clients]
+        frozen=[cap(c["memory"]+c["shared"]) for c in clients]
         for rr in range(job["rounds_per_stage"]):
             local=[];counts=defaultdict(int)
-            gradient=grad_probe(model,server,bank,s["units"],setting,observed,device) if rr==0 else None
+            if intervention=="download_before_new_training":
+                for cid in s["cohort"]:
+                    c=clients[cid]
+                    c.update(state=server,anchor=server,version=version,shared=list(archive),pending={})
+                    c["known"].update(integrated)
+            if reconstructed:
+                # With additional communications, use new archive receipts on
+                # subsequent rounds; the original single-round case is unchanged.
+                # Historical replay contains completed prior stages only.
+                frozen=[cap([(i,h) for i,h in c["memory"]+c["shared"] if tuple(h) not in current]) for c in clients]
+            competitor_sets=[competitors(c,us) for c,us in zip(clients,s["units"])]
+            gradient=grad_probe(model,server,bank,s["units"],setting,observed,device,
+                competitors=competitor_sets if reconstructed and setting=="class_il" and job["objective"]=="original" else None) if rr==0 else None
             for cid,us in enumerate(s["units"]):
+                if not us:continue
                 c=clients[cid];hist_keys=targets(prior,setting)
                 own_heads={tuple(u["head"]) for u in us}
                 own_keys=targets(own_heads,setting)
                 pre=eval_panel(c["state"],prior|own_heads)
-                new,opt,cc=train_block(model,c["state"],c["optimizer"],us,frozen[cid],bank,job,t,cid,rr,observed,device)
+                new,opt,cc=train_block(model,c["state"],c["optimizer"],us,frozen[cid],bank,job,t,cid,rr,competitor_sets[cid],device)
                 post=eval_panel(new,prior|own_heads)
                 local.append({"client":cid,"history_before":macro(pre,hist_keys),"history_after":macro(post,hist_keys),
                               "local_forgetting":difference(macro(pre,hist_keys),macro(post,hist_keys)),
-                              "current_before":macro(pre,own_keys),"current_after":macro(post,own_keys)})
+                              "current_before":macro(pre,own_keys),"current_after":macro(post,own_keys),
+                              "classification_competitor_classes":sorted(competitor_sets[cid])})
                 c.update(state=new,optimizer=opt)
+                c["known"].update(own_classes(us))
                 c["pending"].update({i:(i,h) for i,h in records(us)})
                 for key,v in cc.items():counts[key]+=v;all_counts[key]+=v
             if rr==job["rounds_per_stage"]-1:
                 for cid,us in enumerate(s["units"]):
                     c=clients[cid]
-                    c["memory"]=capped_memory(c["memory"]+records(us),bank.train.targets,seed,budget)
+                    c["memory"]=cap(c["memory"]+records(us))
             row=commit(s["cohort"],t,current,train_counts=dict(counts),local=local,gradient=gradient)
             row["round_in_stage"]=rr+1
             rows.append(row)
@@ -327,15 +370,23 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
         keys=targets(prior,setting)
         forgetting=[max(0.,peak[k]-test[k]["accuracy"]) for k in keys if k in peak and k in test]
         for k,a in test.items():peak[k]=max(peak.get(k,0.),a["accuracy"])
-        rows[-1].update(test_current=macro(test,targets(current,setting)),test_history=macro(test,keys),
+        task_slots=[macro(test,targets({tuple(u["head"])},setting)) for us in s["units"] for u in us]
+        task_slots=[x for x in task_slots if x is not None]
+        rows[-1].update(test_current=sum(task_slots)/len(task_slots),test_history=macro(test,keys),
                        test_global=macro(test,set(test)),test_forgetting=sum(forgetting)/len(forgetting) if forgetting else None)
-        atomic_json(output/f"stage_{t:02d}_evaluation.json",{"stage":t,"test":test,"validation":val,"current":sorted(targets(current,setting)),"historical":sorted(keys)})
+        legacy=evaluate_union(model,server,bank.test,prior|current,device) if reconstructed and setting=="task_il" else None
+        if legacy is not None:rows[-1]["legacy_union_accuracy"]=macro(legacy,set(legacy))
+        atomic_json(output/f"stage_{t:02d}_evaluation.json",{"stage":t,"test":test,"validation":val,"current":sorted(targets(current,setting)),"historical":sorted(keys),"class_membership_union_test":legacy})
         torch.save({"server":server,"version":version,"stage":t},checkpoints/"latest.pt")
         prior.update(current)
-    if job["participation"]<1:
+    if job["participation"]<1 or reconstructed:
         row=commit(list(range(len(clients))),len(stages),set(),flush=True)
         final=evaluate(model,server,bank.test,prior,setting,observed,device)
         row["test_global"]=macro(final,set(final))
+        if reconstructed and setting=="task_il":
+            union=evaluate_union(model,server,bank.test,prior,device)
+            row["legacy_union_accuracy"]=macro(union,set(union))
+            atomic_json(output/"terminal_union_evaluation.json",union)
         row["test_forgetting"]=sum(max(0.,peak[k]-v["accuracy"]) for k,v in final.items())/len(final)
         rows.append(row);atomic_json(output/"terminal_evaluation.json",final)
         torch.save({"server":server,"version":version,"stage":len(stages)},checkpoints/"latest.pt")
@@ -343,20 +394,82 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
         final=test
     # Stable scalar round table; detailed panels in individual JSON files.
     fields=["sync","stage","round_in_stage","flush","history_before","history_after","aggregation_forgetting",
-            "current_before","current_after","test_current","test_history","test_global","test_forgetting","shared_replay_size"]
+            "current_before","current_after","test_current","test_history","test_global","test_forgetting","legacy_union_accuracy","shared_replay_size"]
     with (output/"metrics.csv").open("w",newline="") as f:
         writer=csv.DictWriter(f,fieldnames=fields,extrasaction="ignore");writer.writeheader();writer.writerows(rows)
     end_stages=[r for r in rows if "test_current" in r]
     values=[r["test_current"] for r in end_stages if r["test_current"] is not None]
-    atomic_json(output/"result_summary.json",{"job_id":job["job_id"],"protocol":"matched_reference_v1",
-        "learning_syncs":sum(not r["flush"] for r in rows),"terminal_flush":job["participation"]<1,
-        "final_accuracy":macro(final,set(final)),"current_task_average_accuracy":sum(values)/len(values),
+    atomic_json(output/"result_summary.json",{"job_id":job["job_id"],"protocol":job["binding"],"historical_reproduction_verified":False if reconstructed else None,
+        "learning_syncs":sum(not r["flush"] for r in rows),"terminal_flush":job["participation"]<1 or reconstructed,
+        "final_accuracy":macro(final,set(final)),"legacy_union_accuracy":rows[-1].get("legacy_union_accuracy"),"current_task_average_accuracy":sum(values)/len(values),
         "final_forgetting":rows[-1].get("test_forgetting"),"counts":dict(all_counts),
         "allocation_sha256":audit["allocation_sha256"],"replay_budget_per_class":budget,
         "evaluation":"global_seen_class or independent_semantic_task_head",
         "aggregation":"sample_weighted_full_model; stale parameter delta/(1+lag); stale buffers unchanged",
-        "optimizer":"persistent SGD", "augmentation":"none", "subset_probes":subset_probes})
+        "optimizer":"persistent SGD except explicit reset intervention", "augmentation":"crop_flip_reference" if reconstructed else "none", "subset_probes":subset_probes,
+        "memory_budget_scope":"per_class_occurrence" if reconstructed else "per_class","intervention":intervention,"stale_beta":beta})
     return rows
+
+
+def crop_flip(x,seed):
+    rng=random.Random(seed)
+    padded=F.pad(x,(4,4,4,4))
+    result=[]
+    for i in range(len(x)):
+        a,b=rng.randrange(9),rng.randrange(9)
+        z=padded[i,:,a:a+32,b:b+32]
+        result.append(z.flip(-1) if rng.random()<.5 else z)
+    return torch.stack(result)
+
+
+@torch.no_grad()
+def recalibrate_bn(model,state,dataset,indices,device,seed):
+    """Only TRAIN examples accepted from uploaders or shared replay."""
+    model.load_state_dict(state)
+    layers=[m for m in model.modules() if isinstance(m,torch.nn.modules.batchnorm._BatchNorm)]
+    if not layers or not indices:
+        return state
+    ids=sorted(set(indices))
+    ids=random.Random(seed).sample(ids,min(512,len(ids)))
+    model.eval()
+    for m in layers:
+        m.reset_running_stats()
+        m.train()
+    for x,_ in DataLoader(Subset(dataset,ids),batch_size=64,shuffle=False):
+        model.features(x.to(device))
+    return copy_cpu_state(model)
+
+
+@torch.no_grad()
+def evaluate_union(model,state,dataset,heads,device):
+    """Class-membership oracle union, separate from true task-ID accuracy.
+
+    This implements the documented duplicate-class probability rule, not
+    a claim of bitwise historical evaluator equivalence.
+    """
+    model.load_state_dict(state);model.eval()
+    by_class=defaultdict(list)
+    for h in sorted(heads):
+        for c in head_labels(h):by_class[c].append(h)
+    ids=[i for i,y in enumerate(dataset.targets) if int(y) in by_class]
+    accum=defaultdict(lambda:[0,0,0.])
+    for x,y in DataLoader(Subset(dataset,ids),batch_size=64,shuffle=False):
+        y=y.to(device);features=model.features(x.to(device))
+        for label in y.unique().tolist():
+            mask=y==label
+            group=by_class[label]
+            scores=torch.zeros((int(mask.sum()),model.num_classes),device=device)
+            count=torch.zeros(model.num_classes,device=device)
+            for h in group:
+                c=torch.tensor(head_labels(h),device=device)
+                scores[:,c]+=model.classifier(features[mask],model_head(h)).softmax(1)
+                count[c]+=1
+            present=count>0
+            scores[:,present]/=count[present]
+            scores[:,present]/=scores[:,present].sum(1,keepdim=True)
+            a=accum[str(label)];a[0]+=int((scores.argmax(1)==label).sum());a[1]+=int(mask.sum())
+            a[2]+=float(-scores[:,label].clamp_min(1e-12).log().sum())
+    return {k:{"accuracy":a[0]/a[1],"loss":a[2]/a[1],"correct":a[0],"total":a[1]} for k,a in accum.items()}
 
 
 def main():

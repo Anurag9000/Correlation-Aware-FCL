@@ -100,7 +100,7 @@ def compile_matched(job, targets, num_classes=100):
     return stages
 
 
-def batch_stream(records, replay, labels, seed, epochs, epoch_start=0):
+def batch_stream(records, replay, labels, seed, epochs, epoch_start=0, paired_padding=False):
     """Stable physical batch 64; exact epoch-indexed schedules across R.
 
     Current rows are padded cyclically after deterministic shuffle, never
@@ -117,9 +117,10 @@ def batch_stream(records, replay, labels, seed, epochs, epoch_start=0):
     for epoch in range(epoch_start,epoch_start+epochs):
         rng=random.Random(stable_seed(seed,epoch))
         order=list(records);rng.shuffle(order)
-        for offset in range(0,len(order),width):
+        end=math.ceil(len(order)/64)*64 if paired_padding else math.ceil(len(order)/width)*width
+        for offset in range(0,end,width):
             real=order[offset:offset+width]
-            padded=real+[order[i%len(order)] for i in range(width-len(real))]
+            padded=real+[order[(offset+len(real)+i)%len(order)] for i in range(width-len(real))]
             history=[rng.choice(by_class[rng.choice(classes)]) for _ in range(32)] if replay else []
             yield padded+history,len(real),len(padded),len(history)
 
@@ -133,3 +134,77 @@ def plan_audit(job,stages,targets):
                     "task_instances":[len(us) for us in s["units"]]})
     return {"job_id":job["job_id"],"stages":out,"unique_train_samples":len(targets),
             "allocation_sha256":hashlib.sha256(json.dumps(stages,sort_keys=True).encode()).hexdigest()}
+
+
+# These exact cohorts were transcribed from the uploaded results_4 design
+# records. The disjoint design uses the first ten rows of the same schedule.
+ARCHIVED_COHORTS={
+    2:[[1,4],[2,4],[1,3],[3,4],[2,4],[0,4],[0,4],[3,4],[2,3],[0,3],
+       [2,3],[0,4],[0,1],[0,4],[2,3],[1,2],[0,4],[0,3],[2,3],[1,2]],
+    3:[[0,1,4],[1,3,4],[1,3,4],[0,3,4],[1,3,4],[1,3,4],[1,2,4],[0,1,2],[2,3,4],[1,3,4],
+       [0,3,4],[2,3,4],[0,2,4],[0,2,3],[1,2,4],[0,1,3],[1,2,4],[1,2,3],[0,2,4],[0,2,4]],
+}
+
+
+def head_labels(head):
+    return tuple(head[:2])
+
+
+def model_head(head):
+    if len(head)==2:
+        return tuple(head)
+    return "task_"+"_".join(f"{c:03d}" for c in head[:2])+f"__occ_{head[2]:05d}"
+
+
+def compile_reconstructed(job, targets, num_classes=100):
+    """Reconstruct archived curriculum/cohorts, not the original source.
+
+    A third head coordinate identifies the independent task occurrence.
+    Every unique TRAIN sample is allocated once over its class occurrences.
+    The last K=3 Block-A stage has two active clients, not three fake tasks.
+    """
+    k=job["clients"];seed=job["seed"]
+    if num_classes%2:
+        raise ValueError("Expected even class count")
+    joint=job["curriculum"]=="joint"
+    if joint and (k!=5 or num_classes%5):
+        raise ValueError("Invalid joint chain dimensions")
+    n=(num_classes//k if joint else math.ceil(num_classes/(2*k)))
+    if joint:
+        events=[(t,c,tuple(sorted((min(t*k+c,num_classes-2),min(t*k+c,num_classes-2)+1))))
+                for t in range(n) for c in range(k)]
+    else:
+        events=[(i//k,i%k,(2*i,2*i+1)) for i in range(num_classes//2)]
+    m=round(k*job["participation"])
+    if m==k:
+        cohorts=[list(range(k)) for _ in range(n)]
+    elif job.get("cohort_schedule"):
+        cohorts=job["cohort_schedule"][:n]
+    else:
+        cohorts=ARCHIVED_COHORTS[m][:n]
+    if len(cohorts)!=n or any(len(set(c))!=m or not set(c)<=set(range(k)) for c in cohorts):
+        raise ValueError("Invalid explicit historical cohort schedule")
+    stages=[{"stage":t,"classes":[],"units":[[] for _ in range(k)],"cohort":list(cohorts[t])}
+            for t in range(n)]
+    by=defaultdict(list);pool=defaultdict(list)
+    for i,y in enumerate(targets):
+        pool[int(y)].append(i)
+    for ordinal,(t,c,pair) in enumerate(events):
+        u={"head":(*pair,ordinal),"slot":0,"indices":[]}
+        stages[t]["units"][c].append(u)
+        for label in pair:
+            by[label].append(u)
+            stages[t]["classes"].append(label)
+    if set(by)!=set(pool) or set(pool)!=set(range(num_classes)):
+        raise ValueError("Incomplete reconstructed class coverage")
+    for label,holders in by.items():
+        ids=pool[label]
+        random.Random(stable_seed(seed,"historical_class",label)).shuffle(ids)
+        for j,u in enumerate(holders):
+            u["indices"].extend(ids[j*len(ids)//len(holders):(j+1)*len(ids)//len(holders)])
+    for stage in stages:
+        stage["classes"]=sorted(set(stage["classes"]))
+    all_ids=[i for s in stages for us in s["units"] for u in us for i in u["indices"]]
+    if sorted(all_ids)!=list(range(len(targets))):
+        raise ValueError("Historical allocation lost or duplicated TRAIN examples")
+    return stages

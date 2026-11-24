@@ -74,3 +74,34 @@ def test_matched_smoke(tmp_path):
         assert s["learning_syncs"]==4 and s["counts"]["replay_draws"]>0
         assert 0<=s["final_accuracy"]<=1
         assert rows[-1]["test_forgetting"] is not None
+
+
+def test_reconstructed_plans():
+    from cafcl.diagnostic_designs import compile_reconstructed,head_labels
+    labels=[c for c in range(100) for _ in range(450)]
+    for j in load_jobs():
+        if not j.get("reconstruction_binding"):continue
+        p=compile_reconstructed(j,labels)
+        assert sum(len(u["indices"]) for s in p for us in s["units"] for u in us)==45000
+        assert len(p)==(20 if j["curriculum"]=="joint" else (50+j["clients"]-1)//j["clients"])
+        if j["curriculum"]=="joint":
+            from collections import Counter
+            counts=Counter(c for s in p for us in s["units"] for u in us for c in head_labels(u["head"]))
+            assert counts[0]==1 and counts[98]==3 and counts[99]==2
+        if j["family"]=="CC" and j["clients"]==3:
+            assert not p[-1]["units"][2]
+
+
+def test_reconstructed_smoke(tmp_path):
+    torch.set_num_threads(1)
+    bank=DataBank(Fixture(8),Fixture(2),20,{},(),Fixture(2))
+    for il in ("class_il","task_il"):
+        j=next(x for x in load_jobs() if x["family"]=="JR" and x["curriculum"]=="joint" and x["participation"]==.4 and x["il"]==il)
+        j={**j,"binding":"historical_reconstruction_v1","local_epochs":1}
+        out=tmp_path/il
+        rows=run_reference(j,out,bank,model_name="test_linear",subset_probes=True)
+        assert len(rows)==5 and rows[-1]["flush"]
+        summary=json.loads((out/"result_summary.json").read_text())
+        assert not summary["historical_reproduction_verified"]
+        assert 0<=summary["final_accuracy"]<=1
+        if il=="task_il":assert 0<=summary["legacy_union_accuracy"]<=1
