@@ -19,7 +19,7 @@ def domain_transform(x,client,experience,mode,index=0):
     if mode not in ('client_fixed','client_periodic'):raise ValueError(mode)
     domain=client%5 if mode=='client_fixed' else (client+experience//5)%5
     if domain==0:return x
-    if domain==1:return x.flip(-1)
+    if domain==1:return x.flip(-2)  # vertical, not erased by fair horizontal training augmentation
     if domain==2:return x.roll(1,dims=-3)
     if domain==3:return x*.65+.2
     return x*.85-.25

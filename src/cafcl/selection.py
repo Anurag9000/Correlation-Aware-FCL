@@ -52,7 +52,9 @@ def select_clients(states, cfg, round_id, rng, *, old_classes=frozenset(),new_cl
         # The following selectors are PRIVILEGED/ORACLE: class holdings are
         # read from the simulator, not inferred from privacy-preserving uploads.
         new=set(new_classes);old=set(old_classes)
-        holding={i:set(states[i].observed_classes) for i in ids}
+        # Receiving a global model does not change the client's private data holdings.
+        have_delivery_ledger=any(getattr(states[i],'locally_delivered_classes',()) for i in ids)
+        holding={i:set(states[i].locally_delivered_classes if have_delivery_ledger else states[i].observed_classes) for i in ids}
         if policy=='old':
             scores={i:len(holding[i]&old) for i in ids}
         elif policy=='new':

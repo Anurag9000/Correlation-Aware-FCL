@@ -240,7 +240,9 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                         if raw['is_recurrence']:
                             client.recurrence_rounds[cls] = round_id
                     all_available[cid].extend(raw['indices'])
-                    if raw.get('segment_index',0)==0:client.local_experience += 1
+                    if raw.get('segment_index',0)==0:
+                        client.local_experience += 1
+                        client.parent_experience_indices.clear()
                     for idx in raw['indices']:
                         client.sample_first_local_experience.setdefault(
                             int(idx), client.local_experience)
@@ -254,6 +256,8 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                         'global_stage': raw['global_stage'],
                         'recurrence': raw['is_recurrence'],
                         'selected_for_upload': False})
+                    if cfg.stream_sync_every_batch:
+                        client.local_training_events[-1].update({k:raw[k] for k in ('segment_index','segment_count','experience_end')})
                     if cfg.joint_plan_path:
                         client.local_training_events[-1].update(atomic_step=raw['atomic_step'],
                             occurrence_id=raw['occurrence_id'],semantic_task_id=raw['semantic_task_id'])
@@ -262,6 +266,9 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                     client.current_indices = list(raw['indices'])
                     if cfg.pending_policy == 'bounded' and cfg.max_pending_samples > 0:
                         client.current_indices = client.current_indices[-cfg.max_pending_samples:]
+                if has_new:
+                    client.locally_delivered_classes.update(int(bank.train.targets[i]) for i in raw['indices'])
+                client.parent_experience_indices.update(map(int,client.current_indices))
                 if cfg.learning_setting == 'task_il':
                     task_labels = tuple(sorted(set(map(int,raw['class_ids']))))
                     task_id=raw['task_id']
@@ -279,7 +286,7 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                                               else local_cfg.replay_update_policy))
                 event = {
                     'is_actual': bool(has_new) and raw.get('experience_end',True),
-                    'epoch_offset':raw.get('segment_index',0)*cfg.epochs,
+                    'epoch_offset':raw.get('segment_index',0)*(1 if cfg.stream_sync_every_batch else cfg.epochs),
                     'active_pair': (tuple(raw['class_ids'])
                                     if has_new and len(raw['class_ids']) >= 2
                                     and not cfg.label_noise_rate else None),
@@ -288,14 +295,14 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                 }
                 visible_task_sets=known_task_sets
                 visible_provenance=task_ids_by_index
-                if cfg.joint_plan_path and cfg.learning_setting=='task_il':
+                if cfg.learning_setting=='task_il':
                     # Only delivered local tasks and genuinely received replay
                     # samples can authorize a source task head. The plan is
                     # globally known to the simulator, not to the learner.
                     from .joint.provenance import expose,visible_source_heads
                     if pooled:
                         for source in raw['source_events']:expose(client,source['indices'],source['task_id'])
-                    else:expose(client,raw['indices'],task_id)
+                    else:expose(client,client.current_indices,task_id)
                     visible_provenance=visible_source_heads(client)
                     visible_task_sets=tuple(sorted({h for heads in visible_provenance.values() for h in heads}))
                 pending.append((cid, executor.submit(
@@ -314,6 +321,9 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                 continue
             client = clients[cid]
             client.shared_weights = result['weights']
+            if result['steps']>0:
+                client.locally_optimized_indices.update(map(int,client.current_indices))
+                client.locally_optimized_classes.update(map(int,result['class_counts']))
             client.pending_upload_examples += result['examples']
             client.pending_upload_steps += result['steps']
             for cls, count in result['class_update_steps'].items():

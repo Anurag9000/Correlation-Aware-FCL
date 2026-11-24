@@ -298,7 +298,10 @@ def expand_stream_to_batch_syncs(scenario,cfg):
                     batch_arrivals.append(Arrival(
                         sync_id,arrival.client_id,sync_id,
                         batch_values,arrival.labels,arrival.recurrence,padding_pool,
-                        arrival.task_id))
+                        arrival.task_id,
+                        epoch*len(client_batches)+batch_index,
+                        cfg.epochs*len(client_batches),
+                        epoch==cfg.epochs-1 and batch_index==len(client_batches)-1))
                     seen_stream_by_client[arrival.client_id].extend(batch_values)
                     for label in arrival.labels:
                         label=int(label)

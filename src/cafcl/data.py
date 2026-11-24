@@ -251,6 +251,9 @@ class Arrival:
     recurrence: bool = False
     padding_indices: tuple[int,...] = ()
     task_id: str = ''
+    segment_index: int = 0
+    segment_count: int = 1
+    experience_end: bool = True
 
 @dataclass
 class Scenario:

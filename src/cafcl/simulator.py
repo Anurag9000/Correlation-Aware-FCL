@@ -31,11 +31,11 @@ from .task_ids import task_instance_id
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v3'
+PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v4'
 
 def protocol_version_for(cfg):
     if getattr(cfg,'joint_plan_path',''):
-        return 'joint_spatiotemporal_fcl_v4_audit_'+cfg.learning_setting
+        return 'joint_spatiotemporal_fcl_v5_audit_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -629,7 +629,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         'class_ids':tuple(map(int,arrival.labels)),
                         'task_id':arrival.task_id,
                         'global_stage':int(arrival.stage),
-                        'is_recurrence':bool(arrival.recurrence)})
+                        'is_recurrence':bool(arrival.recurrence),
+                        'segment_index':arrival.segment_index,'segment_count':arrival.segment_count,
+                        'experience_end':arrival.experience_end})
                     if cfg.joint_plan_path:
                         atomic=joint_events[arrival_index]
                         assert atomic['client_id']==arrival.client_id and tuple(atomic['classes'])==arrival.labels
@@ -804,7 +806,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             if accepted and cfg.representation_diagnostics and old:
                 model.load_state_dict(global_state)
                 model.to(device)
-                arrived=set(server_cl_state.acknowledged_train_indices)
+                arrived=set(server_cl_state.acknowledged_optimized_indices)
                 pre_representation=arrived_feature_means(model,bank,old,device,
                                                           allowed_indices=arrived)
             aggregation_norm_diagnostics=None
@@ -813,7 +815,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 old_gradient=None
                 if cfg.aggregator in {'retention_aware'} and old:
                     model.load_state_dict(global_state)
-                    arrived=set(server_cl_state.acknowledged_train_indices)
+                    arrived=set(server_cl_state.acknowledged_optimized_indices)
                     vectors=class_gradient_representations(model,bank,old,device,
                                                            allowed_indices=arrived,task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,seed=cfg.seed)
                     if vectors:old_gradient=torch.stack(list(vectors.values())).mean(0)
@@ -880,7 +882,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
                         server_cl_state.assert_complete_download(clients[cid])
-                    if cfg.joint_plan_path:download_provenance(server_cl_state,clients[cid])
+                    if cfg.learning_setting=='task_il':
+                        from .joint.provenance import download_provenance
+                        download_provenance(server_cl_state,clients[cid])
                     assert all(torch.equal(clients[cid].shared_weights[k],v) for k,v in candidate.items())
                 global_state=candidate
                 server_optimizer_state=new_server_state
@@ -894,7 +898,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
                         server_cl_state.assert_complete_download(clients[cid])
-                    if cfg.joint_plan_path:download_provenance(server_cl_state,clients[cid])
+                    if cfg.learning_setting=='task_il':
+                        from .joint.provenance import download_provenance
+                        download_provenance(server_cl_state,clients[cid])
             if cfg.joint_plan_path:
                 atomic_json(run_dir/f'joint_knowledge_{round_id:05d}.json',{
                     'interval':round_id,'committed_version':version,
@@ -918,6 +924,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
                         server_cl_state.assert_complete_download(clients[cid])
+                    if cfg.learning_setting=='task_il':
+                        from .joint.provenance import download_provenance
+                        download_provenance(server_cl_state,clients[cid])
             for cid in selected:
                 clients[cid].last_selected=round_id
                 clients[cid].selection_count+=1
@@ -938,7 +947,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     from .joint.task_evaluation import evaluate_task_conditioned
                     joint_global_after['task_conditioned']=evaluate_task_conditioned(
                         model,bank,active_task_sets,cfg.batch_size,device)
-                    joint_task_test=evaluate_task_conditioned(model,bank,active_task_sets,cfg.batch_size,device,'test')
+                    if cfg.audit_test_every_sync or round_id==total_rounds-1:
+                        joint_task_test=evaluate_task_conditioned(model,bank,active_task_sets,cfg.batch_size,device,'test')
                 # Selected clients received the committed state; evaluate it
                 # with their unchanged pre-upload competitor set.
                 broadcast_metrics={}
@@ -997,7 +1007,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 client_update_cosines={f'{a}:{b}':vector_cosine(deltas[a],deltas[b])
                     for a,b in combinations(sorted(deltas),2)}
                 if old:
-                    arrived=set(server_cl_state.acknowledged_train_indices)
+                    arrived=set(server_cl_state.acknowledged_optimized_indices)
                     model.load_state_dict(base_global_state)
                     vectors=class_gradient_representations(model,bank,old,device,
                         allowed_indices=arrived,task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,seed=cfg.seed)
@@ -1062,8 +1072,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             integrated_task_sets={}
             if cfg.learning_setting=='task_il':
                 integrated_task_sets=_integrated_task_class_sets(
-                    server_cl_state.joint_source_heads if cfg.joint_plan_path else task_ids_by_index,
-                    server_cl_state.acknowledged_train_indices,task_class_map)
+                    server_cl_state.joint_source_heads,
+                    server_cl_state.acknowledged_optimized_indices,task_class_map)
             if test_this_round and integrated and not (cfg.learning_setting=='task_il' and
                                    not integrated_task_sets):
                 integrated_test,_=evaluate(model,evaluation_bank,set(integrated),
@@ -1121,7 +1131,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 # zero forgetting because historical testing was deferred.
                 result['forgetting']=per_sync_test['forgetting'] if cfg.audit_test_every_sync else None
                 result['all_observed_peak_drop']=per_sync_test['all_observed_peak_drop'] if cfg.audit_test_every_sync else None
-            if cfg.spurious_ood_eval and cfg.spurious_strength:
+            if test_this_round and cfg.spurious_ood_eval and cfg.spurious_strength:
                 from .data import DataBank
                 from .domains import SpuriousTest
                 shifted=DataBank(bank.train,SpuriousTest(bank.test,cfg.spurious_strength,reverse=True),
@@ -1179,6 +1189,10 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'server_class_sample_exposure':{str(k):int(v) for k,v in sorted(server_cl_state.class_sample_exposure.items())},
                            'server_integrated_class_count':len(server_cl_state.integrated_classes),
                            'server_acknowledged_train_examples':len(server_cl_state.acknowledged_train_indices),
+                           'server_acknowledged_optimized_examples':len(server_cl_state.acknowledged_optimized_indices),
+                           'client_local_delivered_classes':{str(cid):sorted(c.locally_delivered_classes) for cid,c in clients.items()},
+                           'client_local_optimized_classes':{str(cid):sorted(c.locally_optimized_classes) for cid,c in clients.items()},
+                           'client_remote_received_classes':{str(cid):sorted(c.remotely_received_classes) for cid,c in clients.items()},
                            'server_cl_state':server_cl_state.statistics(),
                            'client_shared_memory_sizes':{str(cid):sum(map(len,c.received_memory.values())) for cid,c in clients.items()},
                            'client_private_memory_sizes':{str(cid):sum(map(len,c.private_memory.values())) for cid,c in clients.items()},

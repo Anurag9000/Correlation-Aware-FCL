@@ -80,6 +80,7 @@ class FederatedCLState:
     class_sample_exposure:dict[int,int]=field(default_factory=dict)
     # The server knows only samples that came from accepted client uploads.
     acknowledged_train_indices:set[int]=field(default_factory=set)
+    acknowledged_optimized_indices:set[int]=field(default_factory=set)
     joint_source_heads:dict[int,set[str]]=field(default_factory=dict)
     joint_occurrence_receipts:dict[str,dict]=field(default_factory=dict)
     memory_provenance:dict[int,set[int]]=field(default_factory=dict)
@@ -103,6 +104,9 @@ class FederatedCLState:
         for client in uploaded_clients:
             self.integrated_classes.update(int(c) for c in client.pending_upload_classes)
             self.acknowledged_train_indices.update(int(i) for i in client.seen_indices)
+            self.acknowledged_optimized_indices.update(client.locally_optimized_indices)
+            for idx,heads in client.joint_local_source_heads.items():
+                self.joint_source_heads.setdefault(idx,set()).update(heads)
         # Each accepted client's source-method artifact ledger becomes visible
         # only at an actual upload. In particular, offline GLFC/LGA entropy
         # and FEAT selection tickets must never leak before reconnection.
@@ -220,6 +224,7 @@ class FederatedCLState:
 
     def broadcast_to(self,client,method):
         """Receive the whole server state only at actual model synchronization."""
+        client.remotely_received_classes.update(self.integrated_classes)
         for cls in self.integrated_classes:
             client.first_seen_local_experience.setdefault(int(cls),client.local_experience)
             client.trained_classes.add(int(cls))

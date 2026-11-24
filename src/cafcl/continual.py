@@ -26,6 +26,11 @@ class LocalState:
     current_stage:int=-1
     observed_classes:set[int]=field(default_factory=set)
     seen_indices:set[int]=field(default_factory=set)
+    locally_delivered_classes:set[int]=field(default_factory=set)
+    locally_optimized_indices:set[int]=field(default_factory=set)
+    locally_optimized_classes:set[int]=field(default_factory=set)
+    remotely_received_classes:set[int]=field(default_factory=set)
+    parent_experience_indices:set[int]=field(default_factory=set)
     first_seen_stage:dict[int,int]=field(default_factory=dict)
     memory:dict[int,list[int]]=field(default_factory=dict)
     last_round:int=-1
@@ -1217,6 +1222,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                     step_count+=1
                 microbatch_count+=1
                 loss_total+=macro_loss
+    consolidation_indices=(sorted(client.parent_experience_indices) if cfg.stream_sync_every_batch else indices)
     # Finalize the just-completed SI experience *before* communication. In v7,
     # consolidation happened only at the next arrival; the most recent task's
     # importance consequently never reached the server in that sync.
@@ -1241,7 +1247,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
             raise RuntimeError('Repeated EWC importance consolidation for one experience')
         if cfg.method=='mas' and client.local_experience<=client.mas_stage:
             raise RuntimeError('Repeated MAS importance consolidation for one experience')
-        fresh=estimate_diagonal_importance(model,training_data,indices,device,
+        fresh=estimate_diagonal_importance(model,training_data,consolidation_indices,device,
             kind=cfg.method,max_samples=cfg.importance_samples_per_experience,
             seed=cfg.seed+rng_round*100003+client.client_id*127+client.local_experience,
             active_classes=(seen_classes if active_pair_classes is not None else None))
@@ -1261,8 +1267,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         from .upstream_feat_replay import source_feat_select_local
         source_feat_select_local(model,client,bank,cfg,device,indices,
                                  active_pair_classes or ())
-    if cfg.method in ({'gem','agem','replay','er_ace'}) and not (cfg.joint_plan_path and cfg.joint_epoch_segments>1 and not experience_end):
-        client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy,
+    if cfg.method in ({'gem','agem','replay','er_ace'}) and not ((cfg.stream_sync_every_batch or (cfg.joint_plan_path and cfg.joint_epoch_segments>1)) and not experience_end):
+        client.update_memory(consolidation_indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy,
                              reservoir_fraction=(cfg.replay_reservoir_fraction if cfg.method in ({'replay'}|NATIVE_METHODS) else 0.),
                              class_totals=(Counter(map(int,bank.train.targets)) if cfg.method in ({'replay'}|NATIVE_METHODS) and cfg.replay_reservoir_fraction else None))
     if cfg.method=='native_feat' and experience_end and active_pair_classes:
