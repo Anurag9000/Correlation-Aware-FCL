@@ -188,6 +188,9 @@ def make_task_schedule(num_classes, cfg):
 
 
 def compile_stream_scenario(bank,cfg):
+    if getattr(cfg,'joint_plan_path',''):
+        from .joint.adapter import compile_joint_scenario
+        return compile_joint_scenario(bank,cfg)
     if cfg.dataset not in ('cifar100','synthetic'):
         raise ValueError('Streaming research curriculum is supported on CIFAR-100 only')
     if cfg.relation!='natural' and not cfg.class_order_override:

@@ -468,7 +468,41 @@ def resolve_backbone(name:str)->str:
     if name in MODEL_IDS:return name
     raise ValueError(f'Unsupported research backbone {name}; choose vit or cnn')
 
-def create_model(name:str,classes:int,*,allow_test_model=False,task_class_sets=None):
+class JointClassIncrementalClassifier(nn.Module):
+    """Explicit one-head global-label classifier for the joint protocol."""
+    def __init__(self, features, classes, model_id):
+        super().__init__()
+        self.features=features
+        self.num_classes=int(classes)
+        self.classifier=nn.Linear(features.num_features,self.num_classes)
+        self.backbone_description=dict(model_id=model_id,task_incremental=False,
+            num_global_classes=self.num_classes,classifier='shared_class_indexed_linear',
+            initialization='seeded_random',input_size=32,pretrained=False)
+
+    def forward(self,x):
+        return self.classifier(self.features(x))
+
+
+def create_model(name:str,classes:int,*,allow_test_model=False,task_class_sets=None,learning_setting='task_il'):
+    if learning_setting=='class_il':
+        if task_class_sets is not None:
+            raise ValueError('Class-IL cannot receive task heads')
+        if name in FEATURE_FACTORIES:
+            return JointClassIncrementalClassifier(FEATURE_FACTORIES[name](),classes,name)
+        if not allow_test_model:
+            raise ValueError('Unknown Class-IL research backbone')
+        # Synthetic fixtures only; no implicit production fallback.
+        if name=='test_linear':
+            features=nn.Flatten();features.num_features=3*32*32
+        elif name=='test_mlp':
+            features=nn.Sequential(nn.Flatten(),nn.Linear(3*32*32,256),nn.ReLU());features.num_features=256
+        elif name=='test_smallcnn':
+            features=nn.Sequential(nn.Conv2d(3,8,3,padding=1),nn.ReLU(),nn.AdaptiveAvgPool2d(1),nn.Flatten());features.num_features=8
+        else:
+            raise ValueError(name)
+        return JointClassIncrementalClassifier(features,classes,name)
+    if learning_setting!='task_il':
+        raise ValueError('Unknown learning setting')
     if task_class_sets is None:
         task_class_sets=(tuple(range(int(classes))),)
     if name in MODEL_IDS:return CanonicalClassifier(name,classes,task_class_sets)

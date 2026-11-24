@@ -462,9 +462,10 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
     indices=list(dict.fromkeys(client.current_indices))
     if not indices:
         return None
-    rng=np.random.default_rng(cfg.seed+round_id*137+client.client_id*100003)
+    rng_round=(client.local_experience-1 if cfg.joint_plan_path else round_id)
+    rng=np.random.default_rng(cfg.seed+rng_round*137+client.client_id*100003)
     replay_order_rng=np.random.default_rng(
-        cfg.seed+7_314_159+round_id*1_000_003+client.client_id*10_007+
+        cfg.seed+7_314_159+rng_round*1_000_003+client.client_id*10_007+
         max(0,int(client.local_experience)))
     training_data=bank.train
     if cfg.scenario in {'domain','gradual_drift','shifted_recurrence'} or cfg.label_noise_rate or cfg.spurious_strength:
@@ -481,7 +482,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         training_data=ClientArchiveDataset(training_data,client.received_example_payloads)
     if cfg.training_augmentation=='cifar_crop_flip':
         augmentation_rng=np.random.default_rng(
-            cfg.seed+4_170_001+round_id*100_003+client.client_id*10_007+
+            cfg.seed+4_170_001+rng_round*100_003+client.client_id*10_007+
             (client.local_experience+1)*101)
         training_data=_CIFARCropFlipDataset(training_data,augmentation_rng)
     optimizer=torch.optim.SGD(model.parameters(),lr=cfg.lr,momentum=cfg.momentum,
@@ -646,7 +647,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                 # a short final archive chunk from the complete visible replay
                 # archive instead of multiplying only its tail examples.
                 pad_rng=np.random.default_rng(
-                    cfg.seed+9_191_377+round_id*1_000_003+
+                    cfg.seed+9_191_377+rng_round*1_000_003+
                     client.client_id*10_007+int(tag))
                 pad_ids=pad_rng.choice(np.asarray(padding_pool,dtype=np.int64),
                     size=missing,replace=len(padding_pool)<missing).tolist()
@@ -790,7 +791,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         keep_padding_mask=(cfg.stream_sync_every_batch and
             cfg.stream_partial_batch_policy=='mask_padding_loss')
         for loaded in _example_loader(training_data,indices,cfg.batch_size,
-                                   cfg.seed+round_id*100_003+client.client_id*127+epoch,
+                                   cfg.seed+rng_round*100_003+client.client_id*127+epoch,
                                    include_indices=(online_der or keep_padding_mask),
                                    full_batch=True,padding_indices=padding_indices):
             for micro_index,packed in enumerate(full_training_batches(loaded)):
@@ -823,7 +824,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                 if cfg.method in {'native_glfc','native_lga'} and cfg.dataset=='cifar100':
                     from .upstream_native_augmentation import original_glfc_lga_augment_batch
                     x=original_glfc_lga_augment_batch(cfg.method,x.cpu(),seed=(
-                        cfg.seed+client.client_id*1_000_003+round_id*100_003+
+                        cfg.seed+client.client_id*1_000_003+rng_round*100_003+
                         client.local_experience*1009+epoch*173+step_count))
                 if cfg.method=='native_feat' and cfg.dataset=='cifar100':
                     # Exact original FEAT CIFAR-100 crop/flip/brightness
@@ -831,7 +832,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                     # Only TRAIN/replay inputs; never validation or TEST.
                     from .upstream_feat_augmentation import original_feat_augment_batch
                     x=original_feat_augment_batch(x.cpu(),seed=(
-                        cfg.seed+client.client_id*1_000_003+round_id*100_003+
+                        cfg.seed+client.client_id*1_000_003+rng_round*100_003+
                         client.local_experience*1009+epoch*173+step_count))
                 x=x.to(device,non_blocking=True)
                 y=y.to(device,non_blocking=True)
@@ -1215,7 +1216,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
             raise RuntimeError('Repeated MAS importance consolidation for one experience')
         fresh=estimate_diagonal_importance(model,training_data,indices,device,
             kind=cfg.method,max_samples=cfg.importance_samples_per_experience,
-            seed=cfg.seed+round_id*100003+client.client_id*127+client.local_experience,
+            seed=cfg.seed+rng_round*100003+client.client_id*127+client.local_experience,
             active_classes=(seen_classes if active_pair_classes is not None else None))
         fresh_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
         from .federated_cl import add_importance,weighted_importance

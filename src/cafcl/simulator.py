@@ -34,6 +34,8 @@ from .task_ids import task_instance_id
 PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay'
 
 def protocol_version_for(cfg):
+    if getattr(cfg,'joint_plan_path',''):
+        return 'joint_spatiotemporal_fcl_v1_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -501,12 +503,14 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'duplicated_training_samples':scenario.duplicate_sample_ids,
                     'unused_training_samples':scenario.unused_sample_ids},run_dir/'scenario.pt')
         clients={cid:LocalState(cid) for cid in range(cfg.num_clients)}
-        model=create_model(cfg.model,bank.num_classes,allow_test_model=(cfg.dataset=='synthetic'),task_class_sets=task_class_sets).to(device)
+        model=create_model(cfg.model,bank.num_classes,allow_test_model=(cfg.dataset=='synthetic'),task_class_sets=task_class_sets,learning_setting=cfg.learning_setting if cfg.joint_plan_path else 'task_il').to(device)
+        if cfg.joint_plan_path:
+            atomic_json(run_dir/'joint_plan.json',scenario.joint_plan)
         backbone_description=getattr(model,'backbone_description',{'test_only':True})
         if cfg.dataset=='cifar100':
             # All clients and the server start from the identical configured
             # seeded-random 32x32 backbone; no pretrained-weight assertion.
-            reference=Path(output_root)/(cfg.model+'_architecture_reference.json')
+            reference=(run_dir/'architecture_reference.json' if cfg.joint_plan_path else Path(output_root)/(cfg.model+'_architecture_reference.json'))
             normalized_description=json.loads(json.dumps(backbone_description))
             if reference.exists():
                 if json.loads(reference.read_text())!=normalized_description:
@@ -635,7 +639,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     clients=clients,bank=bank,cfg=cfg,device=device,
                     round_id=round_id,current_stage=current_stage,
                     scenario=scenario,new_events=new_events,
-                    known_task_sets=active_task_ids,
+                    known_task_sets=(() if cfg.joint_plan_path else active_task_ids),
                     task_ids_by_index=task_ids_by_index))
             class_relationships=None
             if cfg.selector in {'feature_max','feature_min','gradient_align','gradient_conflict'}:
@@ -660,10 +664,11 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                                                      history[-1].get('per_class',{}))
                 risks={int(c):max(0.,peak.get(int(c),0.)-float(v))
                        for c,v in observed_validation.items()}
-            selected=select_clients(clients,cfg,round_id,rng,old_classes=old,new_classes=new,
+            selected=(list(scenario.joint_plan['intervals'][round_id]['upload_clients'])
+                      if cfg.joint_plan_path else select_clients(clients,cfg,round_id,rng,old_classes=old,new_classes=new,
                                     coarse_by_fine=bank.coarse_by_fine,
-                                    relationships=class_relationships,class_forgetting=risks)
-            if cfg.stream_protocol:
+                                    relationships=class_relationships,class_forgetting=risks))
+            if cfg.stream_protocol and not cfg.joint_plan_path:
                 is_flush=bool(cfg.stream_terminal_flush and round_id==total_rounds-1)
                 if is_flush:
                     # One clearly marked communication-only closing round:

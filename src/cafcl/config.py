@@ -121,6 +121,10 @@ class RunConfig:
     stream_sync_every_batch: bool = False
     stream_partial_batch_policy: str = "include_padding"
     evaluate_final_only: bool = False
+    # Opt-in joint protocol. Empty values preserve legacy signatures.
+    joint_plan_path: str = ''
+    joint_plan_hash: str = ''
+    joint_local_evaluation: bool = False
 
     def validate(self):
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
@@ -131,6 +135,20 @@ class RunConfig:
         if self.training_augmentation != 'none':
             assert self.dataset == 'cifar100' and self.stream_protocol and self.scenario == 'disjoint'
         assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
+        if self.joint_plan_path:
+            assert self.joint_plan_hash and len(self.joint_plan_hash)==64
+            assert self.stream_protocol and not self.stream_client_chain
+            assert not self.stream_sync_every_batch and self.stream_overlap_kind=='none'
+            assert self.method in {'replay','sgd'} and self.aggregator=='fedavg'
+            assert self.selector=='random' and self.boundary_mode=='known'
+            assert self.pending_policy=='latest' and not self.client_heterogeneity
+            assert self.sample_overlap_fraction==0 and not self.class_order_override
+            assert not self.class_sample_fraction and not self.client_sample_skew and not self.class_imbalance_power
+            assert not self.label_noise_rate and not self.spurious_strength
+            assert self.model in {'resnet18_cifar32','test_linear','test_mlp','test_smallcnn'}
+            assert not self.gradient_diagnostics and not self.causal_diagnostics and not self.subset_diagnostics and not self.representation_diagnostics
+        else:
+            assert not self.joint_plan_hash and not self.joint_local_evaluation
         if self.stream_client_chain:
             assert self.stream_protocol and self.class_pair_protocol == 'strict'
             assert self.num_clients == 5 and self.classes_per_local_task == 2
@@ -151,7 +169,7 @@ class RunConfig:
             assert not self.prepost_diagnostics and not self.gradient_diagnostics
         if self.stream_protocol:
             assert self.dataset in {'cifar100','synthetic'}
-            assert self.learning_setting == 'task_il', 'The stream suite now uses task-specific heads'
+            assert self.learning_setting == 'task_il' or (self.joint_plan_path and self.learning_setting=='class_il'), 'Legacy streams use task-specific heads'
             assert self.class_pair_protocol == 'strict'
             assert not self.full_sync and not self.reset_memory_on_sync, 'Offline clients must not receive server model weights or lose memory'
             # Canonical methods update all classifier rows with the same
@@ -215,7 +233,7 @@ class RunConfig:
         assert self.local_optimizer in {"sgd"}
         assert self.optimizer_state_policy in {"reset", "persist"}
         assert self.boundary_mode in {"known", "hidden"}
-        assert self.learning_setting == 'task_il', 'This repository run suite is task-incremental'
+        assert self.learning_setting == 'task_il' or (self.joint_plan_path and self.learning_setting=='class_il'), 'Class-IL requires the explicit joint protocol'
         if self.learning_setting=='task_il':
             assert self.class_pair_protocol=='strict'
             assert self.boundary_mode=='known'
@@ -298,6 +316,9 @@ class RunConfig:
         if data['share_continual_state'] is True:data.pop('share_continual_state')
         if data['client_training_concurrency']==0:data.pop('client_training_concurrency')
         if data['training_augmentation']=='none':data.pop('training_augmentation')
+        if not data['joint_plan_path']:
+            for key in ('joint_plan_path','joint_plan_hash','joint_local_evaluation'):
+                data.pop(key)
         return data
 
     def signature(self):

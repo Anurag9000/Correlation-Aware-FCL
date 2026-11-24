@@ -50,7 +50,8 @@ def create_client_runtimes(cfg, bank, clients, device, task_class_sets):
             model = create_model(
                 cfg.model, bank.num_classes,
                 allow_test_model=(cfg.dataset == 'synthetic'),
-                task_class_sets=task_class_sets).to(device)
+                task_class_sets=task_class_sets,
+                learning_setting=cfg.learning_setting if cfg.joint_plan_path else 'task_il').to(device)
             if client.shared_weights is None:
                 raise RuntimeError(f'Client {cid} has no initialized local weights')
             model.load_state_dict(client.shared_weights)
@@ -75,8 +76,23 @@ def _train_one(runtime, client, bank, cfg, device, round_id, event,
     start = perf_counter()
     if cfg.learning_setting=='task_il' and task_id:
         runtime.model.set_active_task_id(task_id)
+    def local_measure():
+        from .evaluation import evaluate
+        labels=set(client.observed_classes)
+        groups=None
+        if cfg.learning_setting=='task_il':
+            groups={k:runtime.model.classifier.task_classes[k] for k in known_task_sets}
+            labels={c for classes in groups.values() for c in classes}
+        result,_=evaluate(runtime.model,bank,labels,cfg.batch_size,device,
+                          task_class_groups=groups,split='validation')
+        return result
+    def measure_before():
+        runtime.model.load_state_dict(client.shared_weights)
+        return local_measure()
+    before=None
     if device.type == 'cuda':
         with torch.cuda.device(device), torch.cuda.stream(runtime.stream):
+            if cfg.joint_local_evaluation:before=measure_before()
             result = local_train(
                 runtime.model, client, bank, cfg, device, round_id,
                 task_classes=task_classes, task_id=task_id,
@@ -85,9 +101,13 @@ def _train_one(runtime, client, bank, cfg, device, round_id, event,
                 padding_indices=event.get('padding_indices'),
                 known_task_ids=known_task_sets,
                 task_ids_by_index=task_ids_by_index)
+            if cfg.joint_local_evaluation and result is not None:
+                result['local_validation_pre_task']=before
+                result['local_validation_post_task']=local_measure()
             # Never expose an unfinished client update to the server or Task 2.
             runtime.stream.synchronize()
     else:
+        if cfg.joint_local_evaluation:before=measure_before()
         result = local_train(
             runtime.model, client, bank, cfg, device, round_id,
             task_classes=task_classes, task_id=task_id,
@@ -96,6 +116,9 @@ def _train_one(runtime, client, bank, cfg, device, round_id, event,
             padding_indices=event.get('padding_indices'),
             known_task_ids=known_task_sets,
             task_ids_by_index=task_ids_by_index)
+        if cfg.joint_local_evaluation and result is not None:
+            result['local_validation_pre_task']=before
+            result['local_validation_post_task']=local_measure()
     return result, start, perf_counter()
 
 
@@ -230,9 +253,19 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                                     and not cfg.label_noise_rate else None),
                     'padding_indices': list(map(int,raw.get('padding_indices',()))),
                 }
+                visible_task_sets=known_task_sets
+                if cfg.joint_plan_path and cfg.learning_setting=='task_il':
+                    # Only delivered local tasks and genuinely received replay
+                    # samples can authorize a source task head. The plan is
+                    # globally known to the simulator, not to the learner.
+                    visible_task_sets={e['task_id'] for e in client.local_training_events if e.get('task_id')}
+                    for indices in client.received_memory.values():
+                        for idx in indices:
+                            visible_task_sets.update(task_ids_by_index.get(int(idx),()))
+                    visible_task_sets=tuple(sorted(visible_task_sets))
                 pending.append((cid, executor.submit(
                     _train_one, runtimes[cid], client, bank, local_cfg, device,
-                    round_id, event, task_labels, task_id, start_barrier,known_task_sets,
+                    round_id, event, task_labels, task_id, start_barrier,visible_task_sets,
                     task_ids_by_index)))
             # Every active client completes Task N before any Task N+1 starts.
             for cid, future in pending:

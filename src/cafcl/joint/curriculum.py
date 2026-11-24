@@ -15,7 +15,10 @@ from typing import Mapping, Sequence
 
 
 def digest(value):
-    return sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
+    # JSON object keys are strings on disk. Normalize before hashing so
+    # integer class-ID maps survive a JSON round trip unchanged.
+    normalized=json.loads(json.dumps(value,allow_nan=False))
+    return sha256(json.dumps(normalized, sort_keys=True, separators=(",", ":"),
                              allow_nan=False).encode()).hexdigest()
 
 
@@ -201,9 +204,10 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
         local_exp[i] += 1
         semantic = "classes_"+"_".join(f"{c:03d}" for c in classes)
         occ = f"client_{i:03d}__atomic_{t:06d}__{semantic}"
-        head = (occ if head_policy == "occurrence_specific" else
-                semantic if head_policy == "semantic_shared" else
-                f"client_{i:03d}__{semantic}")
+        task_key='task_'+'_'.join(f'{c:03d}' for c in classes)
+        head = (f'{task_key}__client_{i:03d}__atomic_{t:06d}' if head_policy == 'occurrence_specific' else
+                task_key if head_policy == 'semantic_shared' else
+                f'{task_key}__client_{i:03d}')
         ids = []
         for c in classes:
             j = seen_occ[c]

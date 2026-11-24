@@ -1,0 +1,98 @@
+"""Plan and execute explicit joint experiments through cafcl.simulator.
+
+Examples:
+  python -m cafcl.joint.runner plan --output runs/joint_plan
+  python -m cafcl.joint.runner run --manifest runs/joint_plan/manifest.json \
+      --job-id J-H-S1-O0-L2-task_il --output runs/joint_results
+"""
+from __future__ import annotations
+import argparse
+from collections import Counter
+from dataclasses import replace
+import json
+from pathlib import Path
+from .curriculum import compile_plan, foundational_registry, foundational_stream
+
+
+def write_json(path, value):
+    path=Path(path)
+    path.parent.mkdir(parents=True,exist_ok=True)
+    temp=path.with_suffix(path.suffix+'.tmp')
+    temp.write_text(json.dumps(value,indent=2,sort_keys=True)+'\n')
+    temp.replace(path)
+
+
+def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5)):
+    from ..data import get_data_bank
+    bank=get_data_bank('cifar100',data_root,download=download,seed=seed)
+    root=Path(output).resolve()
+    jobs=[]
+    for item in foundational_registry(depths,seed=seed):
+        events=foundational_stream(item['spatial'],item['local_overlap'])
+        plan=compile_plan(events,bank.train.targets,num_clients=5,num_classes=100,
+                          local_depth=item['local_depth'],head_policy=item['head_policy'],
+                          seed=seed,minimum_samples=8).to_dict()
+        filename=item['job_id']+'.json'
+        write_json(root/'plans'/filename,plan)
+        jobs.append({**item,'plan_file':'plans/'+filename,'plan_hash':plan['plan_hash'],
+                     'atomic_hash':plan['atomic_hash'],'status':'planned',
+                     'task_occurrences':len(plan['tasks']),
+                     'communication_intervals':len(plan['intervals'])})
+    write_json(root/'manifest.json',{'dataset':'cifar100','jobs':jobs})
+    return jobs
+
+
+def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evaluation=False):
+    from ..config import RunConfig
+    from ..simulator import run_experiment
+    manifest=Path(manifest).resolve()
+    jobs=json.loads(manifest.read_text())['jobs']
+    found=[x for x in jobs if x['job_id']==job_id]
+    if len(found)!=1:
+        raise ValueError('Expected one matching job')
+    job=found[0];path=(manifest.parent/job['plan_file']).resolve()
+    plan=json.loads(path.read_text())
+    counts=Counter()
+    lookup={x['occurrence_id']:x for x in plan['tasks']}
+    for r in plan['intervals']:
+        for oid in r['occurrences']:
+            counts[(r['interval_id'],lookup[oid]['client_id'])]+=1
+    cfg=RunConfig(dataset='cifar100',model='resnet18_cifar32',stream_protocol=True,
+        num_clients=plan['num_clients'],epochs=job['epochs'],batch_size=64,
+        participation=1.,selector='random',scenario='disjoint',
+        stages=1,rounds_per_stage=1,learning_setting=job['learning_setting'],
+        local_tasks_per_round=max(counts.values()),method='replay',
+        aggregator='fedavg',memory_per_class=50,classwise_head_merge=False,
+        replay_ratio=1.,training_augmentation='cifar_crop_flip',
+        client_training_concurrency=concurrency,seed=job['seed'],
+        joint_plan_path=str(path),joint_plan_hash=job['plan_hash'],
+        joint_local_evaluation=local_evaluation,
+        stream_terminal_flush=plan['intervals'][-1]['terminal_flush'],
+        checkpoint_every=1,job_id=job_id)
+    return run_experiment(cfg,str(output),data_root,download=download)
+
+
+def main(argv=None):
+    p=argparse.ArgumentParser(description=__doc__)
+    sub=p.add_subparsers(dest='command',required=True)
+    a=sub.add_parser('plan');a.add_argument('--output',required=True)
+    a.add_argument('--seed',type=int,default=0)
+    a.add_argument('--depths',type=int,nargs='+',default=[1,2,3,5])
+    a=sub.add_parser('run');a.add_argument('--manifest',required=True)
+    a.add_argument('--job-id',required=True);a.add_argument('--output',required=True)
+    a.add_argument('--concurrency',type=int,default=1)
+    a.add_argument('--local-evaluation',action='store_true')
+    for a in sub.choices.values():
+        a.add_argument('--data-root',default='data')
+        a.add_argument('--no-download',action='store_true')
+    a=p.parse_args(argv)
+    if a.command=='plan':
+        jobs=plan_campaign(a.output,a.data_root,a.seed,not a.no_download,a.depths)
+        print(f'Planned {len(jobs)} conditions; no training launched')
+    else:
+        print(run_job(a.manifest,a.job_id,a.output,a.data_root,
+                      not a.no_download,a.concurrency,a.local_evaluation))
+
+
+if __name__=='__main__':
+    main()
