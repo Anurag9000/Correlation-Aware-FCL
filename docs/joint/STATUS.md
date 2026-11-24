@@ -101,3 +101,15 @@ stored plan hashes, execution barriers/occurrences, server-state hashes,
 terminal artifacts and reports. It does not establish causal validity or
 re-run checkpoint inference. Source launch receipts record the current git
 revision and tracked-worktree dirtiness when a checkout is available.
+
+## Restricted raw-sample reuse
+
+Family P now includes five exact-task raw-sample overlap levels (0/25/50/75/100%).
+A shared subset replaces private draws while each occurrence keeps its original
+sample count; the unique training support therefore decreases as overlap rises.
+The plan records shared/duplicate/unused indices and the allocation contract.
+Both IL settings can use this design, but reuse is restricted to a single
+semantic class set per class and shared semantic head policy. Cross-semantic
+raw reuse, domain shift and other distributional interventions remain blocked.
+This is deliberate: global planned index-to-head maps are not sufficient to
+safely route a sample reused by multiple different tasks before future arrivals.

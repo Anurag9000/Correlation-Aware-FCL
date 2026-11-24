@@ -48,7 +48,8 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
                     require_all_classes=design.require_all_classes,
                     interval_boundaries=design.boundaries,upload_cohorts=design.cohorts,
                     offline_clients=design.offline_clients,outage_duration=design.outage_duration,
-                    allocation_order=design.allocation_order).to_dict()
+                    allocation_order=design.allocation_order,
+                    raw_sample_overlap=design.raw_sample_overlap).to_dict()
             except ValueError as exc:
                 blocked.append({'design':design.name,'reason':str(exc),'status':'infeasible'})
                 continue
@@ -68,7 +69,7 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
             else:unique[key]=job
         jobs=list(unique.values())
         write_json(root/'manifest.json',{'dataset':'cifar100','jobs':jobs,'aliases':aliases,'infeasible':blocked,
-                   'implementation_blocked':['P: raw sample overlap and domain allocation']})
+                   'implementation_blocked':['P: cross-semantic raw sample reuse and domain allocation']})
         return jobs
     for item in foundational_registry(depths,seed=seed):
         events=foundational_stream(item['spatial'],item['local_overlap'])
@@ -107,6 +108,7 @@ def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evalua
         local_tasks_per_round=max(counts.values()),method='replay',
         aggregator='fedavg',memory_per_class=50,classwise_head_merge=False,
         replay_ratio=1.,training_augmentation='cifar_crop_flip',
+        sample_overlap_fraction=plan['allocation_audit']['raw_sample_overlap'],
         client_training_concurrency=concurrency,seed=job['seed'],
         joint_plan_path=str(path),joint_plan_hash=job['plan_hash'],
         joint_local_evaluation=local_evaluation,

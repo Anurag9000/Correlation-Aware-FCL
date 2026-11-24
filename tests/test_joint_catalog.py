@@ -13,8 +13,11 @@ class JointCatalogTests(unittest.TestCase):
                 p=compile_plan(d.events,targets,num_clients=d.num_clients,num_classes=100,
                     local_depth=d.local_depth,interval_boundaries=d.boundaries,
                     upload_cohorts=d.cohorts,offline_clients=d.offline_clients,
-                    allocation_order=d.allocation_order)
-                self.assertEqual(p.allocation_audit['unique_assigned'],45000)
+                    allocation_order=d.allocation_order,raw_sample_overlap=d.raw_sample_overlap,
+                    head_policy=d.head_policy)
+                self.assertEqual(p.allocation_audit['assignments'],45000)
+                if not d.raw_sample_overlap:
+                    self.assertEqual(p.allocation_audit['unique_assigned'],45000)
 
     def test_order_matched_samples(self):
         targets=[c for c in range(100) for _ in range(450)]

@@ -37,7 +37,8 @@ def load_plan(path, expected_hash, train_targets):
         interval_boundaries=[max(r['atomic_steps'])+1 for r in learning],
         upload_cohorts=[r['upload_clients'] for r in learning],
         terminal_flush=saved['intervals'][-1]['terminal_flush'],
-        allocation_order=saved['allocation_audit'].get('allocation_order','timeline'))
+        allocation_order=saved['allocation_audit'].get('allocation_order','timeline'),
+        raw_sample_overlap=saved['allocation_audit']['raw_sample_overlap'])
     if rebuilt.to_dict()['plan_hash']!=claimed:
         raise ValueError('Joint plan reconstruction differs from saved plan')
     return saved
@@ -48,6 +49,8 @@ def compile_joint_scenario(bank,cfg):
     if (plan['num_clients'],plan['num_classes'],plan['seed'])!=(
             cfg.num_clients,bank.num_classes,cfg.seed):
         raise ValueError('Plan/config/dataset dimensions disagree')
+    if plan['allocation_audit']['raw_sample_overlap']!=cfg.sample_overlap_fraction:
+        raise ValueError('Plan/config raw sample overlap mismatch')
     if plan['intervals'][-1]['terminal_flush']!=cfg.stream_terminal_flush:
         raise ValueError('Plan/config terminal flush mismatch')
     if cfg.dataset!='synthetic' and not cfg.joint_allow_partial_coverage and len(plan['overlap_audit']['class_owners'])!=bank.num_classes:
@@ -70,4 +73,5 @@ def compile_joint_scenario(bank,cfg):
                     stage.append(label);seen.add(label)
         stages.append(stage)
     return JointScenario(arrivals,stages,dict(holders),cfg.num_clients,bank.num_classes,
-                         (),tuple(plan['allocation_audit']['unused_training_indices']),plan)
+                         tuple(plan['allocation_audit'].get('duplicate_sample_ids',())),
+                         tuple(plan['allocation_audit']['unused_training_indices']),plan)

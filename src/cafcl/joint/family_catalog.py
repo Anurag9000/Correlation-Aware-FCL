@@ -28,6 +28,7 @@ class Design:
     epochs: int = 5
     require_all_classes: bool = True
     head_policy: str = 'semantic_shared'
+    raw_sample_overlap: float = 0.0
 
 
 def coverage_tail(events,k):
@@ -280,6 +281,10 @@ def screening_designs():
             events,cohorts=outage_stream(comp,duration)
             yield Design(f'O-{comp}-D{duration}','O',events,cohorts=cohorts,
                          metadata={'duration':duration,'compensation':comp,'hidden_client':0})
+    for overlap in (0.,.25,.5,.75,1.):
+        yield Design(f'P-RAW{int(100*overlap)}','P',exact_groups((5,),width=2,steps=50),
+                     raw_sample_overlap=overlap,metadata={'raw_overlap':overlap,
+                     'fixed_fresh_draws':True,'unique_support_varies':True})
     for policy in ('increasing','decreasing','periodic','abrupt'):
         yield Design('Q-'+policy,'Q',dynamic_stream(policy),metadata={'policy':policy})
     for historical in range(6):

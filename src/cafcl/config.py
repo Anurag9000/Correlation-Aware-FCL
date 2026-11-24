@@ -143,7 +143,7 @@ class RunConfig:
             assert self.method in {'replay','sgd'} and self.aggregator=='fedavg'
             assert self.selector=='random' and self.boundary_mode=='known'
             assert self.pending_policy=='latest' and not self.client_heterogeneity
-            assert self.sample_overlap_fraction==0 and not self.class_order_override
+            assert not self.class_order_override
             assert not self.class_sample_fraction and not self.client_sample_skew and not self.class_imbalance_power
             assert not self.label_noise_rate and not self.spurious_strength
             assert self.model in {'resnet18_cifar32','test_linear','test_mlp','test_smallcnn'}

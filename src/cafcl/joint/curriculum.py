@@ -148,7 +148,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
                  offline_clients=0, outage_duration=1, terminal_flush=True,
                  minimum_samples=1, require_all_classes=True,
                  interval_boundaries=None, upload_cohorts=None,
-                 allocation_order='timeline'):
+                 allocation_order='timeline',raw_sample_overlap=0.0):
     """Compile exact explicit events (atomic_step, client, class tuple).
 
     Fixed unique-data allocation: each observed class's entire TRAIN pool is
@@ -160,6 +160,10 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
         raise ValueError("Invalid client/class/depth count")
     if not 0 <= offline_clients < num_clients or outage_duration < 1:
         raise ValueError("Invalid outage specification")
+    if not 0 <= raw_sample_overlap <= 1:
+        raise ValueError('Raw sample overlap must lie in [0,1]')
+    if raw_sample_overlap and head_policy!='semantic_shared':
+        raise ValueError('Raw reuse requires shared semantic heads')
     if allocation_order not in ('timeline','client_semantic'):
         raise ValueError('Unsupported allocation order')
     if minimum_samples < 1:
@@ -190,6 +194,14 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
         raise ValueError("Incomplete class coverage")
     if not any(len(v) > 1 for v in owners.values()):
         raise ValueError("Primary joint curriculum must have cross-client overlap")
+    if raw_sample_overlap:
+        # A raw image may recur only under one semantic class set, so its
+        # source-head provenance cannot activate a future different task.
+        semantic_by_class=defaultdict(set)
+        for _,_,classes in ordered:
+            for label in classes:semantic_by_class[label].add(classes)
+        if any(len(v)>1 for v in semantic_by_class.values()):
+            raise ValueError('Ambiguous raw reuse across different semantic tasks is unsupported')
     pool = defaultdict(list)
     for index, label in enumerate(train_targets):
         c = int(label)
@@ -207,11 +219,21 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
     allocation_events=(ordered if allocation_order=='timeline' else
                        sorted(ordered,key=lambda x:(x[1],x[2],x[0])))
     allocated={}
+    shared_counts={c:int((len(pool[c])//n)*raw_sample_overlap) if n>1 else 0
+                   for c,n in counts.items()}
+    private_cursor=Counter(shared_counts)
     for t,i,classes in allocation_events:
         ids=[]
         for label in classes:
             j=seen_occ[label];seen_occ[label]+=1;n=len(pool[label])
-            ids.extend(pool[label][j*n//counts[label]:(j+1)*n//counts[label]])
+            size=(j+1)*n//counts[label]-j*n//counts[label]
+            shared=shared_counts[label]
+            if shared:
+                start=private_cursor[label];end=start+size-shared
+                ids.extend(pool[label][:shared]);ids.extend(pool[label][start:end])
+                private_cursor[label]=end
+            else:
+                ids.extend(pool[label][j*n//counts[label]:(j+1)*n//counts[label]])
         allocated[t,i]=tuple(ids)
     local_exp = Counter()
     tasks = []
@@ -272,7 +294,9 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
     for x in tasks:
         task_owners[x.semantic_task_id].add(x.client_id)
     all_indices = [idx for x in tasks for idx in x.train_indices]
-    if len(set(all_indices)) != len(all_indices):
+    if any(len(x.train_indices)!=len(set(x.train_indices)) for x in tasks):
+        raise AssertionError('Duplicate raw sample within one atomic task')
+    if not raw_sample_overlap and len(set(all_indices)) != len(all_indices):
         raise AssertionError("Unexpected duplicate allocation")
     audit = {
         "class_occurrences": dict(sorted(counts.items())),
@@ -289,9 +313,13 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
                   "unused_training_indices": sorted(set(range(len(train_targets)))-set(all_indices)),
                   "minimum_samples_per_occurrence": min(len(x.train_indices) for x in tasks),
                   "minimum_samples_per_class_occurrence": min(len(pool[c])//n for c,n in counts.items()),
-                  "raw_sample_overlap": 0.0,
+                  "raw_sample_overlap": float(raw_sample_overlap),
                   "allocation_order": allocation_order,
                   "training_target_hash": digest(list(map(int, train_targets)))}
+    if raw_sample_overlap:
+        allocation['duplicate_sample_ids']=sorted(i for i,n in Counter(all_indices).items() if n>1)
+        allocation['shared_samples_per_class_occurrence']=dict(sorted(shared_counts.items()))
+        allocation['allocation_contract']='fixed_fresh_draws_reduced_unique_support'
     return JointPlan(num_classes, num_clients, seed, head_policy, tuple(tasks),
                      tuple(intervals), audit, allocation)
 
