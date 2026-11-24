@@ -35,7 +35,7 @@ PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_class
 
 def protocol_version_for(cfg):
     if getattr(cfg,'joint_plan_path',''):
-        return 'joint_spatiotemporal_fcl_v1_'+cfg.learning_setting
+        return 'joint_spatiotemporal_fcl_v2_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -721,8 +721,14 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 if uploaded is None:
                     continue
                 uploaded['client_id']=cid
-                integrated.update(uploaded['accumulated_classes'])
+                if not cfg.joint_plan_path:integrated.update(uploaded['accumulated_classes'])
                 accepted.append(uploaded)
+            if cfg.joint_plan_path:
+                from .joint.provenance import prepare_receipts,install_receipts,download_provenance
+                joint_receipts=prepare_receipts(server_cl_state,clients,accepted,round_id,version+1)
+                joint_upload_metadata=[{'client':u['client_id'],'anchor_version':u['anchor_version'],
+                    'steps':u['accumulated_steps'],'occurrences':list(clients[u['client_id']].joint_pending_occurrences)}
+                    for u in accepted]
             # Nonselected clients have not downloaded, uploaded or reset their
             # pending updates. Their local trajectory remains intact.
             evaluation_bank=bank
@@ -810,6 +816,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         server_class_update_counts[int(cls)]=(
                             server_class_update_counts.get(int(cls),0)+int(n))
 
+                if cfg.joint_plan_path and not check_finite(candidate):
+                    raise RuntimeError('Nonfinite joint aggregation candidate')
                 # Accepted client-private historical state is merged before
                 # the model/state acknowledgement; inactive clients are untouched.
                 if cfg.share_continual_state:
@@ -829,6 +837,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                             cls=int(cls)
                             server_cl_state.class_sample_exposure[cls]=(
                                 server_cl_state.class_sample_exposure.get(cls,0)+int(n))
+                if cfg.joint_plan_path:
+                    install_receipts(server_cl_state,joint_receipts,clients,accepted)
+                    for u in accepted:integrated.update(u['accumulated_classes'])
                 # Candidate is built without mutating the committed server state.
                 for cid in selected:
                     clients[cid].receive(candidate,version+1,
@@ -837,6 +848,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
                         server_cl_state.assert_complete_download(clients[cid])
+                    if cfg.joint_plan_path:download_provenance(server_cl_state,clients[cid])
                     assert all(torch.equal(clients[cid].shared_weights[k],v) for k,v in candidate.items())
                 global_state=candidate
                 server_optimizer_state=new_server_state
@@ -850,6 +862,14 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
                         server_cl_state.assert_complete_download(clients[cid])
+                    if cfg.joint_plan_path:download_provenance(server_cl_state,clients[cid])
+            if cfg.joint_plan_path:
+                atomic_json(run_dir/f'joint_knowledge_{round_id:05d}.json',{
+                    'interval':round_id,'committed_version':version,
+                    'locally_trained_occurrences':[d['occurrence_id'] for d in local_details],
+                    'uploads':joint_upload_metadata,'acknowledged_occurrences':joint_receipts,
+                    'pending_occurrences':{cid:list(c.joint_pending_occurrences) for cid,c in clients.items()},
+                    'broadcast_clients':list(selected),'server_acknowledged_total':len(server_cl_state.joint_occurrence_receipts)})
             # Capture server-level backbone/head compatibility diagnostics
             # after the commit, without changing any global or local weights.
             aggregation_norm_diagnostics=_normalization_aggregation_diagnostics(
@@ -992,8 +1012,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             integrated_task_sets={}
             if cfg.learning_setting=='task_il':
                 integrated_task_sets=_integrated_task_class_sets(
-                    task_ids_by_index,server_cl_state.acknowledged_train_indices,
-                    task_class_map)
+                    server_cl_state.joint_source_heads if cfg.joint_plan_path else task_ids_by_index,
+                    server_cl_state.acknowledged_train_indices,task_class_map)
             if integrated and not (cfg.learning_setting=='task_il' and
                                    not integrated_task_sets):
                 integrated_test,_=evaluate(model,evaluation_bank,set(integrated),

@@ -64,6 +64,9 @@ class LocalState:
     local_experience:int=-1
     first_seen_local_experience:dict[int,int]=field(default_factory=dict)
     local_training_events:list[dict]=field(default_factory=list)
+    joint_local_source_heads:dict[int,set[str]]=field(default_factory=dict)
+    joint_received_source_heads:dict[int,set[str]]=field(default_factory=dict)
+    joint_pending_occurrences:list[str]=field(default_factory=list)
     private_memory:dict[int,list[int]]=field(default_factory=dict)
     private_reservoir_seen_counts:dict[int,int]=field(default_factory=dict)
     private_reservoir_seen_indices:set[int]=field(default_factory=set)
@@ -111,6 +114,7 @@ class LocalState:
         self.pending_upload_steps=0
         self.pending_class_update_steps={}
         self.pending_task_head_examples={}
+        self.joint_pending_occurrences=[]
         self.pending_importance={}
         self.pending_feat_ecc=[]
         self.pending_native_prototypes=[]

@@ -29,6 +29,7 @@ class Design:
     require_all_classes: bool = True
     head_policy: str = 'semantic_shared'
     raw_sample_overlap: float = 0.0
+    allow_cross_semantic_reuse: bool = False
 
 
 def coverage_tail(events,k):
@@ -284,6 +285,11 @@ def screening_designs():
     for overlap in (0.,.25,.5,.75,1.):
         yield Design(f'P-RAW{int(100*overlap)}','P',exact_groups((5,),width=2,steps=50),
                      raw_sample_overlap=overlap,metadata={'raw_overlap':overlap,
+                     'fixed_fresh_draws':True,'unique_support_varies':True})
+    for overlap in (.25,.5,.75,1.):
+        yield Design(f'P-CROSS-RAW{int(100*overlap)}','P',foundational_stream('S3',1),
+                     raw_sample_overlap=overlap,allow_cross_semantic_reuse=True,
+                     local_depth=2,metadata={'raw_overlap':overlap,'cross_semantic_reuse':True,
                      'fixed_fresh_draws':True,'unique_support_varies':True})
     for policy in ('increasing','decreasing','periodic','abrupt'):
         yield Design('Q-'+policy,'Q',dynamic_stream(policy),metadata={'policy':policy})

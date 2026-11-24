@@ -84,3 +84,15 @@ This is not the complete 100-section design. Remaining work includes:
 The available validation is source/unit/synthetic evidence only. It does not
 establish high accuracy, causal identification, historical result equivalence
 or publication-level novelty.
+
+## Continuation: causal provenance (protocol v2)
+
+The prior final v1 CI passed 16 tests and 230 subtests at c6af986:
+https://github.com/Anurag9000/Correlation-Aware-FCL/actions/runs/45403370323
+
+The opt-in v2 runtime now records local source-head exposure and only copies
+acknowledged archive source heads at actual broadcast. It adds pending and
+accepted occurrence receipts and per-interval knowledge JSON. Cross-semantic
+raw reuse can be explicitly enabled. V1 checkpoints cannot resume into v2.
+Commit-level durability remains boundary-based; full failure-injection and
+resume equivalence still require tests. No GPU claims are made.

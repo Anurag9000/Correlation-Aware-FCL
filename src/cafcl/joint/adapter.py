@@ -38,7 +38,8 @@ def load_plan(path, expected_hash, train_targets):
         upload_cohorts=[r['upload_clients'] for r in learning],
         terminal_flush=saved['intervals'][-1]['terminal_flush'],
         allocation_order=saved['allocation_audit'].get('allocation_order','timeline'),
-        raw_sample_overlap=saved['allocation_audit']['raw_sample_overlap'])
+        raw_sample_overlap=saved['allocation_audit']['raw_sample_overlap'],
+        allow_cross_semantic_reuse=saved['allocation_audit'].get('allow_cross_semantic_reuse',False))
     if rebuilt.to_dict()['plan_hash']!=claimed:
         raise ValueError('Joint plan reconstruction differs from saved plan')
     return saved

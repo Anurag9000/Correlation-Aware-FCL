@@ -14,7 +14,7 @@ class JointCatalogTests(unittest.TestCase):
                     local_depth=d.local_depth,interval_boundaries=d.boundaries,
                     upload_cohorts=d.cohorts,offline_clients=d.offline_clients,
                     allocation_order=d.allocation_order,raw_sample_overlap=d.raw_sample_overlap,
-                    head_policy=d.head_policy)
+                    head_policy=d.head_policy,allow_cross_semantic_reuse=d.allow_cross_semantic_reuse)
                 self.assertEqual(p.allocation_audit['assignments'],45000)
                 if not d.raw_sample_overlap:
                     self.assertEqual(p.allocation_audit['unique_assigned'],45000)

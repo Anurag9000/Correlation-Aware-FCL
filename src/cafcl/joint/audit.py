@@ -18,6 +18,8 @@ def server_boundary_digest(weights,version,state):
         'acknowledged_indices':sorted(state.acknowledged_train_indices),
         'integrated_classes':sorted(state.integrated_classes),
         'class_sample_exposure':state.class_sample_exposure,
+        'joint_source_heads':{i:sorted(v) for i,v in state.joint_source_heads.items()},
+        'joint_occurrence_receipts':state.joint_occurrence_receipts,
     }
     h.update(json.dumps(metadata,sort_keys=True).encode())
     return h.hexdigest()

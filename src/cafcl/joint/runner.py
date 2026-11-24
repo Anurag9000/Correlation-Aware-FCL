@@ -49,7 +49,8 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
                     interval_boundaries=design.boundaries,upload_cohorts=design.cohorts,
                     offline_clients=design.offline_clients,outage_duration=design.outage_duration,
                     allocation_order=design.allocation_order,
-                    raw_sample_overlap=design.raw_sample_overlap).to_dict()
+                    raw_sample_overlap=design.raw_sample_overlap,
+                    allow_cross_semantic_reuse=design.allow_cross_semantic_reuse).to_dict()
             except ValueError as exc:
                 blocked.append({'design':design.name,'reason':str(exc),'status':'infeasible'})
                 continue
@@ -72,7 +73,7 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
             else:unique[key]=job
         jobs=list(unique.values())
         write_json(root/'manifest.json',{'dataset':'cifar100','jobs':jobs,'aliases':aliases,'infeasible':blocked,
-                   'implementation_blocked':['P: cross-semantic raw sample reuse and domain allocation']})
+                   'implementation_blocked':['P: domain allocation and distribution skew']})
         return jobs
     for item in foundational_registry(depths,seed=seed):
         events=foundational_stream(item['spatial'],item['local_overlap'])

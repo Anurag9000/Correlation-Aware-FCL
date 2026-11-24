@@ -80,6 +80,8 @@ class FederatedCLState:
     class_sample_exposure:dict[int,int]=field(default_factory=dict)
     # The server knows only samples that came from accepted client uploads.
     acknowledged_train_indices:set[int]=field(default_factory=set)
+    joint_source_heads:dict[int,set[str]]=field(default_factory=dict)
+    joint_occurrence_receipts:dict[str,dict]=field(default_factory=dict)
     memory_provenance:dict[int,set[int]]=field(default_factory=dict)
     # Stable provenance of each exemplar, including which local task supplied it.
     memory_origins:dict[int,tuple[int,int]]=field(default_factory=dict)

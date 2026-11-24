@@ -148,7 +148,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
                  offline_clients=0, outage_duration=1, terminal_flush=True,
                  minimum_samples=1, require_all_classes=True,
                  interval_boundaries=None, upload_cohorts=None,
-                 allocation_order='timeline',raw_sample_overlap=0.0):
+                 allocation_order='timeline',raw_sample_overlap=0.0,allow_cross_semantic_reuse=False):
     """Compile exact explicit events (atomic_step, client, class tuple).
 
     Fixed unique-data allocation: each observed class's entire TRAIN pool is
@@ -163,7 +163,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
         raise ValueError("Invalid outage specification")
     if not 0 <= raw_sample_overlap <= 1:
         raise ValueError('Raw sample overlap must lie in [0,1]')
-    if raw_sample_overlap and head_policy!='semantic_shared':
+    if raw_sample_overlap and head_policy!='semantic_shared' and not allow_cross_semantic_reuse:
         raise ValueError('Raw reuse requires shared semantic heads')
     if allocation_order not in ('timeline','client_semantic'):
         raise ValueError('Unsupported allocation order')
@@ -195,7 +195,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
         raise ValueError("Incomplete class coverage")
     if not any(len(v) > 1 for v in owners.values()):
         raise ValueError("Primary joint curriculum must have cross-client overlap")
-    if raw_sample_overlap:
+    if raw_sample_overlap and not allow_cross_semantic_reuse:
         # A raw image may recur only under one semantic class set, so its
         # source-head provenance cannot activate a future different task.
         semantic_by_class=defaultdict(set)
@@ -317,6 +317,8 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
                   "raw_sample_overlap": float(raw_sample_overlap),
                   "allocation_order": allocation_order,
                   "training_target_hash": digest(list(map(int, train_targets)))}
+    if allow_cross_semantic_reuse:
+        allocation['allow_cross_semantic_reuse']=True
     if raw_sample_overlap:
         allocation['duplicate_sample_ids']=sorted(i for i,n in Counter(all_indices).items() if n>1)
         allocation['shared_samples_per_class_occurrence']=dict(sorted(shared_counts.items()))

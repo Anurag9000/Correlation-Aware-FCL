@@ -273,19 +273,19 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                     'padding_indices': list(map(int,raw.get('padding_indices',()))),
                 }
                 visible_task_sets=known_task_sets
+                visible_provenance=task_ids_by_index
                 if cfg.joint_plan_path and cfg.learning_setting=='task_il':
                     # Only delivered local tasks and genuinely received replay
                     # samples can authorize a source task head. The plan is
                     # globally known to the simulator, not to the learner.
-                    visible_task_sets={e['task_id'] for e in client.local_training_events if e.get('task_id')}
-                    for indices in client.received_memory.values():
-                        for idx in indices:
-                            visible_task_sets.update(task_ids_by_index.get(int(idx),()))
-                    visible_task_sets=tuple(sorted(visible_task_sets))
+                    from .joint.provenance import expose,visible_source_heads
+                    expose(client,raw['indices'],task_id)
+                    visible_provenance=visible_source_heads(client)
+                    visible_task_sets=tuple(sorted({h for heads in visible_provenance.values() for h in heads}))
                 pending.append((cid, executor.submit(
                     _train_one, runtimes[cid], client, bank, local_cfg, device,
                     round_id, event, task_labels, task_id, start_barrier,visible_task_sets,
-                    task_ids_by_index)))
+                    visible_provenance)))
             # Every active client completes Task N before any Task N+1 starts.
             for cid, future in pending:
                 result, start, end = future.result()
@@ -312,6 +312,12 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                 cls = int(cls)
                 client.pending_upload_class_counts[cls] = (
                     client.pending_upload_class_counts.get(cls, 0) + count)
+            if cfg.joint_plan_path:
+                if result['steps']<=0:raise RuntimeError('Joint task completed without optimizer updates')
+                client.joint_pending_occurrences.append(slot[cid]['occurrence_id'])
+                # Keep the historical event ledger, but do not retain unrestricted
+                # access to the previous task's current dataset.
+                client.current_indices=[]
             locally_trained.append(cid)
             local_details.append({
                 **({'atomic_step':atomic_step,'occurrence_id':slot[cid]['occurrence_id'],
