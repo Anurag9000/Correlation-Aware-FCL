@@ -25,6 +25,9 @@ class Design:
     offline_clients: int = 0
     outage_duration: int = 1
     allocation_order: str = 'timeline'
+    epochs: int = 5
+    require_all_classes: bool = True
+    head_policy: str = 'semantic_shared'
 
 
 def coverage_tail(events,k):
@@ -74,10 +77,11 @@ def migration(gap, *, same_client=False, partial=False, visits=2):
     return coverage_tail(events,5)[0]
 
 
-def sequence_order(policy,depth):
+def sequence_order(policy,depth,local_overlap=0,matched_horizon=False):
     """Same per-client semantic multiset; communication at block ends."""
     events=[];boundaries=[]
-    pairs=[(c,c+1) for c in range(0,100,2)]
+    pairs=([(c,(c+1)%100) for c in range(100)] if local_overlap else
+           [(c,c+1) for c in range(0,100,2)]*(2 if matched_horizon else 1))
     t=0
     for first in range(0,len(pairs),depth):
         block=pairs[first:first+depth]

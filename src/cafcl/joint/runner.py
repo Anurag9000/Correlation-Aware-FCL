@@ -8,7 +8,9 @@ Examples:
 from __future__ import annotations
 import argparse
 from collections import Counter
-from dataclasses import replace
+from itertools import chain
+import os
+import subprocess
 import json
 from pathlib import Path
 from .curriculum import compile_plan, foundational_registry, foundational_stream
@@ -27,14 +29,23 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
     bank=get_data_bank('cifar100',data_root,download=download,seed=seed)
     root=Path(output).resolve()
     jobs=[]
-    if suite=='screening':
-        from .family_catalog import screening_designs
+    if suite in ('screening','interactions','short','all'):
+        from .family_catalog import screening_designs,Design
+        from .interactions import interaction_designs,short_designs
+        generators=[]
+        if suite in ('screening','all'):generators.append(screening_designs())
+        if suite in ('interactions','all'):generators.append(interaction_designs())
+        if suite in ('short','all'):generators.append(short_designs())
+        if suite=='all':
+            generators.append((Design(f'H-{s}-O{o}-L{l}','H',foundational_stream(s,o),local_depth=l)
+                for s in ('S1','S2','S3') for o in (0,1) for l in depths))
         blocked=[]
-        for design in screening_designs():
+        for design in chain.from_iterable(generators):
             try:
                 plan=compile_plan(design.events,bank.train.targets,num_clients=design.num_clients,
                     num_classes=100,local_depth=design.local_depth,seed=seed,
-                    head_policy='semantic_shared',minimum_samples=1,
+                    head_policy=design.head_policy,minimum_samples=1,
+                    require_all_classes=design.require_all_classes,
                     interval_boundaries=design.boundaries,upload_cohorts=design.cohorts,
                     offline_clients=design.offline_clients,outage_duration=design.outage_duration,
                     allocation_order=design.allocation_order).to_dict()
@@ -45,7 +56,8 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
                 job_id='J-'+design.name+'-'+setting
                 filename=job_id+'.json';write_json(root/'plans'/filename,plan)
                 jobs.append({'job_id':job_id,'family':design.family,'metadata':design.metadata,
-                    'learning_setting':setting,'epochs':5,'seed':seed,'plan_file':'plans/'+filename,
+                    'learning_setting':setting,'epochs':design.epochs,'seed':seed,'plan_file':'plans/'+filename,
+                    'allow_partial_coverage':not design.require_all_classes,
                     'plan_hash':plan['plan_hash'],'atomic_hash':plan['atomic_hash'],'status':'planned',
                     'low_support_warning':plan['allocation_audit']['minimum_samples_per_class_occurrence']<8})
         unique={};aliases=[]
@@ -98,8 +110,19 @@ def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evalua
         client_training_concurrency=concurrency,seed=job['seed'],
         joint_plan_path=str(path),joint_plan_hash=job['plan_hash'],
         joint_local_evaluation=local_evaluation,
+        joint_allow_partial_coverage=job.get('allow_partial_coverage',False),
         stream_terminal_flush=plan['intervals'][-1]['terminal_flush'],
         checkpoint_every=1,job_id=job_id)
+    job_dir=Path(output)/job_id
+    try:
+        head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+        dirty=bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],text=True).strip())
+    except (OSError,subprocess.CalledProcessError):head=None;dirty=None
+    # Preserve the first launch receipt; retries have separate receipts.
+    from time import time_ns
+    write_json(job_dir/'launch_receipts'/f'{time_ns()}.json',
+               {'git_commit':head,'tracked_worktree_dirty':dirty,'job_id':job_id,
+                'plan_hash':job['plan_hash'],'config_signature':cfg.signature()})
     return run_experiment(cfg,str(output),data_root,download=download)
 
 
@@ -108,12 +131,19 @@ def main(argv=None):
     sub=p.add_subparsers(dest='command',required=True)
     a=sub.add_parser('plan');a.add_argument('--output',required=True)
     a.add_argument('--seed',type=int,default=0)
-    a.add_argument('--suite',choices=['foundational','screening'],default='foundational')
+    a.add_argument('--suite',choices=['foundational','screening','interactions','short','all'],default='foundational')
     a.add_argument('--depths',type=int,nargs='+',default=[1,2,3,5])
     a=sub.add_parser('run');a.add_argument('--manifest',required=True)
     a.add_argument('--job-id',required=True);a.add_argument('--output',required=True)
     a.add_argument('--concurrency',type=int,default=1)
     a.add_argument('--local-evaluation',action='store_true')
+    a.add_argument('--gpu',type=int)
+    a=sub.add_parser('run-suite');a.add_argument('--manifest',required=True)
+    a.add_argument('--output',required=True);a.add_argument('--family')
+    a.add_argument('--concurrency',type=int,default=1);a.add_argument('--gpu',type=int)
+    a.add_argument('--local-evaluation',action='store_true')
+    a=sub.add_parser('validate');a.add_argument('--manifest',required=True)
+    a=sub.add_parser('audit');a.add_argument('--manifest',required=True);a.add_argument('--output',required=True)
     for a in sub.choices.values():
         a.add_argument('--data-root',default='data')
         a.add_argument('--no-download',action='store_true')
@@ -121,9 +151,32 @@ def main(argv=None):
     if a.command=='plan':
         jobs=plan_campaign(a.output,a.data_root,a.seed,not a.no_download,a.depths,a.suite)
         print(f'Planned {len(jobs)} conditions; no training launched')
+    elif a.command=='validate':
+        from .result_audit import validate_manifest
+        report=validate_manifest(a.manifest,a.data_root,not a.no_download)
+        print(json.dumps(report,indent=2))
+        if report['invalid']:raise SystemExit(1)
+    elif a.command=='audit':
+        from .result_audit import audit_campaign
+        print(json.dumps(audit_campaign(a.manifest,a.output),indent=2))
     else:
-        print(run_job(a.manifest,a.job_id,a.output,a.data_root,
-                      not a.no_download,a.concurrency,a.local_evaluation))
+        if a.gpu is not None:os.environ['CUDA_VISIBLE_DEVICES']=str(a.gpu)
+        if a.command=='run':
+            print(run_job(a.manifest,a.job_id,a.output,a.data_root,
+                          not a.no_download,a.concurrency,a.local_evaluation))
+        else:
+            # Sequential controller: resource-broker integration is intentionally
+            # deferred rather than oversubscribing available GPUs.
+            jobs=json.loads(Path(a.manifest).read_text())['jobs']
+            failures=[]
+            for job in jobs:
+                if a.family and job.get('family')!=a.family:continue
+                try:print(run_job(a.manifest,job['job_id'],a.output,a.data_root,
+                              not a.no_download,a.concurrency,a.local_evaluation),flush=True)
+                except Exception as exc:
+                    failures.append({'job_id':job['job_id'],'error':repr(exc)})
+                    write_json(Path(a.output)/'campaign_failures.json',failures)
+            if failures:raise SystemExit(1)
 
 
 if __name__=='__main__':

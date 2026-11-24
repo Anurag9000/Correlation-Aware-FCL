@@ -50,7 +50,7 @@ def compile_joint_scenario(bank,cfg):
         raise ValueError('Plan/config/dataset dimensions disagree')
     if plan['intervals'][-1]['terminal_flush']!=cfg.stream_terminal_flush:
         raise ValueError('Plan/config terminal flush mismatch')
-    if cfg.dataset!='synthetic' and len(plan['overlap_audit']['class_owners'])!=bank.num_classes:
+    if cfg.dataset!='synthetic' and not cfg.joint_allow_partial_coverage and len(plan['overlap_audit']['class_owners'])!=bank.num_classes:
         raise ValueError('Production plans must expose every class')
     lookup={x['occurrence_id']:x for x in plan['tasks']}
     holders=defaultdict(set);seen=set();arrivals=[];stages=[]

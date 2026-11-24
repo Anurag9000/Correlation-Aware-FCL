@@ -663,7 +663,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'interval':round_id,'server_version_during_local_learning':version,
                     'server_state_digest_before':boundary_before,'server_state_digest_after':boundary_after,
                     'atomic_barriers':task_barriers,'local_occurrences':local_details})
-            if cfg.joint_plan_path and cfg.joint_local_evaluation and local_details:
+            if cfg.joint_plan_path and cfg.joint_local_evaluation:
                 # Use the same planned, all-observed evaluation context before
                 # and after aggregation. This cannot affect selection.
                 model.load_state_dict(global_state)

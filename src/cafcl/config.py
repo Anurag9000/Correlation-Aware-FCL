@@ -125,6 +125,7 @@ class RunConfig:
     joint_plan_path: str = ''
     joint_plan_hash: str = ''
     joint_local_evaluation: bool = False
+    joint_allow_partial_coverage: bool = False
 
     def validate(self):
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
@@ -148,7 +149,7 @@ class RunConfig:
             assert self.model in {'resnet18_cifar32','test_linear','test_mlp','test_smallcnn'}
             assert not self.gradient_diagnostics and not self.causal_diagnostics and not self.subset_diagnostics and not self.representation_diagnostics
         else:
-            assert not self.joint_plan_hash and not self.joint_local_evaluation
+            assert not self.joint_plan_hash and not self.joint_local_evaluation and not self.joint_allow_partial_coverage
         if self.stream_client_chain:
             assert self.stream_protocol and self.class_pair_protocol == 'strict'
             assert self.num_clients == 5 and self.classes_per_local_task == 2
@@ -317,7 +318,7 @@ class RunConfig:
         if data['client_training_concurrency']==0:data.pop('client_training_concurrency')
         if data['training_augmentation']=='none':data.pop('training_augmentation')
         if not data['joint_plan_path']:
-            for key in ('joint_plan_path','joint_plan_hash','joint_local_evaluation'):
+            for key in ('joint_plan_path','joint_plan_hash','joint_local_evaluation','joint_allow_partial_coverage'):
                 data.pop(key)
         return data
 
