@@ -115,21 +115,9 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
                'implementation_blocked':['minibatch-level joint synchronization; compute-matched pooled controls']})
     return jobs
 
-def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evaluation=False,mechanistic_probes=False,checkpoint_policy='all'):
+def job_config(job,plan,path,concurrency=1,local_evaluation=False,mechanistic_probes=False,checkpoint_policy='all'):
     from ..config import RunConfig
-    from ..simulator import run_experiment
-    if os.environ.get('CAFCL_REQUIRE_CUDA')=='1':
-        import torch
-        if not torch.cuda.is_available():raise RuntimeError('GPU worker cannot access CUDA; refusing CPU fallback')
-    manifest=Path(manifest).resolve()
-    catalog=json.loads(manifest.read_text());jobs=catalog['jobs']
-    alias={a['job_id']:a['canonical_job_id'] for a in catalog.get('aliases',[])}
-    job_id=alias.get(job_id,job_id)
-    found=[x for x in jobs if x['job_id']==job_id]
-    if len(found)!=1:
-        raise ValueError('Expected one matching job')
-    job=found[0];path=(manifest.parent/job['plan_file']).resolve()
-    plan=json.loads(path.read_text())
+    job_id=job['job_id']
     counts=Counter()
     lookup={x['occurrence_id']:x for x in plan['tasks']}
     for r in plan['intervals']:
@@ -159,6 +147,25 @@ def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evalua
         joint_epoch_segments=plan['allocation_audit'].get('epoch_slicing',{}).get('segments',1),
         stream_terminal_flush=plan['intervals'][-1]['terminal_flush'],
         checkpoint_every=1,job_id=job_id)
+    return cfg
+
+
+def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evaluation=False,mechanistic_probes=False,checkpoint_policy='all'):
+    from ..config import RunConfig
+    from ..simulator import run_experiment
+    if os.environ.get('CAFCL_REQUIRE_CUDA')=='1':
+        import torch
+        if not torch.cuda.is_available():raise RuntimeError('GPU worker cannot access CUDA; refusing CPU fallback')
+    manifest=Path(manifest).resolve()
+    catalog=json.loads(manifest.read_text());jobs=catalog['jobs']
+    alias={a['job_id']:a['canonical_job_id'] for a in catalog.get('aliases',[])}
+    job_id=alias.get(job_id,job_id)
+    found=[x for x in jobs if x['job_id']==job_id]
+    if len(found)!=1:
+        raise ValueError('Expected one matching job')
+    job=found[0];path=(manifest.parent/job['plan_file']).resolve()
+    plan=json.loads(path.read_text())
+    cfg=job_config(job,plan,path,concurrency,local_evaluation,mechanistic_probes,checkpoint_policy)
     from .checkpoint_io import job_lease
     with job_lease(Path(output)/job_id):
         return execute_locked(cfg,job,output,data_root,download,run_experiment)

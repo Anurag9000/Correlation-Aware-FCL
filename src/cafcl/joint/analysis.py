@@ -46,6 +46,7 @@ def analyze_run(directory,output=None,figures=True):
     plan=json.loads((root/'joint_plan.json').read_text())
     setting=cfg['learning_setting']
     tasks={x['occurrence_id']:x for x in plan['tasks']}
+    runtime_metrics=json.loads((root/'metrics.json').read_text())
     local_rows=[];global_rows=[];latency=[];class_rows=[];task_rows=[];local_history=[]
     peaks={};first_integrated={};local_peak={};history_peaks={};global_head_peaks={};integrated_heads=set();seen_classes=set()
     from .knowledge_audit import audit_knowledge
@@ -146,6 +147,8 @@ def analyze_run(directory,output=None,figures=True):
         global_rows.append({'interval':r,'server_version':report['version'],
             'atomic_steps_completed':sum(len(x['atomic_steps']) for x in plan['intervals'][:r+1]),
             'test_accuracy':report['test_accuracy'],'validation_accuracy':report['validation_accuracy'],
+            'standard_task_conditioned_test_accuracy':runtime_metrics[r].get('standard_task_conditioned_test',{}).get('macro_head_accuracy') if setting=='task_il' else None,
+            'standard_task_conditioned_validation_accuracy':runtime_metrics[r].get('standard_task_conditioned_validation',{}).get('macro_head_accuracy') if setting=='task_il' else None,
             'integrated_only_test_accuracy':report['integrated_only_test_accuracy'],
             'integrated_class_peak_drop':average(drops),
             'integrated_task_head_peak_drop':average(head_drops),

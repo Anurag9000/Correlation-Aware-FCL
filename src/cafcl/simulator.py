@@ -31,11 +31,11 @@ from .task_ids import task_instance_id
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v5'
+PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v6'
 
 def protocol_version_for(cfg):
     if getattr(cfg,'joint_plan_path',''):
-        return 'joint_spatiotemporal_fcl_v6_audit_'+cfg.learning_setting
+        return 'joint_spatiotemporal_fcl_v7_audit_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -418,10 +418,10 @@ def server_optimizer_step(base,mean,method,cfg,state):
     return out,state
 
 def save_round_state(path,cfg,round_id,global_state,version,clients,observed,peak,
-                     integrated,history,rng,server_optimizer_state,server_class_update_counts=None,server_cl_state=None):
+                     integrated,history,rng,server_optimizer_state,server_class_update_counts=None,server_cl_state=None,run_identity=None):
     """Durable full-state checkpoint for exact logical-round resumption."""
     payload={'config':cfg.to_dict(),'protocol_version':protocol_version_for(cfg),'last_completed_round':round_id,
-             'global_state':global_state,'version':version,
+             'global_state':global_state,'version':version,'run_identity':run_identity,
              'clients':{cid:asdict(s) for cid,s in clients.items()},
              'observed':observed,'peak':peak,'integrated':integrated,
              'history':history,'selection_rng':rng.bit_generator.state,
@@ -519,6 +519,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'task_id_to_classes':task_class_map,
                     'duplicated_training_samples':scenario.duplicate_sample_ids,
                     'unused_training_samples':scenario.unused_sample_ids},run_dir/'scenario.pt')
+        from .identity import runtime_identity,dataset_identity,digest as identity_digest
+        run_identity={'runtime':runtime_identity(),'dataset':dataset_identity(bank),
+                      'curriculum_sha256':identity_digest({'arrivals':[asdict(a) for a in scenario.arrivals],'stages':scenario.stages})}
+        identity_path=run_dir/'run_identity.json'
+        if identity_path.exists() and json.loads(identity_path.read_text())!=run_identity:
+            raise RuntimeError('Existing run has different source, dependencies, raw data or curriculum; use a new output root')
+        atomic_json(identity_path,run_identity)
         clients={cid:LocalState(cid) for cid in range(cfg.num_clients)}
         model=create_model(cfg.model,bank.num_classes,allow_test_model=(cfg.dataset=='synthetic'),task_class_sets=task_class_sets,learning_setting=cfg.learning_setting if cfg.joint_plan_path else 'task_il').to(device)
         if cfg.joint_plan_path:
@@ -554,6 +561,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            (latest_checkpoint if cfg.resume and latest_checkpoint.exists() else None))
         if source_checkpoint is not None:
             saved=torch.load(source_checkpoint,map_location='cpu',weights_only=False)
+            if saved.get('run_identity')!=run_identity:
+                raise RuntimeError('Checkpoint source, dependencies, data or curriculum differ from current execution')
             if saved.get('protocol_version')!=protocol_version_for(cfg):
                 raise RuntimeError('Cannot resume or fork a checkpoint from an incompatible training protocol')
             if fork_from_checkpoint:
@@ -873,6 +882,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 else:
                     server_cl_state.acknowledge_clients([clients[u['client_id']] for u in accepted])
                     server_cl_state.version=version+1
+                    server_cl_state.uploaded_clients.update(u['client_id'] for u in accepted)
                 for upload in accepted:
                     for cls,n in upload['class_counts'].items():
                         cls=int(cls)
@@ -1183,7 +1193,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'client_unsent_steps':{str(cid):c.pending_upload_steps for cid,c in clients.items()},
                            'protocol_version':protocol_version_for(cfg),
                            'aggregation_algorithm':cfg.aggregator,
-                           'aggregation_family':(('stale_'+cfg.stale_update_policy) if any(u.get('stale_upload') for u in accepted)
+                           'aggregation_family':(({'damped_delta':'stale_delta_damped_bn_safe','undamped_delta':'stale_delta_undamped_bn_safe','direct_model':'stale_direct_model'}[cfg.stale_update_policy]) if any(u.get('stale_upload') for u in accepted)
                                 else ('uniform_mean_ablation' if cfg.aggregator=='uniform'
                                 else ('canonical_full_model' if cfg.aggregator in
                                       {'fedavg','fedavgm','fedadam'} else 'repository_specific_custom'))),
@@ -1239,12 +1249,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                (cfg.stream_protocol or (round_id+1)%cfg.rounds_per_stage==0):
                 save_round_state(latest_checkpoint,cfg,round_id,global_state,version,
                                  clients,observed,peak,integrated,history,rng,
-                                 server_optimizer_state,server_class_update_counts,server_cl_state)
+                                 server_optimizer_state,server_class_update_counts,server_cl_state,run_identity)
                 if cfg.checkpoint_every and not (cfg.joint_plan_path and cfg.joint_checkpoint_policy=='latest'):
                     save_round_state(run_dir/f'checkpoint_round_{round_id+1:04d}.pt',
                                      cfg,round_id,global_state,version,
                                      clients,observed,peak,integrated,history,rng,
-                                     server_optimizer_state,server_class_update_counts,server_cl_state)
+                                     server_optimizer_state,server_class_update_counts,server_cl_state,run_identity)
             if (cfg.stream_protocol or (round_id+1)%cfg.rounds_per_stage==0) and not (cfg.joint_plan_path and cfg.joint_checkpoint_policy=='latest'):
                 save_checkpoint(run_dir/f'model_stage_{current_stage+1:02d}.pt',global_state,
                                 cfg,version,clients,full_state=True,server_cl_state=server_cl_state)

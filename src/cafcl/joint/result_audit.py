@@ -52,6 +52,25 @@ def audit_job(job,root):
             config=json.loads((directory/'config.json').read_text())
             for key,expected in [('joint_plan_hash',job['plan_hash']),('learning_setting',job['learning_setting']),('seed',job['seed']),('epochs',job['epochs']),('method',job.get('method','replay')),('joint_domain_mode',job.get('domain_mode','none'))]:
                 if config.get(key)!=expected:raise ValueError('Run/manifest configuration mismatch: '+key)
+            from .runner import job_config
+            expected=job_config(job,plan,config['joint_plan_path'],
+                config.get('client_training_concurrency',0),
+                config.get('joint_local_evaluation',False),
+                config.get('joint_mechanistic_probes',False),
+                config.get('joint_checkpoint_policy','all'))
+            if json.loads(json.dumps(expected.to_dict()))!=config:
+                raise ValueError('Full execution configuration differs from declared manifest job')
+            receipts=sorted((directory/'launch_receipts').glob('*.json'))
+            for launch in receipts:
+                record=json.loads(launch.read_text())
+                if record['config_signature']!=expected.signature() or record['plan_hash']!=job['plan_hash']:
+                    raise ValueError('Launch receipt configuration mismatch')
+            identity_path=directory/'run_identity.json'
+            if identity_path.exists():
+                identity=json.loads(identity_path.read_text())
+                revisions={json.loads(p.read_text()).get('git_commit') for p in receipts}
+                if revisions and revisions!={identity['runtime'].get('git_revision')}:
+                    raise ValueError('Run identity and launch revisions differ')
             history=json.loads((directory/'metrics.json').read_text())
             if len(history)!=len(plan['intervals']):raise ValueError('Incomplete metrics')
             assert_sync_reports_complete(directory,history)

@@ -139,6 +139,8 @@ class RunConfig:
     joint_checkpoint_policy: str = 'all'
 
     def validate(self):
+        if not __debug__:
+            raise RuntimeError('Python -O disables scientific validation assertions; refusing execution')
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
         assert self.batch_size == 64 or self.dataset == "synthetic", "All production optimization must use physical batch 64"
         assert self.num_clients >= (1 if self.joint_plan_path and self.joint_control_kind=='centralized_sequential' else 2)

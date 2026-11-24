@@ -21,7 +21,9 @@ METRICS=('terminal_test_accuracy','terminal_integrated_class_peak_drop',
          'terminal_integrated_task_head_peak_drop','mean_current_task_test_accuracy',
          'mean_historical_noncurrent_class_test_accuracy','mean_local_acquisition',
          'mean_signed_local_retention_drop','mean_integration_latency_intervals',
-         'terminal_prediction_coverage','optimizer_steps','model_tensor_bytes')
+         'terminal_prediction_coverage','optimizer_steps','model_tensor_bytes',
+         'total_model_and_archive_payload_bytes','mean_integration_latency_atomic_steps',
+         'mean_occurrence_weighted_current_task_test_accuracy')
 
 
 def default_contrasts():
@@ -109,7 +111,11 @@ def read_condition(job,root,plan):
         summary=analyze_run(root/job['job_id'],figures=False)
         term=summary['terminal'];resource=summary['resource_totals']
         row.update(control_kind=summary['control_kind'],
-            terminal_test_accuracy=term['test_accuracy'],
+            terminal_test_accuracy=(term.get('standard_task_conditioned_test_accuracy') if job['learning_setting']=='task_il' else term['test_accuracy']),
+            legacy_class_membership_oracle_accuracy=term['test_accuracy'] if job['learning_setting']=='task_il' else None,
+            total_model_and_archive_payload_bytes=resource.get('total_model_and_archive_payload_bytes'),
+            mean_integration_latency_atomic_steps=summary.get('mean_integration_latency_atomic_steps'),
+            mean_occurrence_weighted_current_task_test_accuracy=summary.get('mean_occurrence_weighted_current_task_test_accuracy'),
             terminal_integrated_class_peak_drop=term['integrated_class_peak_drop'],
             terminal_integrated_task_head_peak_drop=term['integrated_task_head_peak_drop'],
             terminal_prediction_coverage=term['coverage'],
