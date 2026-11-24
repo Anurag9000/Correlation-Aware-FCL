@@ -106,7 +106,7 @@ def _train_one(runtime, client, bank, cfg, device, round_id, event,
                 padding_indices=event.get('padding_indices'),
                 known_task_ids=known_task_sets,
                 task_ids_by_index=task_ids_by_index,
-                current_head_by_index=event.get('current_head_by_index'))
+                current_head_by_index=event.get('current_head_by_index'),epoch_offset=event.get('epoch_offset',0))
             if cfg.joint_local_evaluation and result is not None:
                 result['local_validation_pre_task']=before
                 result['local_validation_post_task']=local_measure()
@@ -122,7 +122,7 @@ def _train_one(runtime, client, bank, cfg, device, round_id, event,
             padding_indices=event.get('padding_indices'),
             known_task_ids=known_task_sets,
             task_ids_by_index=task_ids_by_index,
-            current_head_by_index=event.get('current_head_by_index'))
+            current_head_by_index=event.get('current_head_by_index'),epoch_offset=event.get('epoch_offset',0))
         if cfg.joint_local_evaluation and result is not None:
             result['local_validation_pre_task']=before
             result['local_validation_post_task']=local_measure()
@@ -240,7 +240,7 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                         if raw['is_recurrence']:
                             client.recurrence_rounds[cls] = round_id
                     all_available[cid].extend(raw['indices'])
-                    client.local_experience += 1
+                    if raw.get('segment_index',0)==0:client.local_experience += 1
                     for idx in raw['indices']:
                         client.sample_first_local_experience.setdefault(
                             int(idx), client.local_experience)
@@ -257,6 +257,8 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                     if cfg.joint_plan_path:
                         client.local_training_events[-1].update(atomic_step=raw['atomic_step'],
                             occurrence_id=raw['occurrence_id'],semantic_task_id=raw['semantic_task_id'])
+                        if cfg.joint_epoch_segments>1:
+                            client.local_training_events[-1].update({k:raw[k] for k in ('parent_occurrence_id','parent_atomic_step','segment_index','segment_count','experience_end')})
                     client.current_indices = list(raw['indices'])
                     if cfg.pending_policy == 'bounded' and cfg.max_pending_samples > 0:
                         client.current_indices = client.current_indices[-cfg.max_pending_samples:]
@@ -276,7 +278,8 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                         replay_update_policy=(policy if client_method=='replay'
                                               else local_cfg.replay_update_policy))
                 event = {
-                    'is_actual': bool(has_new),
+                    'is_actual': bool(has_new) and raw.get('experience_end',True),
+                    'epoch_offset':raw.get('segment_index',0)*cfg.epochs,
                     'active_pair': (tuple(raw['class_ids'])
                                     if has_new and len(raw['class_ids']) >= 2
                                     and not cfg.label_noise_rate else None),
@@ -342,6 +345,7 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                 'client': cid, 'local_experience': client.local_experience,
                 'task_ordinal': task_index + 1,
                 'is_selected': False,
+                **({k:slot[cid][k] for k in ('parent_occurrence_id','parent_atomic_step','segment_index','segment_count','experience_end')} if cfg.joint_plan_path and cfg.joint_epoch_segments>1 else {}),
                 **{k: v for k, v in result.items() if k != 'weights'}})
         barriers.append({
             **({'atomic_step':atomic_step,'atomic_steps':sorted({e['atomic_step'] for raw in slot.values() for e in raw['source_events']}),'pooled_access':True} if pooled else

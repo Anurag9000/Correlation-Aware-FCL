@@ -35,6 +35,7 @@ class Design:
     terminal_flush: bool = True
     method: str = 'replay'
     domain_mode: str = 'none'
+    epoch_segments: int = 1
 
 
 def coverage_tail(events,k):

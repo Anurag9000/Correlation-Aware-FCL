@@ -32,6 +32,9 @@ def audit_knowledge(directory,plan):
             raise ValueError('Acknowledgement does not match unique accepted uploads')
         for oid,receipt in receipts.items():
             task=expected[oid]
+            fragment=plan['allocation_audit'].get('epoch_slicing',{}).get('fragment_metadata',{}).get(oid)
+            if fragment and any(receipt.get(k)!=v for k,v in fragment.items()):
+                raise ValueError('Incorrect epoch fragment acknowledgement')
             if (receipt['client']!=task['client_id'] or receipt['atomic_step']!=task['atomic_step']
                     or receipt['semantic_task_id']!=task['semantic_task_id']
                     or receipt['accepted_server_version']!=version

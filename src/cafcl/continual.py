@@ -407,7 +407,7 @@ def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,acti
     return result
 
 
-def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_id=None,experience_end=False,active_pair_classes=None,padding_indices=None,known_task_ids=None,task_ids_by_index=None,current_head_by_index=None):
+def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_id=None,experience_end=False,active_pair_classes=None,padding_indices=None,known_task_ids=None,task_ids_by_index=None,current_head_by_index=None,epoch_offset=0):
     """Continue training on the client's own local model, without server access.
 
     The simulator calls this for every client with local data every round,
@@ -473,7 +473,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
     # LocalState starts at -1; arrival increments to zero for experience 1.
     rng_round=(client.local_experience if cfg.joint_plan_path else round_id)
     if rng_round<0:raise RuntimeError('Local training requires a delivered experience')
-    rng=np.random.default_rng(cfg.seed+rng_round*137+client.client_id*100003)
+    rng=np.random.default_rng(cfg.seed+rng_round*137+client.client_id*100003+epoch_offset*1_700_003)
     replay_order_rng=np.random.default_rng(
         cfg.seed+7_314_159+rng_round*1_000_003+client.client_id*10_007+
         max(0,int(client.local_experience)))
@@ -498,7 +498,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
     if cfg.training_augmentation=='cifar_crop_flip':
         augmentation_rng=np.random.default_rng(
             cfg.seed+4_170_001+rng_round*100_003+client.client_id*10_007+
-            (client.local_experience+1)*101)
+            (client.local_experience+1)*101+epoch_offset*1_900_003)
         training_data=_CIFARCropFlipDataset(training_data,augmentation_rng)
     optimizer=torch.optim.SGD(model.parameters(),lr=cfg.lr,momentum=cfg.momentum,
                               weight_decay=cfg.weight_decay)
@@ -808,7 +808,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         keep_padding_mask=(cfg.stream_sync_every_batch and
             cfg.stream_partial_batch_policy=='mask_padding_loss')
         for loaded in _example_loader(training_data,indices,cfg.batch_size,
-                                   cfg.seed+rng_round*100_003+client.client_id*127+epoch,
+                                   cfg.seed+rng_round*100_003+client.client_id*127+epoch+epoch_offset,
                                    include_indices=(online_der or keep_padding_mask or current_head_by_index is not None),
                                    full_batch=True,padding_indices=padding_indices):
             for micro_index,packed in enumerate(full_training_batches(loaded)):
@@ -1258,7 +1258,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         from .upstream_feat_replay import source_feat_select_local
         source_feat_select_local(model,client,bank,cfg,device,indices,
                                  active_pair_classes or ())
-    if cfg.method in ({'gem','agem','replay','er_ace'}):
+    if cfg.method in ({'gem','agem','replay','er_ace'}) and not (cfg.joint_plan_path and cfg.joint_epoch_segments>1 and not experience_end):
         client.update_memory(indices,bank.train.targets,cfg.memory_per_class,rng,cfg.memory_policy,
                              reservoir_fraction=(cfg.replay_reservoir_fraction if cfg.method in ({'replay'}|NATIVE_METHODS) else 0.),
                              class_totals=(Counter(map(int,bank.train.targets)) if cfg.method in ({'replay'}|NATIVE_METHODS) and cfg.replay_reservoir_fraction else None))

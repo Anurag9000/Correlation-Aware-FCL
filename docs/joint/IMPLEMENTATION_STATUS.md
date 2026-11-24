@@ -155,3 +155,17 @@ active domain. Canonical held-out metrics remain comparable; additional
 terminal global-model domain-specific test metrics are stored separately.
 Semantic same/different-superclass treatments use actual CIFAR-100 metadata
 and match class occurrence counts, client counts, widths and horizon.
+
+## Epoch-sliced intra-task synchronization
+
+The intratask suite compares 1, 2, 5 and 10 communications per local task at
+10 total epochs per parent task. Each fragment reuses its parent's exact
+fresh sample IDs and classifier head; it does not increment the parent
+local-experience counter or insert private replay until the last fragment.
+The immutable plan preserves the parent hash and explicit fragment metadata;
+receipts and audits distinguish fragment integration from completion of a
+parent task. Current minibatch shuffle includes the epoch offset. Replay
+and augmentation RNG streams are reinitialized per fragment, so exact
+augmentation/replay draws are not claimed matched across synchronization
+frequencies. Full participation only; arbitrary minibatch-level joint
+synchronization remains separate unfinished work.

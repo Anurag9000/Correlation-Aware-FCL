@@ -35,7 +35,8 @@ def prepare_receipts(state,clients,accepted,interval,version):
             receipts[oid]={'client':cid,'atomic_step':event['atomic_step'],
                 'semantic_task_id':event['semantic_task_id'],'head_id':event['task_id'],
                 'classes':event['classes'],'trained_interval':event['round'],
-                'accepted_interval':interval,'accepted_server_version':version}
+                'accepted_interval':interval,'accepted_server_version':version,
+                **{k:event[k] for k in ('parent_occurrence_id','parent_atomic_step','segment_index','segment_count','experience_end') if k in event}}
         if not client.joint_pending_occurrences:
             raise RuntimeError('Upload has no pending atomic occurrence')
     return receipts

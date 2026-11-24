@@ -7,7 +7,7 @@ allocation API. Its caller supplies the actual training split targets.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from hashlib import sha256
 import json
 import random
@@ -149,7 +149,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
                  offline_clients=0, outage_duration=1, terminal_flush=True,
                  minimum_samples=1, require_all_classes=True,
                  interval_boundaries=None, upload_cohorts=None,
-                 allocation_order='timeline',raw_sample_overlap=0.0,allow_cross_semantic_reuse=False,allocation_weights=None,control_kind='federated'):
+                 allocation_order='timeline',raw_sample_overlap=0.0,allow_cross_semantic_reuse=False,allocation_weights=None,control_kind='federated',epoch_segments=1):
     """Compile exact explicit events (atomic_step, client, class tuple).
 
     Fixed unique-data allocation: each observed class's entire TRAIN pool is
@@ -158,6 +158,10 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
     No automatic tail events, padding or class insertion.
     Explicit interval boundaries are exclusive atomic-step endpoints.
     """
+    if not isinstance(epoch_segments,int) or epoch_segments<1:
+        raise ValueError('Invalid epoch segment count')
+    if epoch_segments>1 and (local_depth!=1 or interval_boundaries is not None or upload_cohorts is not None or offline_clients or raw_sample_overlap or control_kind!='federated'):
+        raise ValueError('Epoch slicing currently requires full participation and one parent task per interval')
     if control_kind not in ('federated','local_only','centralized_sequential','simultaneous_access'):
         raise ValueError('Unknown control kind')
     if control_kind=='simultaneous_access' and raw_sample_overlap:
@@ -366,6 +370,26 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
         allocation['duplicate_sample_ids']=sorted(i for i,n in Counter(all_indices).items() if n>1)
         allocation['shared_samples_per_class_occurrence']=dict(sorted(shared_counts.items()))
         allocation['allocation_contract']='fixed_fresh_draws_reduced_unique_support'
+    if epoch_segments>1:
+        parent_hash=digest([asdict(x) for x in tasks]);parent_events=[[x.atomic_step,x.client_id,list(x.classes)] for x in tasks]
+        fragments=[];fragment_metadata={}
+        for x in tasks:
+            for j in range(epoch_segments):
+                oid=f'{x.occurrence_id}__segment_{j:03d}'
+                fragments.append(replace(x,occurrence_id=oid,atomic_step=x.atomic_step*epoch_segments+j))
+                fragment_metadata[oid]={'parent_occurrence_id':x.occurrence_id,'parent_atomic_step':x.atomic_step,
+                    'segment_index':j,'segment_count':epoch_segments,'experience_end':j==epoch_segments-1}
+        tasks=sorted(fragments,key=lambda x:(x.atomic_step,x.client_id))
+        by_fragment_step=defaultdict(list)
+        for x in tasks:by_fragment_step[x.atomic_step].append(x.occurrence_id)
+        intervals=[Interval(j,(j,),tuple(by_fragment_step[j]),tuple(range(num_clients)))
+                   for j in range(horizon*epoch_segments)]
+        if terminal_flush:intervals.append(Interval(len(intervals),(),(),tuple(range(num_clients)),True))
+        allocation['epoch_slicing']={'segments':epoch_segments,'parent_atomic_hash':parent_hash,
+            'parent_events':parent_events,'fragment_metadata':fragment_metadata,
+            'fragment_sample_assignments':len(all_indices)*epoch_segments}
+        audit.update(parent_atomic_steps=horizon,parent_task_occurrences=audit['task_occurrences'],
+                     atomic_steps=horizon*epoch_segments,task_occurrences=len(tasks))
     return JointPlan(num_classes, num_clients, seed, head_policy, tuple(tasks),
                      tuple(intervals), audit, allocation)
 

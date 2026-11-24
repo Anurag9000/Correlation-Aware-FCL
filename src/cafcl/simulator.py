@@ -620,6 +620,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         assert atomic['client_id']==arrival.client_id and tuple(atomic['classes'])==arrival.labels
                         new_events[arrival.client_id][-1].update(atomic_step=atomic['atomic_step'],
                             occurrence_id=atomic['occurrence_id'],semantic_task_id=atomic['semantic_task_id'])
+                        if cfg.joint_epoch_segments>1:
+                            new_events[arrival.client_id][-1].update(
+                                scenario.joint_plan['allocation_audit']['epoch_slicing']['fragment_metadata'][atomic['occurrence_id']])
                     observed.update(arrival.labels)
                     continue
                 for cls in arrival.labels:

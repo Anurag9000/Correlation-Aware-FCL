@@ -29,7 +29,7 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
     bank=get_data_bank('cifar100',data_root,download=download,seed=seed)
     root=Path(output).resolve()
     jobs=[]
-    if suite in ('screening','interactions','short','extensions','controls','all'):
+    if suite in ('screening','interactions','short','extensions','controls','intratask','all'):
         from .family_catalog import screening_designs,Design
         from .interactions import interaction_designs,short_designs
         generators=[]
@@ -47,6 +47,9 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
         if suite in ('controls','all'):
             from .controls import control_designs
             generators.append(control_designs())
+        if suite in ('intratask','all'):
+            from .intratask import intratask_designs
+            generators.append(intratask_designs())
         blocked=[]
         for design in chain.from_iterable(generators):
             try:
@@ -60,7 +63,7 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
                     raw_sample_overlap=design.raw_sample_overlap,
                     allow_cross_semantic_reuse=design.allow_cross_semantic_reuse,
                     allocation_weights=design.allocation_weights,control_kind=design.control_kind,
-                    terminal_flush=design.terminal_flush).to_dict()
+                    terminal_flush=design.terminal_flush,epoch_segments=design.epoch_segments).to_dict()
             except ValueError as exc:
                 blocked.append({'design':design.name,'reason':str(exc),'status':'infeasible'})
                 continue
@@ -83,7 +86,7 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
             else:unique[key]=job
         jobs=list(unique.values())
         write_json(root/'manifest.json',{'dataset':'cifar100','jobs':jobs,'aliases':aliases,'infeasible':blocked,
-                   'implementation_blocked':['joint intra-task synchronization; compute-matched pooled controls']})
+                   'implementation_blocked':['joint minibatch-level synchronization; compute-matched pooled controls']})
         return jobs
     for item in foundational_registry(depths,seed=seed):
         events=foundational_stream(item['spatial'],item['local_overlap'])
@@ -129,6 +132,7 @@ def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evalua
         joint_allow_partial_coverage=job.get('allow_partial_coverage',False),
         joint_control_kind=plan['allocation_audit'].get('control_kind','federated'),
         joint_domain_mode=job.get('domain_mode','none'),
+        joint_epoch_segments=plan['allocation_audit'].get('epoch_slicing',{}).get('segments',1),
         stream_terminal_flush=plan['intervals'][-1]['terminal_flush'],
         checkpoint_every=1,job_id=job_id)
     job_dir=Path(output)/job_id
@@ -149,7 +153,7 @@ def main(argv=None):
     sub=p.add_subparsers(dest='command',required=True)
     a=sub.add_parser('plan');a.add_argument('--output',required=True)
     a.add_argument('--seed',type=int,default=0)
-    a.add_argument('--suite',choices=['foundational','screening','interactions','short','extensions','controls','all'],default='foundational')
+    a.add_argument('--suite',choices=['foundational','screening','interactions','short','extensions','controls','intratask','all'],default='foundational')
     a.add_argument('--depths',type=int,nargs='+',default=[1,2,3,5])
     a=sub.add_parser('run');a.add_argument('--manifest',required=True)
     a.add_argument('--job-id',required=True);a.add_argument('--output',required=True)

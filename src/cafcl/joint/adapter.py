@@ -29,20 +29,22 @@ def load_plan(path, expected_hash, train_targets):
     # sample labels, allocation, coordinates, IDs, coverage and all boundaries.
     tasks=saved['tasks']
     learning=[r for r in saved['intervals'] if not r['terminal_flush']]
+    slicing=saved['allocation_audit'].get('epoch_slicing')
     rebuilt=compile_plan(
-        [(x['atomic_step'],x['client_id'],x['classes']) for x in tasks],
+        slicing['parent_events'] if slicing else [(x['atomic_step'],x['client_id'],x['classes']) for x in tasks],
         train_targets,num_clients=saved['num_clients'],num_classes=saved['num_classes'],
         seed=saved['seed'],head_policy=saved['head_policy'],
         require_all_classes=False,
-        interval_boundaries=[max(r['atomic_steps'])+1 for r in learning],
-        upload_cohorts=[r['upload_clients'] for r in learning],
+        interval_boundaries=None if slicing else [max(r['atomic_steps'])+1 for r in learning],
+        upload_cohorts=None if slicing else [r['upload_clients'] for r in learning],
         terminal_flush=saved['intervals'][-1]['terminal_flush'],
         allocation_order=saved['allocation_audit'].get('allocation_order','timeline'),
         raw_sample_overlap=saved['allocation_audit']['raw_sample_overlap'],
         allow_cross_semantic_reuse=saved['allocation_audit'].get('allow_cross_semantic_reuse',False),
         allocation_weights=saved['allocation_audit'].get('allocation_weights'),
         minimum_samples=saved['allocation_audit'].get('allocation_minimum_samples',1),
-        control_kind=saved['allocation_audit'].get('control_kind','federated'))
+        control_kind=saved['allocation_audit'].get('control_kind','federated'),
+        epoch_segments=slicing['segments'] if slicing else 1)
     if rebuilt.to_dict()['plan_hash']!=claimed:
         raise ValueError('Joint plan reconstruction differs from saved plan')
     return saved
@@ -53,6 +55,8 @@ def compile_joint_scenario(bank,cfg):
     if (plan['num_clients'],plan['num_classes'],plan['seed'])!=(
             cfg.num_clients,bank.num_classes,cfg.seed):
         raise ValueError('Plan/config/dataset dimensions disagree')
+    if plan['allocation_audit'].get('epoch_slicing',{}).get('segments',1)!=cfg.joint_epoch_segments:
+        raise ValueError('Plan/config epoch slicing mismatch')
     if plan['allocation_audit'].get('control_kind','federated')!=cfg.joint_control_kind:
         raise ValueError('Plan/config control identity mismatch')
     if plan['allocation_audit']['raw_sample_overlap']!=cfg.sample_overlap_fraction:
