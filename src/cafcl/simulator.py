@@ -31,11 +31,11 @@ from .task_ids import task_instance_id
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v4'
+PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v5'
 
 def protocol_version_for(cfg):
     if getattr(cfg,'joint_plan_path',''):
-        return 'joint_spatiotemporal_fcl_v5_audit_'+cfg.learning_setting
+        return 'joint_spatiotemporal_fcl_v6_audit_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -166,7 +166,7 @@ def _normalization_aggregation_diagnostics(previous,committed,uploads):
                 classifier_bias_update_l2=classifier_shift)
 
 
-def anchored_upload(client, global_state, *, current_version=None):
+def anchored_upload(client, global_state, *, current_version=None,stale_policy='damped_delta'):
     """Rebase delayed parameter updates without treating buffers as parameters.
 
     For a client last synchronized at anchor A with current private model L,
@@ -187,7 +187,8 @@ def anchored_upload(client, global_state, *, current_version=None):
     if current_version is not None and client.model_version>current_version:
         raise RuntimeError('Client model version ahead of server')
     staleness=max(0,int(current_version-client.model_version)) if current_version is not None else int(stale)
-    stale_scale=1.0/(1.0+staleness) if stale else 1.0
+    if stale_policy not in {'damped_delta','undamped_delta','direct_model'}:raise ValueError('Unsupported stale update policy')
+    stale_scale=1.0/(1.0+staleness) if stale and stale_policy=='damped_delta' else 1.0
     if not stale and not all(torch.equal(client.sync_anchor[key],gv)
                              for key,gv in global_state.items()):
         raise RuntimeError('Fresh FedAvg client anchor differs from current global model')
@@ -197,7 +198,7 @@ def anchored_upload(client, global_state, *, current_version=None):
         anchor=client.sync_anchor[key]
         if lv.shape != gv.shape or anchor.shape != gv.shape:
             raise RuntimeError('Client/server state shape mismatch')
-        if not stale:
+        if not stale or stale_policy=='direct_model':
             candidate[key]=lv.detach().cpu().clone()   # exact canonical FedAvg model
         elif key.endswith('running_mean') or key.endswith('running_var') or key.endswith('num_batches_tracked'):
             # BN running moments are distribution estimates rather than
@@ -219,15 +220,16 @@ def anchored_upload(client, global_state, *, current_version=None):
             'accumulated_steps':client.pending_upload_steps,
             'accumulated_classes':sorted(client.pending_upload_classes),
             'anchor_version':client.model_version,
-             'stale_rebased':bool(stale),
+             'stale_rebased':bool(stale and stale_policy!='direct_model'),
+             'stale_upload':bool(stale),
              'staleness_versions':staleness,
              'stale_update_scale':stale_scale,
-             'aggregation_input_semantics':('stale_delta_damped_bn_safe' if stale else 'fresh_local_model')}
+             'aggregation_input_semantics':(('stale_direct_model' if stale_policy=='direct_model' else 'stale_delta_'+('damped' if stale_policy=='damped_delta' else 'undamped')+'_bn_safe') if stale else 'fresh_local_model')}
 
 
 def _guard_single_stale_terminal_flush(candidate, base, uploads, cfg, *, terminal_flush):
     """Limit a sole stale uploader's influence at the communication-only flush."""
-    if not (terminal_flush and cfg.aggregator=='fedavg' and len(uploads)==1
+    if not (getattr(cfg,'terminal_stale_guard',True) and terminal_flush and cfg.aggregator=='fedavg' and len(uploads)==1
             and uploads[0].get('stale_rebased',False)):
         return candidate,1.0
     scale=1.0/max(1,int(cfg.num_clients))
@@ -277,7 +279,7 @@ def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None,cl
     if method=='uniform':
         weights=[1./len(updates)]*len(updates)
     else:
-        counts=[u['examples'] for u in updates]
+        counts=[u.get('aggregation_weight',u['examples']) for u in updates]
         total=sum(counts)
         if total<=0:raise RuntimeError('FedAvg has no contributing examples')
         weights=[n/total for n in counts]
@@ -750,10 +752,11 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             base_global_state=global_state
             for cid in selected:
                 client=clients[cid]
-                uploaded=anchored_upload(client,global_state,current_version=version)
+                uploaded=anchored_upload(client,global_state,current_version=version,stale_policy=cfg.stale_update_policy)
                 if uploaded is None:
                     continue
                 uploaded['client_id']=cid
+                uploaded['aggregation_weight']=uploaded['accumulated_steps'] if cfg.aggregation_weight_policy=='optimizer_steps' else uploaded['examples']
                 if not cfg.joint_plan_path:integrated.update(uploaded['accumulated_classes'])
                 accepted.append(uploaded)
             if cfg.joint_plan_path:
@@ -811,6 +814,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                                                           allowed_indices=arrived)
             aggregation_norm_diagnostics=None
             custom_head_fusion=False
+            server_cl_state.last_archive_upload_bytes=0
             if accepted:
                 old_gradient=None
                 if cfg.aggregator in {'retention_aware'} and old:
@@ -857,7 +861,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 if cfg.share_continual_state:
                     server_cl_state.merge_clients([clients[u['client_id']] for u in accepted],
                         bank,cfg.method,candidate,version+1,
-                        task_ids_by_index=task_ids_by_index)
+                        task_ids_by_index=task_ids_by_index,server_memory_per_class=cfg.server_memory_per_class,seed=cfg.seed)
                     if cfg.method in {'native_glfc','native_lga'}:
                         # Execute original source proxy inversion, monitor,
                         # and model_back on accepted gradients only.
@@ -866,18 +870,21 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         from .upstream_native_proxy_server import source_proxy_server_step
                         source_proxy_server_step(server_cl_state,cfg.method,
                             model,candidate,cfg,device,round_id)
-                    for upload in accepted:
-                        for cls,n in upload['class_counts'].items():
-                            cls=int(cls)
-                            server_cl_state.class_sample_exposure[cls]=(
-                                server_cl_state.class_sample_exposure.get(cls,0)+int(n))
+                else:
+                    server_cl_state.acknowledge_clients([clients[u['client_id']] for u in accepted])
+                    server_cl_state.version=version+1
+                for upload in accepted:
+                    for cls,n in upload['class_counts'].items():
+                        cls=int(cls)
+                        server_cl_state.class_sample_exposure[cls]=(
+                            server_cl_state.class_sample_exposure.get(cls,0)+int(n))
                 if cfg.joint_plan_path:
                     install_receipts(server_cl_state,joint_receipts,clients,accepted)
                     for u in accepted:integrated.update(u['accumulated_classes'])
                 # Candidate is built without mutating the committed server state.
                 for cid in selected:
                     clients[cid].receive(candidate,version+1,
-                        clear_memory=cfg.reset_memory_on_sync)
+                        clear_memory=cfg.reset_memory_on_sync,reset_optimizer=cfg.optimizer_state_policy=='reset_on_sync')
                     if cfg.share_continual_state:
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
@@ -893,7 +900,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 # All active clients still receive the current committed model.
                 for cid in selected:
                     clients[cid].receive(global_state,version,
-                        clear_memory=cfg.reset_memory_on_sync)
+                        clear_memory=cfg.reset_memory_on_sync,reset_optimizer=cfg.optimizer_state_policy=='reset_on_sync')
                     if cfg.share_continual_state:
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
@@ -919,7 +926,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             if cfg.full_sync:
                 for cid in clients:
                     clients[cid].receive(global_state,version,
-                        clear_memory=cfg.reset_memory_on_sync)
+                        clear_memory=cfg.reset_memory_on_sync,reset_optimizer=cfg.optimizer_state_policy=='reset_on_sync')
                     if cfg.share_continual_state:
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
@@ -1161,7 +1168,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'model_upload_tensor_bytes':transmitted_bytes,
                     'model_download_tensor_bytes':len(selected)*sum(t.numel()*t.element_size() for t in global_state.values()),
                     'archive_image_download_bytes':len(selected)*archive_bytes if cfg.share_continual_state else 0,
-                    'accounting_scope':'tensor and image payload sizes; excludes serialization, headers, metadata and private archive upload bytes'})
+                    'archive_image_upload_bytes':server_cl_state.last_archive_upload_bytes,
+                    'total_model_and_archive_payload_bytes':transmitted_bytes+len(selected)*sum(t.numel()*t.element_size() for t in global_state.values())+(len(selected)*archive_bytes if cfg.share_continual_state else 0)+server_cl_state.last_archive_upload_bytes,
+                    'accounting_scope':'model tensor and newly uploaded/delivered archive image payload sizes; excludes serialization, headers and metadata'})
             result.update({'round':round_id,'model_version':version,
                            'terminal_communication_only_flush':bool(cfg.stream_protocol and cfg.stream_terminal_flush and round_id==total_rounds-1),
                            'stage':current_stage,'selected_clients':selected,
@@ -1174,7 +1183,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'client_unsent_steps':{str(cid):c.pending_upload_steps for cid,c in clients.items()},
                            'protocol_version':protocol_version_for(cfg),
                            'aggregation_algorithm':cfg.aggregator,
-                           'aggregation_family':('stale_delta_damped_bn_safe' if any(u['stale_rebased'] for u in accepted)
+                           'aggregation_family':(('stale_'+cfg.stale_update_policy) if any(u.get('stale_upload') for u in accepted)
                                 else ('uniform_mean_ablation' if cfg.aggregator=='uniform'
                                 else ('canonical_full_model' if cfg.aggregator in
                                       {'fedavg','fedavgm','fedadam'} else 'repository_specific_custom'))),

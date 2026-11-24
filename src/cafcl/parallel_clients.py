@@ -243,6 +243,7 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                     if raw.get('segment_index',0)==0:
                         client.local_experience += 1
                         client.parent_experience_indices.clear()
+                        if cfg.optimizer_state_policy=='reset_on_task':client.optimizer_state=None
                     for idx in raw['indices']:
                         client.sample_first_local_experience.setdefault(
                             int(idx), client.local_experience)

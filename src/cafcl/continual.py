@@ -105,7 +105,8 @@ class LocalState:
     feat_selection_tickets:dict[int,list[int]]=field(default_factory=dict)
     feat_selection_receipts:list[dict]=field(default_factory=list)
     received_feat_ecc:dict|None=None
-    def receive(self,weights,version,*,clear_memory=False):
+    def receive(self,weights,version,*,clear_memory=False,reset_optimizer=False):
+        if reset_optimizer:self.optimizer_state=None
         if clear_memory:
             self.memory.clear()
             self.memory_logits.clear()
@@ -507,7 +508,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         training_data=_CIFARCropFlipDataset(training_data,augmentation_rng)
     optimizer=torch.optim.SGD(model.parameters(),lr=cfg.lr,momentum=cfg.momentum,
                               weight_decay=cfg.weight_decay)
-    if cfg.optimizer_state_policy=='persist' and client.optimizer_state is not None:
+    if cfg.optimizer_state_policy in {'persist','reset_on_sync','reset_on_task'} and client.optimizer_state is not None:
         optimizer.load_state_dict(client.optimizer_state)
     params=_trainable_params(model)
     native_teacher=(historical_teacher(model,client.native_teacher,device)
@@ -1287,7 +1288,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         client.native_teacher_classes=set(seen_classes)
     old_loss_after=local_old_loss() if cfg.prepost_diagnostics else None
     client.last_constraint_violations=num_violations
-    if cfg.optimizer_state_policy=='persist':
+    if cfg.optimizer_state_policy in {'persist','reset_on_sync','reset_on_task'}:
         client.optimizer_state=optimizer.state_dict()
         for state in client.optimizer_state['state'].values():
             for key,value in state.items():

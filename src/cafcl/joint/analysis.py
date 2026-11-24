@@ -156,6 +156,9 @@ def analyze_run(directory,output=None,figures=True):
             'optimizer_steps':resource.get('work_totals',{}).get('optimizer_steps'),
             'model_upload_tensor_bytes':resource.get('model_upload_tensor_bytes'),
             'model_download_tensor_bytes':resource.get('model_download_tensor_bytes'),
+            'archive_image_upload_bytes':resource.get('archive_image_upload_bytes'),
+            'archive_image_download_bytes':resource.get('archive_image_download_bytes'),
+            'total_model_and_archive_payload_bytes':resource.get('total_model_and_archive_payload_bytes'),
             'global_validation_gain':None if not before or not after else after['accuracy']-before['accuracy'],
             'mean_broadcast_gain':average([b['accuracy_change'] for b in comm.get('broadcast_validation',{}).values()]),
             **prediction_stats(counts,observed)})
@@ -178,7 +181,7 @@ def analyze_run(directory,output=None,figures=True):
         if value is not None:
             private_scores.append(value.get('task_conditioned',{}).get('macro_head_accuracy') if setting=='task_il' else value.get('accuracy'))
     totals={}
-    for key in ('optimizer_steps','model_upload_tensor_bytes','model_download_tensor_bytes'):
+    for key in ('optimizer_steps','model_upload_tensor_bytes','model_download_tensor_bytes','archive_image_upload_bytes','archive_image_download_bytes','total_model_and_archive_payload_bytes'):
         values=[r[key] for r in global_rows]
         totals[key]=sum(values) if all(v is not None for v in values) else None
     summary={'learning_setting':setting,'control_kind':cfg.get('joint_control_kind','federated'),

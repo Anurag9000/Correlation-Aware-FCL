@@ -81,6 +81,7 @@ class FederatedCLState:
     # The server knows only samples that came from accepted client uploads.
     acknowledged_train_indices:set[int]=field(default_factory=set)
     acknowledged_optimized_indices:set[int]=field(default_factory=set)
+    last_archive_upload_bytes:int=0
     joint_source_heads:dict[int,set[str]]=field(default_factory=dict)
     joint_occurrence_receipts:dict[str,dict]=field(default_factory=dict)
     memory_provenance:dict[int,set[int]]=field(default_factory=dict)
@@ -98,15 +99,19 @@ class FederatedCLState:
     native_proxy_pending_receipts:list[dict]=field(default_factory=list)
     native_proxy_history:list[dict]=field(default_factory=list)
 
-    def merge_clients(self,uploaded_clients,bank,method,teacher_model,version,
-                      task_ids_by_index=None):
-        """Merge ONLY selected/uploaded private contributions once per source."""
+    def acknowledge_clients(self,uploaded_clients):
+        """Privileged simulator ledger, independent of actual raw-data sharing."""
         for client in uploaded_clients:
             self.integrated_classes.update(int(c) for c in client.pending_upload_classes)
             self.acknowledged_train_indices.update(int(i) for i in client.seen_indices)
             self.acknowledged_optimized_indices.update(client.locally_optimized_indices)
             for idx,heads in client.joint_local_source_heads.items():
                 self.joint_source_heads.setdefault(idx,set()).update(heads)
+    def merge_clients(self,uploaded_clients,bank,method,teacher_model,version,
+                      task_ids_by_index=None,server_memory_per_class=0,seed=0):
+        """Merge ONLY selected/uploaded private contributions once per source."""
+        self.acknowledge_clients(uploaded_clients)
+        self.last_archive_upload_bytes=0
         # Each accepted client's source-method artifact ledger becomes visible
         # only at an actual upload. In particular, offline GLFC/LGA entropy
         # and FEAT selection tickets must never leak before reconnection.
@@ -165,6 +170,7 @@ class FederatedCLState:
                             std=torch.tensor(NORMALIZATION_STD).view(3,1,1)
                             pixels=((x.detach().cpu()*std+mean).clamp(0,1)*255).round().to(torch.uint8)
                             self.exemplar_payloads[idx]=(pixels,int(label))
+                            self.last_archive_upload_bytes+=pixels.numel()*pixels.element_size()
                 if method_by_client[client.client_id] in {'der','derpp'}:
                     for idx,logits in client.memory_logits.items():
                         idx=int(idx)
@@ -187,6 +193,17 @@ class FederatedCLState:
                                 raise ValueError('DER logit target/class count mismatch')
                             self.memory_logits[idx]=logits.detach().cpu().clone()
                             self.logits_source[idx]=(int(version),int(client.client_id))
+            if server_memory_per_class>0:
+                # Deterministic uniform-priority reservoir over uploaded unique IDs.
+                # Evictions are real: payloads, logits and origins cannot survive the cap.
+                from hashlib import sha256
+                for cls,group in pool.items():
+                    pool[cls]=sorted(group,key=lambda i:(sha256(f'{seed}:{cls}:{i}'.encode()).digest(),i))[:server_memory_per_class]
+                retained={int(i) for group in pool.values() for i in group}
+                for table in (self.exemplar_payloads,self.memory_logits,self.logits_source,
+                              self.memory_provenance,self.memory_origins):
+                    for i in list(table):
+                        if i not in retained:del table[i]
             self.memory=pool
         for kind in REGULARIZERS:
             if not any(m==kind for m in method_by_client.values()):continue

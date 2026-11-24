@@ -20,6 +20,10 @@ class RunConfig:
     memory_per_class: int = 20
     replay_reservoir_fraction: float = 0.0  # positive => fixed per-class Algorithm R reservoir
     share_continual_state: bool = True
+    server_memory_per_class: int = 0  # 0 preserves the historical append-only archive
+    stale_update_policy: str = 'damped_delta'
+    terminal_stale_guard: bool = True
+    aggregation_weight_policy: str = 'fresh_examples'
     lr: float = 0.03
     model: str = "vit_base_patch16_32"
     seed: int = 0
@@ -227,10 +231,15 @@ class RunConfig:
         if self.dataset=='cifar100':
             assert self.stream_protocol and self.class_pair_protocol=='strict', (
                 'Every active CIFAR-100 job must use the strict class-pair stream')
-            assert self.share_continual_state, 'All CIFAR-100 jobs require synchronized CL state'
+            if not self.joint_plan_path:assert self.share_continual_state, 'Legacy CIFAR-100 requires synchronized CL state'
             assert not self.reset_memory_on_sync, 'Synchronized history must remain available'
             assert not (self.full_sync and self.participation<1), 'Hidden clients cannot receive server broadcasts'
-        if self.stream_protocol:assert self.share_continual_state, 'Streaming jobs must synchronize method-specific CL state'
+        if self.stream_protocol and not self.joint_plan_path:assert self.share_continual_state, 'Legacy streams synchronize method-specific CL state'
+        if self.server_memory_per_class<0:raise ValueError('Negative server replay capacity')
+        if self.server_memory_per_class and not self.share_continual_state:raise ValueError('Server replay cap requires a shared archive')
+        if self.stale_update_policy not in {'damped_delta','undamped_delta','direct_model'}:raise ValueError('Unknown stale update policy')
+        if self.aggregation_weight_policy not in {'fresh_examples','optimizer_steps'}:raise ValueError('Unknown aggregation weight policy')
+        if self.aggregation_weight_policy!='fresh_examples' and (not self.joint_plan_path or self.aggregator!='fedavg'):raise ValueError('Optimizer-step weighting is a joint FedAvg control')
         assert self.causal_max_clients >= 1 and self.checkpoint_every >= 0
         assert self.participation_schedule in {"feedback", "stage", "constant", "increasing", "decreasing", "alternating"}
         assert self.pending_policy in {"latest", "retain_all", "bounded"}
@@ -253,7 +262,9 @@ class RunConfig:
         assert self.fedadam_epsilon > 0
         assert self.memory_policy in {"random_per_class", "recent_per_class"}
         assert self.local_optimizer in {"sgd"}
-        assert self.optimizer_state_policy in {"reset", "persist"}
+        assert self.optimizer_state_policy in {"reset", "persist", "reset_on_sync", "reset_on_task"}
+        if self.optimizer_state_policy in {'reset_on_sync','reset_on_task'} and not self.joint_plan_path:
+            raise ValueError('New optimizer-reset controls require joint protocol')
         assert self.boundary_mode in {"known", "hidden"}
         assert self.learning_setting == 'task_il' or (self.joint_plan_path and self.learning_setting=='class_il'), 'Class-IL requires the explicit joint protocol'
         if self.learning_setting=='task_il':
@@ -329,6 +340,8 @@ class RunConfig:
     def to_dict(self):
         data=asdict(self)
         if data['audit_test_every_sync'] is True:data.pop('audit_test_every_sync')
+        for key,default in (('server_memory_per_class',0),('stale_update_policy','damped_delta'),('terminal_stale_guard',True),('aggregation_weight_policy','fresh_examples')):
+            if data[key]==default:data.pop(key)
         # Preserve old plan-file serialization for unchanged job configurations.
         # Every nondefault protocol variant is still explicitly serialized.
         if data['class_pair_protocol']=='compatible':data.pop('class_pair_protocol')
