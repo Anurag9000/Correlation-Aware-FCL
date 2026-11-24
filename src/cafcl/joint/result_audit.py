@@ -40,6 +40,10 @@ def audit_campaign(manifest,output):
                 history=json.loads((directory/'metrics.json').read_text())
                 if len(history)!=len(plan['intervals']):raise ValueError('Incomplete metrics')
                 assert_sync_reports_complete(directory,history)
+                from .knowledge_audit import audit_knowledge
+                ledger=audit_knowledge(directory,plan)
+                row.update(acknowledged_occurrences=ledger['acknowledged'],pending_occurrences=ledger['pending'],
+                           committed_versions=ledger['commits'])
                 for r in plan['intervals']:
                     record=json.loads((directory/f"joint_interval_{r['interval_id']:05d}.json").read_text())
                     if record['server_state_digest_before']!=record['server_state_digest_after']:

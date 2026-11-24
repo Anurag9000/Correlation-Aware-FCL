@@ -117,3 +117,18 @@ controls, not principal joint FL conditions. Private test results are
 saved separately from the untrained local-only server score. Detailed
 validation includes pre-upload snapshots of idle and reconnecting clients.
 Simultaneous-access pooled/multi-head training is not yet implemented.
+
+## Independent knowledge and result diagnostics
+
+The artifact auditor now verifies each occurrence against the planned
+training event, upload sender, accepted receipt, pending ledger and actual
+server version. The report command reconstructs signed acquisition and
+retention, global integrated-class peak drop, prediction collapse metrics,
+replication strata and integration latency; unmatched Class-IL competitor
+universes are not treated as pure forgetting. Detailed diagnostics include
+parameter-only applied-candidate cosine/cancellation (not a claim that
+whole-model weighting equals task-head weighting). A failure-injection
+resume test compares continuous and resumed global tensors and receipt
+ledgers for a short synthetic cross-semantic/stale-client curriculum.
+
+    PYTHONPATH=src python -m cafcl.joint.runner report --run-dir runs/joint_results/J-H-S1-O0-L2-task_il

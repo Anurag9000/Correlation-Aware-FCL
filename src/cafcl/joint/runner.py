@@ -159,6 +159,8 @@ def main(argv=None):
     a.add_argument('--local-evaluation',action='store_true')
     a=sub.add_parser('validate');a.add_argument('--manifest',required=True)
     a=sub.add_parser('audit');a.add_argument('--manifest',required=True);a.add_argument('--output',required=True)
+    a=sub.add_parser('report');a.add_argument('--run-dir',required=True);a.add_argument('--output')
+    a.add_argument('--no-figures',action='store_true')
     for a in sub.choices.values():
         a.add_argument('--data-root',default='data')
         a.add_argument('--no-download',action='store_true')
@@ -171,6 +173,9 @@ def main(argv=None):
         report=validate_manifest(a.manifest,a.data_root,not a.no_download)
         print(json.dumps(report,indent=2))
         if report['invalid']:raise SystemExit(1)
+    elif a.command=='report':
+        from .analysis import analyze_run
+        print(json.dumps(analyze_run(a.run_dir,a.output,not a.no_figures),indent=2))
     elif a.command=='audit':
         from .result_audit import audit_campaign
         print(json.dumps(audit_campaign(a.manifest,a.output),indent=2))

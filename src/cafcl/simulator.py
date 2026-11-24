@@ -880,6 +880,10 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             # after the commit, without changing any global or local weights.
             aggregation_norm_diagnostics=_normalization_aggregation_diagnostics(
                 base_global_state,global_state,accepted)
+            joint_update_geometry=None
+            if cfg.joint_plan_path and cfg.joint_local_evaluation:
+                from .joint.update_diagnostics import update_geometry
+                joint_update_geometry=update_geometry(model,base_global_state,accepted)
             if cfg.full_sync:
                 for cid in clients:
                     clients[cid].receive(global_state,version,
@@ -917,7 +921,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'interval':round_id,'server_version':version,'selected_clients':selected,
                     'accepted_clients':[u['client_id'] for u in accepted],
                     'global_validation_before':joint_global_before,'global_validation_after':joint_global_after,
-                    'private_pre_upload_validation':joint_pre_upload,'broadcast_validation':broadcast_metrics})
+                    'private_pre_upload_validation':joint_pre_upload,'broadcast_validation':broadcast_metrics,
+                    'applied_candidate_update_geometry':joint_update_geometry})
             causal=None
             if cfg.causal_diagnostics and len(accepted)>=2 and cfg.aggregator in {'fedavg','uniform'}:
                 # Use the pre-aggregation base model and the exact accepted
