@@ -105,7 +105,7 @@ def stationary_probe(model,bank,parts,labels,objective,device,limit=128):
             "sampled_global_loss":global_loss,"sampled_actual_objective_loss":actual_loss}
 
 
-def train(job,output,root,device,download):
+def train(job,output,root,device,download,resume_from=None):
     if job["family"]!="FL" or job.get("binding")!="stationary_reference":
         raise ValueError("Unsupported job")
     if job["objective"] not in {"global","restricted_local"}:
@@ -126,7 +126,44 @@ def train(job,output,root,device,download):
     rounds=job["rounds_per_stage"] or 100
     steps=0; processed=0
     rows=[]
-    for r in range(1,rounds+1):
+    first_round=1
+    from .identity import runtime_identity,dataset_identity
+    from .joint.checkpoint_io import durable_torch_save
+    from .diagnostic_campaign import signature
+    import shutil
+    identity={'job_signature':signature(job),'runtime':runtime_identity(),
+              'dataset':dataset_identity(bank),'partition_sha256':hashlib.sha256(json.dumps(parts).encode()).hexdigest(),
+              'device_type':torch.device(device).type}
+    checkpoints=output/'checkpoints';checkpoints.mkdir(exist_ok=True)
+    fields=["round","validation_accuracy","validation_loss","test_accuracy","test_loss","optimizer_steps","processed_examples","sampled_global_gradient_norm_squared","sampled_actual_objective_gradient_norm_squared","sampled_global_loss","sampled_actual_objective_loss"]
+    def write_rows():
+        tmp=output/'metrics.csv.tmp'
+        with tmp.open('w',newline='') as f:
+            writer=csv.DictWriter(f,fieldnames=fields)
+            writer.writeheader();writer.writerows(rows)
+        tmp.replace(output/'metrics.csv')
+    if resume_from is not None:
+        previous=Path(resume_from)
+        saved=torch.load(previous,map_location='cpu',weights_only=False)
+        if saved['identity']!=identity:raise RuntimeError('Stationary checkpoint identity mismatch')
+        last=int(saved['round'])
+        rows=saved['rows']
+        if last<1 or last>rounds or [x['round'] for x in rows]!=list(range(1,last+1)):
+            raise ValueError('Stationary checkpoint history mismatch')
+        model.load_state_dict(saved['state'])
+        steps=int(saved['steps']);processed=int(saved['processed'])
+        random.setstate(saved['python_rng']);np.random.set_state(saved['numpy_rng'])
+        torch.set_rng_state(saved['torch_rng'])
+        if torch.cuda.is_available() and saved['cuda_rng']:torch.cuda.set_rng_state_all(saved['cuda_rng'])
+        for r in sorted((CHECKPOINTS|{rounds}) & set(range(1,last+1))):
+            name=f'round_{r:03d}.pt'
+            src=previous.parent/name;dest=checkpoints/name
+            if not src.is_file():raise ValueError('Missing historical stationary checkpoint '+name)
+            if src.resolve()!=dest.resolve():shutil.copy2(src,dest)
+        first_round=last+1
+        durable_torch_save(saved,checkpoints/'latest.pt')
+        write_rows()
+    for r in range(first_round,rounds+1):
         start=copy_cpu_state(model)
         states=[]
         for cid,ids in enumerate(parts):
@@ -161,9 +198,11 @@ def train(job,output,root,device,download):
             checkpoints=output/"checkpoints";checkpoints.mkdir(exist_ok=True)
             torch.save({"round":r,"state":copy_cpu_state(model)},checkpoints/f"round_{r:03d}.pt")
         rows.append(row)
-        with (output/"metrics.csv").open("w",newline="") as f:
-            writer=csv.DictWriter(f,fieldnames=["round","validation_accuracy","validation_loss","test_accuracy","test_loss","optimizer_steps","processed_examples","sampled_global_gradient_norm_squared","sampled_actual_objective_gradient_norm_squared","sampled_global_loss","sampled_actual_objective_loss"])
-            writer.writeheader();writer.writerows(rows)
+        durable_torch_save({'identity':identity,'round':r,'state':copy_cpu_state(model),
+            'rows':rows,'steps':steps,'processed':processed,'python_rng':random.getstate(),
+            'numpy_rng':np.random.get_state(),'torch_rng':torch.get_rng_state(),
+            'cuda_rng':torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []},checkpoints/'latest.pt')
+        write_rows()
         print(json.dumps(row),flush=True)
     atomic_json(output/"result_summary.json",{"job_id":job["job_id"],"final":rows[-1],"rounds":rounds,"protocol":"stationary_reference","optimizer_policy":"reset_each_block","augmentation":"none (shared deterministic repository preprocessing)","bn_policy":"sample_weighted_floating_buffers_max_integer_buffers"})
 
@@ -175,8 +214,9 @@ def main():
     p.add_argument("--data-root",required=True)
     p.add_argument("--device",default="cuda:0")
     p.add_argument("--download",action="store_true")
+    p.add_argument("--resume-from")
     a=p.parse_args()
-    train(json.loads(Path(a.job).read_text()),Path(a.output),a.data_root,a.device,a.download)
+    train(json.loads(Path(a.job).read_text()),Path(a.output),a.data_root,a.device,a.download,a.resume_from)
 
 
 if __name__=="__main__":

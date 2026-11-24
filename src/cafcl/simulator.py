@@ -31,11 +31,11 @@ from .task_ids import task_instance_id
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v7'
+PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v8'
 
 def protocol_version_for(cfg):
     if getattr(cfg,'joint_plan_path',''):
-        return 'joint_spatiotemporal_fcl_v8_audit_'+cfg.learning_setting
+        return 'joint_spatiotemporal_fcl_v9_audit_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -490,6 +490,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 from .stage_report import assert_sync_reports_complete
                 assert_sync_reports_complete(
                     run_dir,json.loads((run_dir/'metrics.json').read_text()))
+            from .identity import runtime_identity,dataset_identity
+            identity=json.loads((run_dir/'run_identity.json').read_text())
+            if identity['runtime']!=runtime_identity():
+                raise RuntimeError('Completed run belongs to a different source/dependency identity')
+            bank=get_data_bank(cfg.dataset,data_root,download=download,seed=cfg.seed,class_subset=cfg.class_subset)
+            if identity['dataset']!=dataset_identity(bank):
+                raise RuntimeError('Completed run belongs to a different dataset identity')
             return {'status':'already_completed','run_dir':str(run_dir)}
     if cfg.joint_plan_path and config_file.exists() and json.loads(config_file.read_text())!=json.loads(json.dumps(cfg.to_dict(),default=str)):
         raise RuntimeError('Existing joint run configuration differs; use a new output root')

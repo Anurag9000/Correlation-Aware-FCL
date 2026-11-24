@@ -151,6 +151,18 @@ def run_one(job,args,root,device,expected_head):
         cmd=[sys.executable,"-m",MODULES[job["binding"]],"--job",str(path/"job.json"),
              "--output",str(path),"--data-root",str(Path(args.data_root).resolve()),"--device",device]
         if job.get("subset_probes"):cmd.append("--subset-probes")
+        if job["binding"]=="stationary_reference" and getattr(args,"command",None)=="resume":
+            for previous in sorted(base.glob("attempt_*"),reverse=True):
+                if previous==path:continue
+                candidate=previous/"checkpoints"/"latest.pt"
+                if not candidate.is_file():continue
+                try:
+                    old_job=json.loads((previous/"job.json").read_text())
+                    old_source=json.loads((previous/"provenance.json").read_text())
+                except (OSError,ValueError):continue
+                if old_job==job and old_source.get("git_commit")==commit:
+                    cmd.extend(["--resume-from",str(candidate)])
+                    break
         try:
             with (path/"stdout.log").open("w") as out,(path/"stderr.log").open("w") as err:
                 rc=subprocess.run(cmd,cwd=ROOT,stdout=out,stderr=err).returncode
