@@ -29,7 +29,7 @@ def pair_interaction(scores: dict[frozenset, float], base: Iterable[int], a: int
 
 
 def aggregation_leave_one_out(model, bank, observed, updates, base_weights,
-                              aggregator, batch_size, device, *, limit=6):
+                              aggregator, batch_size, device, *, limit=6, task_class_groups=None):
     """Return per-class and overall effects of each uploaded client.
 
     The original full aggregate is compared with the aggregate omitting one
@@ -40,13 +40,15 @@ def aggregation_leave_one_out(model, bank, observed, updates, base_weights,
     if len(updates) < 2 or len(updates) > limit:
         return {'kind': 'leave_one_out_aggregation', 'status': 'not_evaluated',
                 'reason': 'requires 2..limit accepted updates'}
-    from .simulator import aggregate
+    from .simulator import aggregate, _merge_task_heads_fedavg
     from .evaluation import evaluate
     original = {k: v.detach().cpu().clone() for k,v in model.state_dict().items()}
     def score(chosen):
         candidate = aggregate(chosen, base_weights, aggregator)
+        if task_class_groups is not None and aggregator=='fedavg':
+            candidate=_merge_task_heads_fedavg(chosen,base_weights,candidate)
         model.load_state_dict(candidate)
-        vals, _ = evaluate(model, bank, observed, batch_size, device, peak={},split='validation')
+        vals, _ = evaluate(model, bank, observed, batch_size, device, peak={},split='validation',task_class_groups=task_class_groups,loader_seed=0)
         return vals
     try:
         full = score(updates)
@@ -67,7 +69,7 @@ def aggregation_leave_one_out(model, bank, observed, updates, base_weights,
 
 
 def aggregation_subset_report(model,bank,observed,updates,base_weights,aggregator,
-                              batch_size,device,*,limit=5):
+                              batch_size,device,*,limit=5,task_class_groups=None):
     """Evaluate every nonempty subset and pairwise interaction from SAME uploads.
 
     This is a retrospective *aggregation-only* oracle. It is intentionally
@@ -77,7 +79,7 @@ def aggregation_subset_report(model,bank,observed,updates,base_weights,aggregato
     ids=[int(u['client_id']) for u in updates]
     if not 2<=len(ids)<=limit or len(set(ids))!=len(ids):
         return {'status':'not_evaluated','reason':'requires 2..limit unique uploads'}
-    from .simulator import aggregate
+    from .simulator import aggregate, _merge_task_heads_fedavg
     from .evaluation import evaluate
     original={k:v.detach().cpu().clone() for k,v in model.state_dict().items()}
     scores={}
@@ -85,7 +87,7 @@ def aggregation_subset_report(model,bank,observed,updates,base_weights,aggregato
     try:
         # Empty subset is the unmodified previous global model.
         model.load_state_dict(base_weights)
-        baseline,_=evaluate(model,bank,observed,batch_size,device,peak={},split='validation')
+        baseline,_=evaluate(model,bank,observed,batch_size,device,peak={},split='validation',task_class_groups=task_class_groups,loader_seed=0)
         scores[frozenset()]=baseline['accuracy']
         per_class[frozenset()]=baseline['per_class']
         for size in range(1,len(ids)+1):
@@ -93,8 +95,10 @@ def aggregation_subset_report(model,bank,observed,updates,base_weights,aggregato
                 cohort=frozenset(chosen)
                 selected=[u for u in updates if u['client_id'] in cohort]
                 weights=aggregate(selected,base_weights,aggregator)
+                if task_class_groups is not None and aggregator=='fedavg':
+                    weights=_merge_task_heads_fedavg(selected,base_weights,weights)
                 model.load_state_dict(weights)
-                value,_=evaluate(model,bank,observed,batch_size,device,peak={},split='validation')
+                value,_=evaluate(model,bank,observed,batch_size,device,peak={},split='validation',task_class_groups=task_class_groups,loader_seed=0)
                 scores[cohort]=value['accuracy']
                 per_class[cohort]=value['per_class']
         interactions={}

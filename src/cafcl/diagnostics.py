@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import defaultdict
 import itertools
 import math
+import random
 import numpy as np
 import torch
 from torch.nn import functional as F
@@ -46,8 +47,8 @@ def lagged_binary_arrival_correlation(scenario,class_a,class_b,lag=0):
     a=np.zeros(horizon,dtype=np.float64)
     b=np.zeros(horizon,dtype=np.float64)
     for e in scenario.arrivals:
-        if class_a in e.labels:a[e.round_id]+=1
-        if class_b in e.labels:b[e.round_id]+=1
+        if class_a in e.labels:a[e.round_id]=1
+        if class_b in e.labels:b[e.round_id]=1
     if lag>=horizon:return None
     if lag:
         a=a[:-lag];b=b[lag:]
@@ -94,61 +95,54 @@ def feature_relationships(model,bank,class_ids,device,samples_per_class=32):
 
 
 def diagnostic_gradient_relationships(model,bank,class_ids,device,samples_per_class=8,
-                                      max_pairs=32):
-    """Pairwise class-loss gradient cosine at one common model checkpoint.
-
-    The input labels and sample indices are drawn from the training bank;
-    the user-visible test set is never used to choose gradient diagnostics.
-    Because the simulator controls all client data, this is an *oracle
-    diagnostic* and should not be a server input in privacy-constrained runs.
-    """
+                                      max_pairs=32,*,allowed_indices=None,task_class_groups=None,seed=0):
+    """Sampled TRAIN-only gradient relationships at a common checkpoint."""
     if samples_per_class<=0 or max_pairs<0:
         raise ValueError('Invalid diagnostic limit')
-    previous_training=model.training
-    model.eval()
-    params=[p for p in model.parameters() if p.requires_grad]
-    vectors={}
-    for cls in sorted(set(map(int,class_ids))):
-        ids=[i for i,y in enumerate(bank.train.targets) if int(y)==cls][:samples_per_class]
-        if not ids:continue
-        x,valid=_physical64_inputs([bank.train[i][0] for i in ids],device)
-        y=torch.tensor([cls]*len(ids),device=device)
-        model.zero_grad(set_to_none=True)
-        F.cross_entropy(model(x)[:valid],y).backward()
-        vectors[cls]=torch.cat([(p.grad.detach() if p.grad is not None
-                                else torch.zeros_like(p)).reshape(-1).cpu()
-                               for p in params])
-    model.zero_grad(set_to_none=True)
-    model.train(previous_training)
-    return {f'{a}:{b}':vector_cosine(vectors[a],vectors[b])
-            for a,b in itertools.islice(itertools.combinations(sorted(vectors),2),max_pairs)}
+    vectors=class_gradient_representations(model,bank,class_ids,device,
+        allowed_indices=allowed_indices,samples_per_class=samples_per_class,
+        task_class_groups=task_class_groups,seed=seed)
+    pairs=list(itertools.combinations(sorted(vectors),2))
+    pairs=sorted(random.Random(seed+197).sample(pairs,min(max_pairs,len(pairs))))
+    return {f'{a}:{b}':vector_cosine(vectors[a],vectors[b]) for a,b in pairs}
 
 
-def class_gradient_representations(model,bank,class_ids,device,*,allowed_indices=None,samples_per_class=8):
-    """Privileged TRAIN-only class gradients at one global checkpoint.
+def class_gradient_representations(model,bank,class_ids,device,*,allowed_indices=None,
+                                   samples_per_class=8,task_class_groups=None,seed=0):
+    """Oracle TRAIN-only class gradients with a common, explicit head context.
 
-    No future samples are eligible: caller supplies indices that have actually
-    arrived somewhere in the federation. Never use held-out evaluation data.
-    Intended only for diagnostics and labeled oracle client selection.
+    Task-IL class gradients average the CE objectives of the supplied active
+    heads containing that class; they are not gradients of a global classifier.
     """
+    if samples_per_class<1:raise ValueError('Invalid diagnostic sample count')
+    is_task=hasattr(getattr(model,'classifier',None),'task_classes')
+    if is_task and task_class_groups is None:
+        raise ValueError('Task-IL gradient diagnostics require explicit active heads')
     allowed=set(allowed_indices) if allowed_indices is not None else set(range(len(bank.train)))
     vectors={}
     params=[p for p in model.parameters() if p.requires_grad]
     previous_training=model.training
     model.eval()
-    for cls in sorted(set(map(int,class_ids))):
-        ids=[i for i,y in enumerate(bank.train.targets)
-             if i in allowed and int(y)==cls][:samples_per_class]
-        if not ids:continue
-        x,valid=_physical64_inputs([bank.train[i][0] for i in ids],device)
-        y=torch.tensor([cls]*len(ids),device=device)
-        model.zero_grad(set_to_none=True)
-        F.cross_entropy(model(x)[:valid],y).backward()
-        vectors[cls]=torch.cat([(p.grad.detach().reshape(-1).cpu() if p.grad is not None
-                                  else torch.zeros_like(p).reshape(-1).cpu()) for p in params])
-    model.zero_grad(set_to_none=True)
-    model.train(previous_training)
-    return vectors
+    try:
+        for cls in sorted(set(map(int,class_ids))):
+            pool=[i for i,y in enumerate(bank.train.targets) if i in allowed and int(y)==cls]
+            if not pool:continue
+            ids=random.Random(seed+100003*cls).sample(pool,min(samples_per_class,len(pool)))
+            x,valid=_physical64_inputs([bank.train[i][0] for i in ids],device)
+            y=torch.tensor([cls]*valid,device=device)
+            if is_task:
+                heads=[h for h,labels in task_class_groups.items() if cls in labels]
+                if not heads:continue
+                features=model.features(x)[:valid]
+                loss=model.loss_for_labels(x[:valid],y,task_ids=heads,features=features)
+            else:
+                loss=F.cross_entropy(model(x)[:valid],y)
+            grads=torch.autograd.grad(loss,params,allow_unused=True)
+            vectors[cls]=torch.cat([(g.detach() if g is not None else torch.zeros_like(p)).reshape(-1).cpu()
+                                   for p,g in zip(params,grads)])
+        return vectors
+    finally:
+        model.train(previous_training)
 
 
 def arrived_feature_means(model,bank,class_ids,device,*,allowed_indices,samples_per_class=16):

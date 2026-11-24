@@ -89,11 +89,18 @@ def select_clients(states, cfg, round_id, rng, *, old_classes=frozenset(),new_cl
                 vals=[relations.get((int(a),int(b)),relations.get((int(b),int(a))))
                       for a in old for b in (holding[i]&new) if a!=b]
                 return [float(v) for v in vals if v is not None and np.isfinite(v)]
-            averages={i:float(np.mean(relevant(i))) if relevant(i) else 0. for i in ids}
+            evidence={i:relevant(i) for i in ids}
+            averages={i:float(np.mean(evidence[i])) if evidence[i] else 0. for i in ids}
             if policy in {'feature_min','gradient_conflict'}:
                 scores={i:-averages[i] for i in ids}
             else:
                 scores=averages
+            if not any(evidence.values()):
+                # No relationship is not a measured zero. Use the seeded random baseline.
+                chosen=rng.choice(ids,size=m,replace=False).tolist()
+            else:
+                scores={i:scores[i] if evidence[i] else -float('inf') for i in ids}
+                chosen=sorted(ids,key=lambda i:(-scores[i],i))[:m]
         elif policy=='forgetting':
             risks=class_forgetting or {}
             scores={i:sum(float(risks.get(c,0.)) for c in (holding[i]&old)) for i in ids}
@@ -120,7 +127,7 @@ def select_clients(states, cfg, round_id, rng, *, old_classes=frozenset(),new_cl
             weights=np.array([max(0.,scores[i])+1. for i in ids],dtype=np.float64)
             weights/=weights.sum()
             chosen=rng.choice(ids,size=m,replace=False,p=weights).tolist()
-        elif policy not in {'coverage','balanced','diversity'}:
+        elif policy not in {'coverage','balanced','diversity','feature_max','feature_min','gradient_align','gradient_conflict'}:
             chosen=sorted(ids,key=lambda i:(-scores[i],i))[:m]
     if cfg.force_target!='none' and (cfg.intervention_round<0 or round_id==cfg.intervention_round):
         target=cfg.target_client

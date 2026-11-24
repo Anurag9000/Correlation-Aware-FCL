@@ -269,7 +269,7 @@ def _merge_task_heads_fedavg(updates,base,candidate):
     return out
 
 
-def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None,class_history_counts=None,source_method=None):
+def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None,class_history_counts=None,source_method=None,parameter_names=None):
     if not updates:raise RuntimeError('No client updates to aggregate')
     if method=='fedavg' and source_method is not None:
         from .original_aggregation import original_aggregate
@@ -302,7 +302,9 @@ def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None,cl
                 for u in updates]
         weights=[score/sum(scores) for score in scores]
     if method in {'conflict_aware','retention_aware','conflict_projection'}:
-        floating=[k for k,v in base.items() if v.is_floating_point()]
+        floating=(list(parameter_names) if parameter_names is not None else
+                  [k for k,v in base.items() if v.is_floating_point() and
+                   not k.endswith(('running_mean','running_var'))])
         delta=[torch.cat([(u['weights'][k].detach().cpu().float()-base[k].float()).reshape(-1)
                           for k in floating]) for u in updates]
         if method=='conflict_aware':
@@ -340,10 +342,14 @@ def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None,cl
             shared_update=sum(w*d for w,d in zip(weights,projected))
             out={};offset=0
             for key,baseval in base.items():
-                if baseval.is_floating_point():
+                if key in floating:
+                    # Named-parameter order must agree with the gradient vector.
+                    start=sum(base[k].numel() for k in floating[:floating.index(key)])
                     n=baseval.numel()
-                    out[key]=(baseval.float().reshape(-1)+shared_update[offset:offset+n]).reshape_as(baseval).to(baseval.dtype)
-                    offset+=n
+                    out[key]=(baseval.float().reshape(-1)+shared_update[start:start+n]).reshape_as(baseval).to(baseval.dtype)
+                elif baseval.is_floating_point():
+                    out[key]=sum((w*u['weights'][key].double() for w,u in zip(weights,updates)),
+                                 torch.zeros_like(baseval,dtype=torch.float64)).to(baseval.dtype)
                 else:
                     out[key]=baseval.clone()
             if not check_finite(out):raise RuntimeError('Nonfinite gradient-corrected aggregate')
@@ -698,13 +704,15 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 # are oracle diagnostics, not privacy-preserving methods.
                 model.load_state_dict(global_state)
                 model.to(device)
-                arrived=set(server_cl_state.acknowledged_train_indices)
+                # Explicit privileged oracle: delivered data, including unsent client data.
+                # This is not a deployable server-side selection policy.
+                arrived=set().union(*(c.seen_indices for c in clients.values()))
                 if cfg.selector.startswith('feature'):
                     vectors=arrived_feature_means(model,bank,observed,device,
                                                   allowed_indices=arrived)
                 else:
                     vectors=class_gradient_representations(model,bank,observed,device,
-                                                           allowed_indices=arrived)
+                                                           allowed_indices=arrived,task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,seed=cfg.seed)
                 class_relationships=pairwise_vector_cosines(vectors)
             risks={}
             if history:
@@ -807,11 +815,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     model.load_state_dict(global_state)
                     arrived=set(server_cl_state.acknowledged_train_indices)
                     vectors=class_gradient_representations(model,bank,old,device,
-                                                           allowed_indices=arrived)
+                                                           allowed_indices=arrived,task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,seed=cfg.seed)
                     if vectors:old_gradient=torch.stack(list(vectors.values())).mean(0)
                 mean=aggregate(accepted,global_state,cfg.aggregator,
                                clients=clients,round_id=round_id,old_gradient=old_gradient,
                                class_history_counts=server_cl_state.class_sample_exposure,
+                               parameter_names=[n for n,p in model.named_parameters() if p.requires_grad],
                                source_method=(None if cfg.learning_setting=='task_il' else cfg.method if cfg.method in {'native_glfc','native_lga','native_feat'} else
                                               'fedclass_resnet8' if cfg.model=='fedclass_resnet8' else None))
                 candidate,new_server_state=server_optimizer_step(
@@ -956,12 +965,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 causal=aggregation_leave_one_out(
                     model,evaluation_bank,observed,accepted,base_global_state,
                     'uniform' if cfg.aggregator=='uniform' else 'fedavg',
-                    cfg.batch_size,device,limit=cfg.causal_max_clients)
+                    cfg.batch_size,device,limit=cfg.causal_max_clients,
+                    task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None)
             subset_analysis=None
             if cfg.subset_diagnostics and accepted and cfg.aggregator in {'fedavg','uniform'}:
                 subset_analysis=aggregation_subset_report(model,evaluation_bank,observed,
                     accepted,base_global_state,cfg.aggregator,cfg.batch_size,device,
-                    limit=cfg.causal_max_clients)
+                    limit=cfg.causal_max_clients,task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None)
             representation_drift=None
             if pre_representation is not None:
                 arrived=set(pre_representation_ids)
@@ -972,11 +982,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             gradient_relationships=None
             if cfg.gradient_diagnostics:
                 gradient_relationships=diagnostic_gradient_relationships(
-                    model,bank,observed,device,samples_per_class=8,max_pairs=32)
+                    model,bank,observed,device,samples_per_class=8,max_pairs=32,
+                    allowed_indices=set().union(*(c.seen_indices for c in clients.values())),
+                    task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,seed=cfg.seed)
             client_update_cosines=None
             old_update_alignment=None
             if cfg.gradient_diagnostics and accepted:
-                floating=[k for k,v in base_global_state.items() if v.is_floating_point()]
+                floating=[n for n,p in model.named_parameters() if p.requires_grad]
                 deltas={u['client_id']:torch.cat([
                     (u['weights'][k].float()-base_global_state[k].float()).reshape(-1)
                     for k in floating]) for u in accepted}
@@ -988,7 +1000,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     arrived=set(server_cl_state.acknowledged_train_indices)
                     model.load_state_dict(base_global_state)
                     vectors=class_gradient_representations(model,bank,old,device,
-                        allowed_indices=arrived)
+                        allowed_indices=arrived,task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,seed=cfg.seed)
                     if vectors:
                         mean_old_grad=torch.stack(list(vectors.values())).mean(0)
                         old_update_alignment={str(cid):vector_cosine(mean_old_grad,delta)
