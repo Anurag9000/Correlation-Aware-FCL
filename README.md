@@ -38,3 +38,13 @@ The completed 46.78% full / 42.13% random-offline results and the earlier 38.58%
 - `docs/ORIGINAL_SOURCE_FIDELITY_AUDIT.md`: separate upstream method-source provenance.
 
 Replay shares raw training examples with connected clients. This simulator is not a privacy-preserving federated-learning system.
+
+## Joint spatiotemporal FCL extension
+
+The opt-in `cafcl.joint` protocol separates atomic local continual tasks from server communication intervals, supports both Task-IL and Class-IL, and provides constructive joint curricula and experiment catalogs. See [current implementation and validation status](docs/joint/IMPLEMENTATION_STATUS.md). Run the plan-only compiler before any training:
+
+```bash
+PYTHONPATH=src python -m cafcl.joint.runner plan --suite foundational --output runs/joint_foundational
+```
+
+The historical primary protocol is unchanged. Do not launch the generalized production campaign until the joint-specific CPU validation and short real-data diagnostics have been checked.

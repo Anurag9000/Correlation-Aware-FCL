@@ -53,7 +53,10 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
             except ValueError as exc:
                 blocked.append({'design':design.name,'reason':str(exc),'status':'infeasible'})
                 continue
-            for setting in ('task_il','class_il'):
+            # Head-only interventions have no meaning for a shared Class-IL
+            # classifier. Do not spend compute on duplicate Class-IL controls.
+            settings=('task_il',) if design.family=='short' and design.head_policy!='semantic_shared' else ('task_il','class_il')
+            for setting in settings:
                 job_id='J-'+design.name+'-'+setting
                 filename=job_id+'.json';write_json(root/'plans'/filename,plan)
                 jobs.append({'job_id':job_id,'family':design.family,'metadata':design.metadata,

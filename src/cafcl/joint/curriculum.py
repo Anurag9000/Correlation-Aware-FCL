@@ -152,8 +152,9 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
     """Compile exact explicit events (atomic_step, client, class tuple).
 
     Fixed unique-data allocation: each observed class's entire TRAIN pool is
-    split over its occurrences; each sample is assigned exactly once. No
-    automatic tail events, padding, class insertion or duplicate sample reuse.
+    split over its occurrences; by default each sample is assigned once.
+    Optional same-semantic reuse preserves draw counts but reduces unique support.
+    No automatic tail events, padding or class insertion.
     Explicit interval boundaries are exclusive atomic-step endpoints.
     """
     if num_clients < 2 or num_classes < 2 or local_depth < 1:
