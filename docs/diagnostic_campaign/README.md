@@ -28,3 +28,34 @@ Results default to `runs/diagnostic_campaign/<family>/<job-id>/attempt_NNNN/`. E
 - Implement fixed-cohort current/history evaluation, local/aggregation/download forgetting, per-head metrics, gradient norm/alignment, checkpoint forks, counterfactual subset evaluation and validation gates before calling the complete campaign runnable.
 
 The existing joint epoch-slicing path is restricted to full participation and divides a fixed epoch budget; it cannot be silently substituted for the proposed partial-participation repeated-optimization jobs. No existing training files or historical ledgers are changed.
+
+
+## Matched-design reference v1
+
+The central suite now binds **71 jobs** (11 stationary + 36 MC + 12 CM + 12 MO).
+The remaining 71 historical-protocol-dependent FCL configurations are still
+blocked; ten confirmation slots remain reserved. These 60 new matched
+bindings are deliberately a new reference backend, not reproductions of V25/V27.
+
+- Same 100 classes, ten classes per stage, ten stages, each unique TRAIN index allocated exactly once.
+- IID class-stratified partition, or 80% dominant-client mixture plus 20% uniform support, with actual allocation counts logged.
+- MO disjoint and complete-overlap share identical semantic pairs; partial overlap changes the second pair matching, explicitly changing TIL discrimination tasks.
+- MO has two 450-sample local units per client per stage on full CIFAR-100; all conditions share the same seeded uploader schedule at a given participation.
+- Global observed-class softmax; semantic task-conditioned heads with source-head replay provenance.
+- Fixed replay cap 50 per class, class-uniform replay, physical batch 64, deterministic padded current examples; memory is shared via TRAIN indices and not privacy preserving.
+- Freeze replay within each parent stage. CM uses identical epoch-indexed batch schedules at a given K across R=1/5/10. Actual optimizer/current/replay counts are logged. MC across K need not have equal padding or step counts.
+- Persistent client SGD state, full-model sample-weighted aggregation (not contributor-only head averaging), stale delta rebasing and retained stale BN buffers.
+- Common global class-ID metadata is a privileged protocol assumption even for offline clients. No future label metadata is used in the loss.
+- Fixed validation panels before and after local training, server aggregation and download; sampled current-objective gradient norm and backbone pairwise gradient cosine at the first round of each stage. Official test metrics at stage end and terminal flush are diagnostic only.
+- Optional `--subset-probes` evaluates all size-two and size-three cohorts at each learning sync for K<=5 (offline oracle, not selection feedback).
+- Stage test metrics use independent semantic heads in TIL; do not compare numerically to the old union evaluator without separate evaluation controls.
+- Checkpoints retain the latest server state, not full client/momentum mid-job resume. Job retries restart from scratch. Checkpoint-fork experiments and historical-protocol reproduction remain unimplemented.
+
+```bash
+PYTHONPATH=src python -m cafcl.diagnostic_campaign preflight --all --ready-only
+PYTHONPATH=src python -m cafcl.diagnostic_campaign run --family MC --device cuda:0
+PYTHONPATH=src python -m cafcl.diagnostic_campaign run --all --ready-only --device cuda:0
+```
+
+CPU synthetic integration tests and deterministic allocation/budget tests are included.
+Real-data/GPU execution has not been validated by the authoring session.
