@@ -24,90 +24,96 @@ def write_json(path, value):
     temp.replace(path)
 
 
+def iter_designs(suite,depths,coarse_by_fine):
+    from .family_catalog import screening_designs,Design
+    from .interactions import interaction_designs,short_designs
+    if suite in ('screening','all'):yield from screening_designs()
+    if suite in ('interactions','all'):yield from interaction_designs()
+    if suite in ('short','all'):yield from short_designs()
+    if suite in ('extensions','all'):
+        from .extensions import extension_designs
+        from .distribution_designs import distribution_designs
+        yield from extension_designs()
+        yield from distribution_designs(coarse_by_fine)
+    if suite in ('foundational','all'):
+        for s in ('S1','S2','S3'):
+            for o in (0,1):
+                for depth in depths:
+                    yield Design(f'H-{s}-O{o}-L{depth}','H',foundational_stream(s,o),local_depth=depth)
+    if suite in ('controls','all'):
+        from .controls import control_designs
+        yield from control_designs()
+    if suite in ('intratask','all'):
+        from .intratask import intratask_designs
+        yield from intratask_designs()
+    if suite=='smoke':
+        from .smoke import smoke_designs
+        yield from smoke_designs()
+
+
+def compile_design(design,targets,seed):
+    return compile_plan(design.events,targets,num_clients=design.num_clients,
+        num_classes=100,local_depth=design.local_depth,seed=seed,
+        head_policy=design.head_policy,minimum_samples=8 if design.family=='H' and design.name.startswith('H-') else 1,
+        require_all_classes=design.require_all_classes,interval_boundaries=design.boundaries,
+        upload_cohorts=design.cohorts,offline_clients=design.offline_clients,
+        outage_duration=design.outage_duration,allocation_order=design.allocation_order,
+        raw_sample_overlap=design.raw_sample_overlap,allow_cross_semantic_reuse=design.allow_cross_semantic_reuse,
+        allocation_weights=design.allocation_weights,control_kind=design.control_kind,
+        terminal_flush=design.terminal_flush,epoch_segments=design.epoch_segments).to_dict()
+
+
+def settings_for(design):
+    return ('task_il',) if design.family=='short' and design.head_policy!='semantic_shared' else ('task_il','class_il')
+
+
 def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundational'):
     from ..data import get_data_bank
     bank=get_data_bank('cifar100',data_root,download=download,seed=seed)
     root=Path(output).resolve()
     jobs=[]
-    if suite in ('screening','interactions','short','extensions','controls','intratask','all'):
-        from .family_catalog import screening_designs,Design
-        from .interactions import interaction_designs,short_designs
-        generators=[]
-        if suite in ('screening','all'):generators.append(screening_designs())
-        if suite in ('interactions','all'):generators.append(interaction_designs())
-        if suite in ('short','all'):generators.append(short_designs())
-        if suite in ('extensions','all'):
-            from .extensions import extension_designs
-            generators.append(extension_designs())
-            from .distribution_designs import distribution_designs
-            generators.append(distribution_designs(bank.coarse_by_fine))
-        if suite=='all':
-            generators.append((Design(f'H-{s}-O{o}-L{l}','H',foundational_stream(s,o),local_depth=l)
-                for s in ('S1','S2','S3') for o in (0,1) for l in depths))
-        if suite in ('controls','all'):
-            from .controls import control_designs
-            generators.append(control_designs())
-        if suite in ('intratask','all'):
-            from .intratask import intratask_designs
-            generators.append(intratask_designs())
-        blocked=[]
-        for design in chain.from_iterable(generators):
-            try:
-                plan=compile_plan(design.events,bank.train.targets,num_clients=design.num_clients,
-                    num_classes=100,local_depth=design.local_depth,seed=seed,
-                    head_policy=design.head_policy,minimum_samples=1,
-                    require_all_classes=design.require_all_classes,
-                    interval_boundaries=design.boundaries,upload_cohorts=design.cohorts,
-                    offline_clients=design.offline_clients,outage_duration=design.outage_duration,
-                    allocation_order=design.allocation_order,
-                    raw_sample_overlap=design.raw_sample_overlap,
-                    allow_cross_semantic_reuse=design.allow_cross_semantic_reuse,
-                    allocation_weights=design.allocation_weights,control_kind=design.control_kind,
-                    terminal_flush=design.terminal_flush,epoch_segments=design.epoch_segments).to_dict()
-            except ValueError as exc:
-                blocked.append({'design':design.name,'reason':str(exc),'status':'infeasible'})
-                continue
-            # Head-only interventions have no meaning for a shared Class-IL
-            # classifier. Do not spend compute on duplicate Class-IL controls.
-            settings=('task_il',) if design.family=='short' and design.head_policy!='semantic_shared' else ('task_il','class_il')
-            for setting in settings:
-                job_id='J-'+design.name+'-'+setting
-                filename=job_id+'.json';write_json(root/'plans'/filename,plan)
-                jobs.append({'job_id':job_id,'family':design.family,'metadata':design.metadata,
-                    'learning_setting':setting,'epochs':design.epochs,'method':design.method,'domain_mode':design.domain_mode,'seed':seed,'plan_file':'plans/'+filename,
-                    'allow_partial_coverage':not design.require_all_classes,
-                    'plan_hash':plan['plan_hash'],'atomic_hash':plan['atomic_hash'],'status':'planned',
-                    'low_support_warning':plan['allocation_audit']['minimum_samples_per_class_occurrence']<8})
-        unique={};aliases=[]
-        for job in jobs:
-            key=(job['plan_hash'],job['learning_setting'],job['epochs'],job.get('method','replay'),job.get('domain_mode','none'))
+    unique={};aliases=[];blocked=[];nominal=Counter();written=set()
+    for design in iter_designs(suite,depths,bank.coarse_by_fine):
+        settings=settings_for(design);nominal[design.family]+=len(settings)
+        try:plan=compile_design(design,bank.train.targets,seed)
+        except ValueError as exc:
+            blocked.append({'design':design.name,'family':design.family,'conditions':len(settings),
+                            'reason':str(exc),'status':'infeasible'})
+            continue
+        for setting in settings:
+            job_id='J-'+design.name+'-'+setting
+            key=(plan['plan_hash'],setting,design.epochs,design.method,design.domain_mode)
             if key in unique:
-                aliases.append({'job_id':job['job_id'],'canonical_job_id':unique[key]['job_id']})
-            else:unique[key]=job
-        jobs=list(unique.values())
-        write_json(root/'manifest.json',{'dataset':'cifar100','jobs':jobs,'aliases':aliases,'infeasible':blocked,
-                   'implementation_blocked':['joint minibatch-level synchronization; compute-matched pooled controls']})
-        return jobs
-    for item in foundational_registry(depths,seed=seed):
-        events=foundational_stream(item['spatial'],item['local_overlap'])
-        plan=compile_plan(events,bank.train.targets,num_clients=5,num_classes=100,
-                          local_depth=item['local_depth'],head_policy=item['head_policy'],
-                          seed=seed,minimum_samples=8).to_dict()
-        filename=item['job_id']+'.json'
-        write_json(root/'plans'/filename,plan)
-        jobs.append({**item,'plan_file':'plans/'+filename,'plan_hash':plan['plan_hash'],
-                     'atomic_hash':plan['atomic_hash'],'status':'planned',
-                     'task_occurrences':len(plan['tasks']),
-                     'communication_intervals':len(plan['intervals'])})
-    write_json(root/'manifest.json',{'dataset':'cifar100','jobs':jobs})
+                canonical=unique[key]
+                if design.family not in canonical['families']:canonical['families'].append(design.family)
+                aliases.append({'job_id':job_id,'family':design.family,
+                                'canonical_job_id':canonical['job_id'],'metadata':design.metadata})
+                continue
+            filename=plan['plan_hash']+'.json'
+            if filename not in written:
+                write_json(root/'plans'/filename,plan);written.add(filename)
+            job={'job_id':job_id,'family':design.family,'families':[design.family],
+                 'metadata':design.metadata,'learning_setting':setting,'epochs':design.epochs,
+                 'method':design.method,'domain_mode':design.domain_mode,'seed':seed,
+                 'plan_file':'plans/'+filename,'allow_partial_coverage':not design.require_all_classes,
+                 'plan_hash':plan['plan_hash'],'atomic_hash':plan['atomic_hash'],'status':'planned',
+                 'task_occurrences':len(plan['tasks']),'communication_intervals':len(plan['intervals']),
+                 'low_support_warning':plan['allocation_audit']['minimum_samples_per_class_occurrence']<8}
+            unique[key]=job;jobs.append(job)
+    write_json(root/'manifest.json',{'dataset':'cifar100','suite':suite,'jobs':jobs,'aliases':aliases,
+               'infeasible':blocked,'nominal_by_family':dict(nominal),
+               'nominal_conditions':sum(nominal.values()),'unique_executable_conditions':len(jobs),
+               'aliased_conditions':len(aliases),'infeasible_conditions':sum(x['conditions'] for x in blocked),
+               'implementation_blocked':['minibatch-level joint synchronization; compute-matched pooled controls']})
     return jobs
-
 
 def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evaluation=False):
     from ..config import RunConfig
     from ..simulator import run_experiment
     manifest=Path(manifest).resolve()
-    jobs=json.loads(manifest.read_text())['jobs']
+    catalog=json.loads(manifest.read_text());jobs=catalog['jobs']
+    alias={a['job_id']:a['canonical_job_id'] for a in catalog.get('aliases',[])}
+    job_id=alias.get(job_id,job_id)
     found=[x for x in jobs if x['job_id']==job_id]
     if len(found)!=1:
         raise ValueError('Expected one matching job')
@@ -153,7 +159,7 @@ def main(argv=None):
     sub=p.add_subparsers(dest='command',required=True)
     a=sub.add_parser('plan');a.add_argument('--output',required=True)
     a.add_argument('--seed',type=int,default=0)
-    a.add_argument('--suite',choices=['foundational','screening','interactions','short','extensions','controls','intratask','all'],default='foundational')
+    a.add_argument('--suite',choices=['foundational','screening','interactions','short','extensions','controls','intratask','smoke','all'],default='foundational')
     a.add_argument('--depths',type=int,nargs='+',default=[1,2,3,5])
     a=sub.add_parser('run');a.add_argument('--manifest',required=True)
     a.add_argument('--job-id',required=True);a.add_argument('--output',required=True)
@@ -197,7 +203,7 @@ def main(argv=None):
             jobs=json.loads(Path(a.manifest).read_text())['jobs']
             failures=[]
             for job in jobs:
-                if a.family and job.get('family')!=a.family:continue
+                if a.family and a.family not in job.get('families',[job.get('family')]):continue
                 try:print(run_job(a.manifest,job['job_id'],a.output,a.data_root,
                               not a.no_download,a.concurrency,a.local_evaluation),flush=True)
                 except Exception as exc:
