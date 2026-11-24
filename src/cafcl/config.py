@@ -4,6 +4,15 @@ from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 
+
+class ConfigValidationError(ValueError, AssertionError):
+    """Explicit invalid configuration error (legacy AssertionError compatibility)."""
+
+
+def _require(condition, message):
+    if not condition:
+        raise ConfigValidationError(message)
+
 @dataclass(frozen=True)
 class RunConfig:
     dataset: str = "cifar100"
@@ -141,209 +150,204 @@ class RunConfig:
     joint_checkpoint_policy: str = 'all'
 
     def validate(self):
-        if not __debug__:
-            raise RuntimeError('Python -O disables scientific validation assertions; refusing execution')
-        assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
+        _require(self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset)
         if self.batch_size<2:raise ValueError('Batch size must be at least two')
         if self.physical_batch_policy not in {'fixed_pad','variable'}:raise ValueError('Unknown physical batch policy')
         if not self.joint_plan_path:
-            assert self.batch_size == 64 or self.dataset == 'synthetic', 'Legacy production protocols use physical batch 64'
+            _require(self.batch_size == 64 or self.dataset == 'synthetic', 'Legacy production protocols use physical batch 64')
             if self.physical_batch_policy!='fixed_pad':raise ValueError('Variable physical batches require the joint protocol')
         if self.physical_batch_policy=='variable' and (self.method not in {'sgd','replay'} or (self.method=='replay' and self.replay_update_policy not in {'sampled_mixed','sampled_mixed_accumulated'})):
             raise ValueError('Variable batches require SGD or sampled Replay')
         if self.replay_class_sampling_policy not in {'distinct_first','class_uniform_with_replacement'}:raise ValueError('Unknown replay class-sampling policy')
-        assert self.num_clients >= (1 if self.joint_plan_path and self.joint_control_kind=='centralized_sequential' else 2)
-        assert 0 <= self.client_training_concurrency <= self.num_clients
-        assert self.training_augmentation in {'none','cifar_crop_flip'}
+        _require(self.num_clients >= (1 if self.joint_plan_path and self.joint_control_kind=='centralized_sequential' else 2), "Invalid configuration: self.num_clients >= (1 if self.joint_plan_path and self.joint_control_kind=='centralized_sequential' else 2)")
+        _require(0 <= self.client_training_concurrency <= self.num_clients, "Invalid configuration: 0 <= self.client_training_concurrency <= self.num_clients")
+        _require(self.training_augmentation in {'none','cifar_crop_flip'}, "Invalid configuration: self.training_augmentation in {'none','cifar_crop_flip'}")
         if self.training_augmentation != 'none':
-            assert self.dataset == 'cifar100' and self.stream_protocol and (self.scenario == 'disjoint' or (self.joint_plan_path and self.scenario=='overlap'))
-        assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
+            _require(self.dataset == 'cifar100' and self.stream_protocol and (self.scenario == 'disjoint' or (self.joint_plan_path and self.scenario=='overlap')), "Invalid configuration: self.dataset == 'cifar100' and self.stream_protocol and (self.scenario == 'disjoint' or (self.joint_plan_path and self.scenario=='overlap'))")
+        _require(self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1, "Invalid configuration: self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1")
         if self.joint_plan_path:
-            assert self.joint_control_kind in {'federated','local_only','centralized_sequential','simultaneous_access'}
-            assert self.joint_domain_mode in {'none','client_fixed','client_periodic','client_corruption'}
-            assert self.joint_checkpoint_policy in {'all','latest'}
-            assert self.joint_epoch_segments>=1
+            _require(self.joint_control_kind in {'federated','local_only','centralized_sequential','simultaneous_access'}, "Invalid configuration: self.joint_control_kind in {'federated','local_only','centralized_sequential','simultaneous_access'}")
+            _require(self.joint_domain_mode in {'none','client_fixed','client_periodic','client_corruption'}, "Invalid configuration: self.joint_domain_mode in {'none','client_fixed','client_periodic','client_corruption'}")
+            _require(self.joint_checkpoint_policy in {'all','latest'}, "Invalid configuration: self.joint_checkpoint_policy in {'all','latest'}")
+            _require(self.joint_epoch_segments>=1, "Invalid configuration: self.joint_epoch_segments>=1")
             if self.joint_epoch_segments>1:
-                assert self.joint_control_kind=='federated' and self.sample_overlap_fraction==0
-                assert self.local_tasks_per_round==1 and self.participation==1.
-            if self.joint_control_kind=='centralized_sequential':assert self.num_clients==1
+                _require(self.joint_control_kind=='federated' and self.sample_overlap_fraction==0, "Invalid configuration: self.joint_control_kind=='federated' and self.sample_overlap_fraction==0")
+                _require(self.local_tasks_per_round==1 and self.participation==1., "Invalid configuration: self.local_tasks_per_round==1 and self.participation==1.")
+            if self.joint_control_kind=='centralized_sequential':_require(self.num_clients==1, "Invalid configuration: self.num_clients==1")
             if self.joint_control_kind=='simultaneous_access':
-                assert self.sample_overlap_fraction==0 and self.replay_update_policy=='sampled_mixed'
-            assert self.joint_plan_hash and len(self.joint_plan_hash)==64
-            assert self.stream_protocol and not self.stream_client_chain
-            assert not self.stream_sync_every_batch and self.stream_overlap_kind=='none'
-            assert self.method in {'replay','sgd'} and self.aggregator=='fedavg'
-            assert self.selector=='random' and self.boundary_mode=='known'
-            assert self.pending_policy=='latest' and not self.client_heterogeneity
-            assert not self.class_order_override
-            assert not self.class_sample_fraction and not self.client_sample_skew and not self.class_imbalance_power
-            assert not self.label_noise_rate and not self.spurious_strength
-            assert self.model in {'resnet18_cifar32','test_linear','test_mlp','test_smallcnn'}
-            assert not self.gradient_diagnostics and not self.causal_diagnostics and not self.subset_diagnostics and not self.representation_diagnostics
+                _require(self.sample_overlap_fraction==0 and self.replay_update_policy=='sampled_mixed', "Invalid configuration: self.sample_overlap_fraction==0 and self.replay_update_policy=='sampled_mixed'")
+            _require(self.joint_plan_hash and len(self.joint_plan_hash)==64, "Invalid configuration: self.joint_plan_hash and len(self.joint_plan_hash)==64")
+            _require(self.stream_protocol and not self.stream_client_chain, "Invalid configuration: self.stream_protocol and not self.stream_client_chain")
+            _require(not self.stream_sync_every_batch and self.stream_overlap_kind=='none', "Invalid configuration: not self.stream_sync_every_batch and self.stream_overlap_kind=='none'")
+            _require(self.method in {'replay','sgd'} and self.aggregator=='fedavg', "Invalid configuration: self.method in {'replay','sgd'} and self.aggregator=='fedavg'")
+            _require(self.selector=='random' and self.boundary_mode=='known', "Invalid configuration: self.selector=='random' and self.boundary_mode=='known'")
+            _require(self.pending_policy=='latest' and not self.client_heterogeneity, "Invalid configuration: self.pending_policy=='latest' and not self.client_heterogeneity")
+            _require(not self.class_order_override, "Invalid configuration: not self.class_order_override")
+            _require(not self.class_sample_fraction and not self.client_sample_skew and not self.class_imbalance_power, "Invalid configuration: not self.class_sample_fraction and not self.client_sample_skew and not self.class_imbalance_power")
+            _require(not self.label_noise_rate and not self.spurious_strength, "Invalid configuration: not self.label_noise_rate and not self.spurious_strength")
+            _require(self.model in {'resnet18_cifar32','test_linear','test_mlp','test_smallcnn'}, "Invalid configuration: self.model in {'resnet18_cifar32','test_linear','test_mlp','test_smallcnn'}")
+            _require(not self.gradient_diagnostics and not self.causal_diagnostics and not self.subset_diagnostics and not self.representation_diagnostics, "Invalid configuration: not self.gradient_diagnostics and not self.causal_diagnostics and not self.subset_diagnostics and not self.representation_diagnostics")
         else:
-            assert not self.joint_plan_hash and not self.joint_local_evaluation and not self.joint_allow_partial_coverage and self.joint_control_kind=='federated' and self.joint_domain_mode=='none' and self.joint_epoch_segments==1 and not self.joint_mechanistic_probes and self.joint_checkpoint_policy=='all'
+            _require(not self.joint_plan_hash and not self.joint_local_evaluation and not self.joint_allow_partial_coverage and self.joint_control_kind=='federated' and self.joint_domain_mode=='none' and self.joint_epoch_segments==1 and not self.joint_mechanistic_probes and self.joint_checkpoint_policy=='all', "Invalid configuration: not self.joint_plan_hash and not self.joint_local_evaluation and not self.joint_allow_partial_coverage and self.joint_control_kind=='federated' and self.joint_domain_mode=='none' and self.joint_epoch_segments==1 and not self.joint_mechanistic_probes and self.joint_checkpoint_policy=='all'")
         if self.stream_client_chain:
-            assert self.stream_protocol and self.class_pair_protocol == 'strict'
-            assert self.num_clients == 5 and self.classes_per_local_task == 2
-            assert self.local_tasks_per_round == 1 and self.stream_recurrence_rounds == 0
-            assert self.stream_overlap_kind == 'none' and self.stream_overlap_fraction == 0
-            assert self.sample_overlap_fraction == 0
-            assert self.stream_terminal_flush, 'Client-chain streams require a final archive/model flush'
-        assert self.stream_overlap_kind in {'none','intra_same_round','intra_cross_round','inter_same_round','inter_cross_round','combined'}
-        assert 0 <= self.stream_overlap_fraction <= 1
-        assert self.stream_recurrence_rounds >= 0 and self.offline_duration_rounds >= 0
-        assert self.stream_offline_policy in {'random','rotate_once'}
-        assert self.stream_partial_batch_policy in {'include_padding','mask_padding_loss'}
+            _require(self.stream_protocol and self.class_pair_protocol == 'strict', "Invalid configuration: self.stream_protocol and self.class_pair_protocol == 'strict'")
+            _require(self.num_clients == 5 and self.classes_per_local_task == 2, "Invalid configuration: self.num_clients == 5 and self.classes_per_local_task == 2")
+            _require(self.local_tasks_per_round == 1 and self.stream_recurrence_rounds == 0, "Invalid configuration: self.local_tasks_per_round == 1 and self.stream_recurrence_rounds == 0")
+            _require(self.stream_overlap_kind == 'none' and self.stream_overlap_fraction == 0, "Invalid configuration: self.stream_overlap_kind == 'none' and self.stream_overlap_fraction == 0")
+            _require(self.sample_overlap_fraction == 0, "Invalid configuration: self.sample_overlap_fraction == 0")
+            _require(self.stream_terminal_flush, 'Client-chain streams require a final archive/model flush')
+        _require(self.stream_overlap_kind in {'none','intra_same_round','intra_cross_round','inter_same_round','inter_cross_round','combined'}, "Invalid configuration: self.stream_overlap_kind in {'none','intra_same_round','intra_cross_round','inter_same_round','inter_cross_round','combined'}")
+        _require(0 <= self.stream_overlap_fraction <= 1, "Invalid configuration: 0 <= self.stream_overlap_fraction <= 1")
+        _require(self.stream_recurrence_rounds >= 0 and self.offline_duration_rounds >= 0, "Invalid configuration: self.stream_recurrence_rounds >= 0 and self.offline_duration_rounds >= 0")
+        _require(self.stream_offline_policy in {'random','rotate_once'}, "Invalid configuration: self.stream_offline_policy in {'random','rotate_once'}")
+        _require(self.stream_partial_batch_policy in {'include_padding','mask_padding_loss'}, "Invalid configuration: self.stream_partial_batch_policy in {'include_padding','mask_padding_loss'}")
         if self.stream_partial_batch_policy == 'mask_padding_loss':
             if self.replay_ratio != 1.0:
                 raise ValueError('Masked partial-batch replay currently supports only ratio 1.0')
-            assert self.stream_sync_every_batch and self.stream_client_chain and self.stream_protocol
-            assert self.method == 'replay' and self.replay_update_policy in {'sampled_mixed','sampled_mixed_accumulated'}
+            _require(self.stream_sync_every_batch and self.stream_client_chain and self.stream_protocol, "Invalid configuration: self.stream_sync_every_batch and self.stream_client_chain and self.stream_protocol")
+            _require(self.method == 'replay' and self.replay_update_policy in {'sampled_mixed','sampled_mixed_accumulated'}, "Invalid configuration: self.method == 'replay' and self.replay_update_policy in {'sampled_mixed','sampled_mixed_accumulated'}")
         if not self.audit_test_every_sync and not self.evaluate_final_only:
             raise ValueError('Disabling per-sync test audit requires evaluate_final_only')
         if self.evaluate_final_only:
-            assert self.selector in {'random','fixed','round_robin'}, 'Test split cannot guide online client selection'
-            assert not self.prepost_diagnostics and not self.gradient_diagnostics
+            _require(self.selector in {'random','fixed','round_robin'}, 'Test split cannot guide online client selection')
+            _require(not self.prepost_diagnostics and not self.gradient_diagnostics, "Invalid configuration: not self.prepost_diagnostics and not self.gradient_diagnostics")
         if self.stream_protocol:
-            assert self.dataset in {'cifar100','synthetic'}
-            assert self.learning_setting == 'task_il' or (self.joint_plan_path and self.learning_setting=='class_il'), 'Legacy streams use task-specific heads'
-            assert self.class_pair_protocol == 'strict'
-            assert not self.full_sync and not self.reset_memory_on_sync, 'Offline clients must not receive server model weights or lose memory'
+            _require(self.dataset in {'cifar100','synthetic'}, "Invalid configuration: self.dataset in {'cifar100','synthetic'}")
+            _require(self.learning_setting == 'task_il' or (self.joint_plan_path and self.learning_setting=='class_il'), 'Legacy streams use task-specific heads')
+            _require(self.class_pair_protocol == 'strict', "Invalid configuration: self.class_pair_protocol == 'strict'")
+            _require(not self.full_sync and not self.reset_memory_on_sync, 'Offline clients must not receive server model weights or lose memory')
             # Canonical methods update all classifier rows with the same
             # aggregation rule. Classwise fusion is only for custom methods.
-            assert not self.class_subset, 'CIFAR-100 subset is insufficient for default 10-client curriculum'
-            assert not self.holders_override and not self.arrival_lag_by_client
-            assert not self.stage_participation and not self.participation_overrides
-            assert not self.fork_source_job, 'Legacy fork checkpoints cannot be used with new streams'
-            if self.offline_duration_rounds:assert self.selector == 'random'
+            _require(not self.class_subset, 'CIFAR-100 subset is insufficient for default 10-client curriculum')
+            _require(not self.holders_override and not self.arrival_lag_by_client, "Invalid configuration: not self.holders_override and not self.arrival_lag_by_client")
+            _require(not self.stage_participation and not self.participation_overrides, "Invalid configuration: not self.stage_participation and not self.participation_overrides")
+            _require(not self.fork_source_job, 'Legacy fork checkpoints cannot be used with new streams')
+            if self.offline_duration_rounds:_require(self.selector == 'random', "Invalid configuration: self.selector == 'random'")
             if self.stream_offline_policy == 'rotate_once':
-                assert self.offline_duration_rounds == 0 and self.selector == 'random'
-                assert (self.stream_overlap_kind == 'none' and not self.stream_client_chain
-                        and self.stream_recurrence_rounds == 0)
-                assert self.participation == 1 - 1/self.num_clients
-                assert self.stream_terminal_flush
-        assert self.class_pair_protocol in {'compatible','strict'}
-        assert self.rounds_per_stage >= 1 and self.stages >= 1
-        assert self.epochs >= 1 and self.lr > 0
-        assert 0 < self.participation <= 1
-        assert self.selector in {"feature_max", "feature_min", "forgetting", "gem_informed", "history_adaptive", "gradient_align", "gradient_conflict", "random", "fixed", "round_robin", "coverage", "old", "new", "least_recent", "related", "recurrence", "overlap", "balanced", "diversity", "fairness", "stochastic_related", "historical_coverage"}
-        assert self.method in {"si", "sgd", "replay", "agem", "gem", "ewc", "er_ace", "der", "derpp", "mas", "lwf", "native_glfc", "native_lga", "native_feat"}
-        assert self.aggregator in {"class_balanced", "inverse_participation", "conflict_aware", "retention_aware", "conflict_projection", "fedavg", "uniform", "fedadam", "fedavgm"}
-        assert self.scenario in {"stationary", "gradual_drift", "shifted_recurrence", "task_incremental", "disjoint", "iid", "overlap", "related", "recurrence", "asynchronous", "mixed", "domain", "non_iid"}
+                _require(self.offline_duration_rounds == 0 and self.selector == 'random', "Invalid configuration: self.offline_duration_rounds == 0 and self.selector == 'random'")
+                _require((self.stream_overlap_kind == 'none' and not self.stream_client_chain and self.stream_recurrence_rounds == 0), "Invalid configuration: (self.stream_overlap_kind == 'none' and not self.stream_client_chain and self.stream_recurrence_rounds == 0)")
+                _require(self.participation == 1 - 1/self.num_clients, "Invalid configuration: self.participation == 1 - 1/self.num_clients")
+                _require(self.stream_terminal_flush, "Invalid configuration: self.stream_terminal_flush")
+        _require(self.class_pair_protocol in {'compatible','strict'}, "Invalid configuration: self.class_pair_protocol in {'compatible','strict'}")
+        _require(self.rounds_per_stage >= 1 and self.stages >= 1, "Invalid configuration: self.rounds_per_stage >= 1 and self.stages >= 1")
+        _require(self.epochs >= 1 and self.lr > 0, "Invalid configuration: self.epochs >= 1 and self.lr > 0")
+        _require(0 < self.participation <= 1, "Invalid configuration: 0 < self.participation <= 1")
+        _require(self.selector in {"feature_max", "feature_min", "forgetting", "gem_informed", "history_adaptive", "gradient_align", "gradient_conflict", "random", "fixed", "round_robin", "coverage", "old", "new", "least_recent", "related", "recurrence", "overlap", "balanced", "diversity", "fairness", "stochastic_related", "historical_coverage"}, "Invalid configuration: self.selector in {\"feature_max\", \"feature_min\", \"forgetting\", \"gem_informed\", \"history_adaptive\", \"gradient_align\", \"gradient_conflict\", \"random\", \"fixed\", \"round_robin\", \"coverage\", \"old\", \"new\", \"least_recent\", \"related\", \"recurrence\", \"overlap\", \"balanced\", \"diversity\", \"fairness\", \"stochastic_related\", \"historical_coverage\"}")
+        _require(self.method in {"si", "sgd", "replay", "agem", "gem", "ewc", "er_ace", "der", "derpp", "mas", "lwf", "native_glfc", "native_lga", "native_feat"}, "Invalid configuration: self.method in {\"si\", \"sgd\", \"replay\", \"agem\", \"gem\", \"ewc\", \"er_ace\", \"der\", \"derpp\", \"mas\", \"lwf\", \"native_glfc\", \"native_lga\", \"native_feat\"}")
+        _require(self.aggregator in {"class_balanced", "inverse_participation", "conflict_aware", "retention_aware", "conflict_projection", "fedavg", "uniform", "fedadam", "fedavgm"}, "Invalid configuration: self.aggregator in {\"class_balanced\", \"inverse_participation\", \"conflict_aware\", \"retention_aware\", \"conflict_projection\", \"fedavg\", \"uniform\", \"fedadam\", \"fedavgm\"}")
+        _require(self.scenario in {"stationary", "gradual_drift", "shifted_recurrence", "task_incremental", "disjoint", "iid", "overlap", "related", "recurrence", "asynchronous", "mixed", "domain", "non_iid"}, "Invalid configuration: self.scenario in {\"stationary\", \"gradual_drift\", \"shifted_recurrence\", \"task_incremental\", \"disjoint\", \"iid\", \"overlap\", \"related\", \"recurrence\", \"asynchronous\", \"mixed\", \"domain\", \"non_iid\"}")
         if self.dataset == 'synthetic':
-            assert self.model in {'test_linear','test_mlp','test_smallcnn','vit_base_patch16_32','resnet18_cifar32'}
+            _require(self.model in {'test_linear','test_mlp','test_smallcnn','vit_base_patch16_32','resnet18_cifar32'}, "Invalid configuration: self.model in {'test_linear','test_mlp','test_smallcnn','vit_base_patch16_32','resnet18_cifar32'}")
         else:
             from .models import MODEL_IDS
-            assert self.model in MODEL_IDS, 'Research requires an explicitly registered native 32x32 research backbone'
-        assert self.memory_per_class >= 0
-        assert 0 <= self.replay_reservoir_fraction <= 1, 'Reservoir fraction must be within [0,1]'
+            _require(self.model in MODEL_IDS, 'Research requires an explicitly registered native 32x32 research backbone')
+        _require(self.memory_per_class >= 0, "Invalid configuration: self.memory_per_class >= 0")
+        _require(0 <= self.replay_reservoir_fraction <= 1, 'Reservoir fraction must be within [0,1]')
         if self.replay_reservoir_fraction:
-            assert self.method in {'replay','native_glfc','native_lga','native_feat'}, 'Per-class reservoir fraction applies to replay-capable methods only'
+            _require(self.method in {'replay','native_glfc','native_lga','native_feat'}, 'Per-class reservoir fraction applies to replay-capable methods only')
         if self.dataset=='cifar100':
-            assert self.stream_protocol and self.class_pair_protocol=='strict', (
-                'Every active CIFAR-100 job must use the strict class-pair stream')
-            if not self.joint_plan_path:assert self.share_continual_state, 'Legacy CIFAR-100 requires synchronized CL state'
-            assert not self.reset_memory_on_sync, 'Synchronized history must remain available'
-            assert not (self.full_sync and self.participation<1), 'Hidden clients cannot receive server broadcasts'
-        if self.stream_protocol and not self.joint_plan_path:assert self.share_continual_state, 'Legacy streams synchronize method-specific CL state'
+            _require(self.stream_protocol and self.class_pair_protocol=='strict', ( 'Every active CIFAR-100 job must use the strict class-pair stream'))
+            if not self.joint_plan_path:_require(self.share_continual_state, 'Legacy CIFAR-100 requires synchronized CL state')
+            _require(not self.reset_memory_on_sync, 'Synchronized history must remain available')
+            _require(not (self.full_sync and self.participation<1), 'Hidden clients cannot receive server broadcasts')
+        if self.stream_protocol and not self.joint_plan_path:_require(self.share_continual_state, 'Legacy streams synchronize method-specific CL state')
         if self.server_memory_per_class<0:raise ValueError('Negative server replay capacity')
         if self.server_memory_per_class and not self.share_continual_state:raise ValueError('Server replay cap requires a shared archive')
         if self.stale_update_policy not in {'damped_delta','undamped_delta','direct_model'}:raise ValueError('Unknown stale update policy')
         if self.aggregation_weight_policy not in {'fresh_examples','optimizer_steps'}:raise ValueError('Unknown aggregation weight policy')
         if self.aggregation_weight_policy!='fresh_examples' and (not self.joint_plan_path or self.aggregator!='fedavg'):raise ValueError('Optimizer-step weighting is a joint FedAvg control')
-        assert self.causal_max_clients >= 1 and self.checkpoint_every >= 0
-        assert self.participation_schedule in {"feedback", "stage", "constant", "increasing", "decreasing", "alternating"}
-        assert self.pending_policy in {"latest", "retain_all", "bounded"}
-        assert self.max_pending_samples >= 0
-        assert self.replay_ratio >= 0 and self.der_alpha >= 0 and self.der_beta >= 0
-        assert self.replay_update_policy in {"exhaustive", "sampled_mixed", "sampled_mixed_accumulated", "sampled_separate"}
-        assert self.replay_bn_policy in {"batch_update", "freeze_replay_buffers"}
-        assert self.replay_buffer_order_policy in {"archive_order", "shuffled_each_pass"}
-        assert self.replay_padding_policy in {"repeat_chunk", "archive_sample"}
-        assert 0 <= self.label_noise_rate <= 1 and self.spurious_strength >= 0
-        assert 0 <= self.feedback_threshold <= 1 and self.feedback_gain >= 0
+        _require(self.causal_max_clients >= 1 and self.checkpoint_every >= 0, "Invalid configuration: self.causal_max_clients >= 1 and self.checkpoint_every >= 0")
+        _require(self.participation_schedule in {"feedback", "stage", "constant", "increasing", "decreasing", "alternating"}, "Invalid configuration: self.participation_schedule in {\"feedback\", \"stage\", \"constant\", \"increasing\", \"decreasing\", \"alternating\"}")
+        _require(self.pending_policy in {"latest", "retain_all", "bounded"}, "Invalid configuration: self.pending_policy in {\"latest\", \"retain_all\", \"bounded\"}")
+        _require(self.max_pending_samples >= 0, "Invalid configuration: self.max_pending_samples >= 0")
+        _require(self.replay_ratio >= 0 and self.der_alpha >= 0 and self.der_beta >= 0, "Invalid configuration: self.replay_ratio >= 0 and self.der_alpha >= 0 and self.der_beta >= 0")
+        _require(self.replay_update_policy in {"exhaustive", "sampled_mixed", "sampled_mixed_accumulated", "sampled_separate"}, "Invalid configuration: self.replay_update_policy in {\"exhaustive\", \"sampled_mixed\", \"sampled_mixed_accumulated\", \"sampled_separate\"}")
+        _require(self.replay_bn_policy in {"batch_update", "freeze_replay_buffers"}, "Invalid configuration: self.replay_bn_policy in {\"batch_update\", \"freeze_replay_buffers\"}")
+        _require(self.replay_buffer_order_policy in {"archive_order", "shuffled_each_pass"}, "Invalid configuration: self.replay_buffer_order_policy in {\"archive_order\", \"shuffled_each_pass\"}")
+        _require(self.replay_padding_policy in {"repeat_chunk", "archive_sample"}, "Invalid configuration: self.replay_padding_policy in {\"repeat_chunk\", \"archive_sample\"}")
+        _require(0 <= self.label_noise_rate <= 1 and self.spurious_strength >= 0, "Invalid configuration: 0 <= self.label_noise_rate <= 1 and self.spurious_strength >= 0")
+        _require(0 <= self.feedback_threshold <= 1 and self.feedback_gain >= 0, "Invalid configuration: 0 <= self.feedback_threshold <= 1 and self.feedback_gain >= 0")
         if self.label_noise_rate:
             # No privileged clean-label memory, class-balanced server weights
             # or simulator label-aware client selection in the noise baseline.
-            assert self.method=='sgd' and self.selector=='random'
-            assert self.aggregator=='fedavg' 
-        assert self.importance_samples_per_experience >= 1
-        assert self.regularization_strength >= 0 and self.fedprox_mu >= 0
-        assert self.server_lr > 0 and 0 <= self.server_beta1 < 1 and 0 <= self.server_beta2 < 1
-        assert self.fedadam_epsilon > 0
-        assert self.memory_policy in {"random_per_class", "recent_per_class"}
-        assert self.local_optimizer in {"sgd"}
-        assert self.optimizer_state_policy in {"reset", "persist", "reset_on_sync", "reset_on_task"}
+            _require(self.method=='sgd' and self.selector=='random', "Invalid configuration: self.method=='sgd' and self.selector=='random'")
+            _require(self.aggregator=='fedavg', "Invalid configuration: self.aggregator=='fedavg'")
+        _require(self.importance_samples_per_experience >= 1, "Invalid configuration: self.importance_samples_per_experience >= 1")
+        _require(self.regularization_strength >= 0 and self.fedprox_mu >= 0, "Invalid configuration: self.regularization_strength >= 0 and self.fedprox_mu >= 0")
+        _require(self.server_lr > 0 and 0 <= self.server_beta1 < 1 and 0 <= self.server_beta2 < 1, "Invalid configuration: self.server_lr > 0 and 0 <= self.server_beta1 < 1 and 0 <= self.server_beta2 < 1")
+        _require(self.fedadam_epsilon > 0, "Invalid configuration: self.fedadam_epsilon > 0")
+        _require(self.memory_policy in {"random_per_class", "recent_per_class"}, "Invalid configuration: self.memory_policy in {\"random_per_class\", \"recent_per_class\"}")
+        _require(self.local_optimizer in {"sgd"}, "Invalid configuration: self.local_optimizer in {\"sgd\"}")
+        _require(self.optimizer_state_policy in {"reset", "persist", "reset_on_sync", "reset_on_task"}, "Invalid configuration: self.optimizer_state_policy in {\"reset\", \"persist\", \"reset_on_sync\", \"reset_on_task\"}")
         if self.optimizer_state_policy in {'reset_on_sync','reset_on_task'} and not self.joint_plan_path:
             raise ValueError('New optimizer-reset controls require joint protocol')
-        assert self.boundary_mode in {"known", "hidden"}
-        assert self.learning_setting == 'task_il' or (self.joint_plan_path and self.learning_setting=='class_il'), 'Class-IL requires the explicit joint protocol'
+        _require(self.boundary_mode in {"known", "hidden"}, "Invalid configuration: self.boundary_mode in {\"known\", \"hidden\"}")
+        _require(self.learning_setting == 'task_il' or (self.joint_plan_path and self.learning_setting=='class_il'), 'Class-IL requires the explicit joint protocol')
         if self.learning_setting=='task_il':
-            assert self.class_pair_protocol=='strict'
-            assert self.boundary_mode=='known'
+            _require(self.class_pair_protocol=='strict', "Invalid configuration: self.class_pair_protocol=='strict'")
+            _require(self.boundary_mode=='known', "Invalid configuration: self.boundary_mode=='known'")
             if self.method in {'native_glfc','native_lga','native_feat'}:
                 raise ValueError(
                     f'{self.method} has no task-head adaptation; refusing to report the generic Task-IL fallback as that method')
         if self.learning_setting=='domain_il':
-            assert self.scenario in {"domain","gradual_drift"}
+            _require(self.scenario in {"domain","gradual_drift"}, "Invalid configuration: self.scenario in {\"domain\",\"gradual_drift\"}")
         if self.learning_setting=='boundary_free':
-            assert self.boundary_mode=='hidden' 
+            _require(self.boundary_mode=='hidden', "Invalid configuration: self.boundary_mode=='hidden'")
         if self.boundary_mode=='hidden':
             # Stage-dependent consolidation would leak hidden task boundaries.
-            assert self.method in {"sgd","replay","gem","agem","er_ace","der","derpp","native_glfc","native_lga","native_feat"}
-            assert self.gem_grouping!='stage' 
-        assert self.gem_grouping in {"class", "stage", "all"}
-        assert 0 <= self.momentum < 1 and self.weight_decay >= 0
-        assert self.si_xi > 0 and self.selection_temperature > 0
-        assert self.relation in {"natural", "related", "unrelated"}
-        assert self.recurrence_client_policy in {"same", "different"}
-        assert self.recurrence_round_delay >= 0 and self.recurrence_period >= 0 and self.recurrence_repeats >= 1
-        assert 0 <= self.sample_overlap_fraction <= 1
-        assert self.client_sample_skew >= 0 and self.class_imbalance_power >= 0
-        assert not self.stage_participation or (len(self.stage_participation) == self.stages and
-                all(0 < rate <= 1 for rate in self.stage_participation))
-        assert len(set(self.class_subset)) == len(self.class_subset)
-        assert len(set(self.class_order_override)) == len(self.class_order_override)
+            _require(self.method in {"sgd","replay","gem","agem","er_ace","der","derpp","native_glfc","native_lga","native_feat"}, "Invalid configuration: self.method in {\"sgd\",\"replay\",\"gem\",\"agem\",\"er_ace\",\"der\",\"derpp\",\"native_glfc\",\"native_lga\",\"native_feat\"}")
+            _require(self.gem_grouping!='stage', "Invalid configuration: self.gem_grouping!='stage'")
+        _require(self.gem_grouping in {"class", "stage", "all"}, "Invalid configuration: self.gem_grouping in {\"class\", \"stage\", \"all\"}")
+        _require(0 <= self.momentum < 1 and self.weight_decay >= 0, "Invalid configuration: 0 <= self.momentum < 1 and self.weight_decay >= 0")
+        _require(self.si_xi > 0 and self.selection_temperature > 0, "Invalid configuration: self.si_xi > 0 and self.selection_temperature > 0")
+        _require(self.relation in {"natural", "related", "unrelated"}, "Invalid configuration: self.relation in {\"natural\", \"related\", \"unrelated\"}")
+        _require(self.recurrence_client_policy in {"same", "different"}, "Invalid configuration: self.recurrence_client_policy in {\"same\", \"different\"}")
+        _require(self.recurrence_round_delay >= 0 and self.recurrence_period >= 0 and self.recurrence_repeats >= 1, "Invalid configuration: self.recurrence_round_delay >= 0 and self.recurrence_period >= 0 and self.recurrence_repeats >= 1")
+        _require(0 <= self.sample_overlap_fraction <= 1, "Invalid configuration: 0 <= self.sample_overlap_fraction <= 1")
+        _require(self.client_sample_skew >= 0 and self.class_imbalance_power >= 0, "Invalid configuration: self.client_sample_skew >= 0 and self.class_imbalance_power >= 0")
+        _require(not self.stage_participation or (len(self.stage_participation) == self.stages and all(0 < rate <= 1 for rate in self.stage_participation)), "Invalid configuration: not self.stage_participation or (len(self.stage_participation) == self.stages and all(0 < rate <= 1 for rate in self.stage_participation))")
+        _require(len(set(self.class_subset)) == len(self.class_subset), "Invalid configuration: len(set(self.class_subset)) == len(self.class_subset)")
+        _require(len(set(self.class_order_override)) == len(self.class_order_override), "Invalid configuration: len(set(self.class_order_override)) == len(self.class_order_override)")
         for cls,clients in self.holders_override.items():
-            assert str(int(cls)) == str(cls) and clients
-            assert len(set(clients)) == len(clients)
-            assert all(0 <= c < self.num_clients for c in clients)
+            _require(str(int(cls)) == str(cls) and clients, "Invalid configuration: str(int(cls)) == str(cls) and clients")
+            _require(len(set(clients)) == len(clients), "Invalid configuration: len(set(clients)) == len(clients)")
+            _require(all(0 <= c < self.num_clients for c in clients), "Invalid configuration: all(0 <= c < self.num_clients for c in clients)")
         for cls,fraction in self.class_sample_fraction.items():
-            assert str(int(cls)) == str(cls) and 0 < fraction <= 1
+            _require(str(int(cls)) == str(cls) and 0 < fraction <= 1, "Invalid configuration: str(int(cls)) == str(cls) and 0 < fraction <= 1")
         for cls,weights in self.class_holder_weights.items():
-            assert str(int(cls)) == str(cls) and weights
-            assert all(w >= 0 for w in weights) and sum(weights)>0
+            _require(str(int(cls)) == str(cls) and weights, "Invalid configuration: str(int(cls)) == str(cls) and weights")
+            _require(all(w >= 0 for w in weights) and sum(weights)>0, "Invalid configuration: all(w >= 0 for w in weights) and sum(weights)>0")
             if cls in self.holders_override:
-                assert len(weights)==len(self.holders_override[cls])
+                _require(len(weights)==len(self.holders_override[cls]), "Invalid configuration: len(weights)==len(self.holders_override[cls])")
         for rnd,chosen in self.participation_overrides.items():
-            assert str(int(rnd)) == str(rnd) and int(rnd)>=0
-            assert len(set(chosen))==len(chosen)
-            assert all(0 <= cid < self.num_clients for cid in chosen)
+            _require(str(int(rnd)) == str(rnd) and int(rnd)>=0, "Invalid configuration: str(int(rnd)) == str(rnd) and int(rnd)>=0")
+            _require(len(set(chosen))==len(chosen), "Invalid configuration: len(set(chosen))==len(chosen)")
+            _require(all(0 <= cid < self.num_clients for cid in chosen), "Invalid configuration: all(0 <= cid < self.num_clients for cid in chosen)")
         for cid,lag in self.arrival_lag_by_client.items():
-            assert str(int(cid))==str(cid) and 0<=int(cid)<self.num_clients
-            assert isinstance(lag,int) and lag>=0
-        assert self.force_target in {"none", "include", "exclude"}
-        assert self.intervention_round >= -1
-        assert 0 <= self.overlap <= 1
-        assert self.dirichlet_alpha > 0
+            _require(str(int(cid))==str(cid) and 0<=int(cid)<self.num_clients, "Invalid configuration: str(int(cid))==str(cid) and 0<=int(cid)<self.num_clients")
+            _require(isinstance(lag,int) and lag>=0, "Invalid configuration: isinstance(lag,int) and lag>=0")
+        _require(self.force_target in {"none", "include", "exclude"}, "Invalid configuration: self.force_target in {\"none\", \"include\", \"exclude\"}")
+        _require(self.intervention_round >= -1, "Invalid configuration: self.intervention_round >= -1")
+        _require(0 <= self.overlap <= 1, "Invalid configuration: 0 <= self.overlap <= 1")
+        _require(self.dirichlet_alpha > 0, "Invalid configuration: self.dirichlet_alpha > 0")
         if self.fork_source_job:
-            assert self.job_id and self.job_id != self.fork_source_job
-            assert self.fork_checkpoint_round >= 1
-            assert self.force_target != 'none'
-            assert self.intervention_round >= self.fork_checkpoint_round
-            assert self.intervention_round < self.stages*self.rounds_per_stage
+            _require(self.job_id and self.job_id != self.fork_source_job, "Invalid configuration: self.job_id and self.job_id != self.fork_source_job")
+            _require(self.fork_checkpoint_round >= 1, "Invalid configuration: self.fork_checkpoint_round >= 1")
+            _require(self.force_target != 'none', "Invalid configuration: self.force_target != 'none'")
+            _require(self.intervention_round >= self.fork_checkpoint_round, "Invalid configuration: self.intervention_round >= self.fork_checkpoint_round")
+            _require(self.intervention_round < self.stages*self.rounds_per_stage, "Invalid configuration: self.intervention_round < self.stages*self.rounds_per_stage")
         if self.force_target != "none":
-            assert 0 <= self.target_client < self.num_clients
-            assert round(self.num_clients * self.participation) < self.num_clients or self.force_target == "include"
+            _require(0 <= self.target_client < self.num_clients, "Invalid configuration: 0 <= self.target_client < self.num_clients")
+            _require(round(self.num_clients * self.participation) < self.num_clients or self.force_target == "include", "Invalid configuration: round(self.num_clients * self.participation) < self.num_clients or self.force_target == \"include\"")
         if self.dataset == "cifar100_20":
-            assert self.stages <= 20 and not self.class_subset
+            _require(self.stages <= 20 and not self.class_subset, "Invalid configuration: self.stages <= 20 and not self.class_subset")
         if self.class_subset:
-            assert self.dataset == "cifar100" and len(self.class_subset) >= self.stages
-            assert all(0 <= x < 100 for x in self.class_subset)
+            _require(self.dataset == "cifar100" and len(self.class_subset) >= self.stages, "Invalid configuration: self.dataset == \"cifar100\" and len(self.class_subset) >= self.stages")
+            _require(all(0 <= x < 100 for x in self.class_subset), "Invalid configuration: all(0 <= x < 100 for x in self.class_subset)")
         if self.dataset == "cifar10":
-            assert self.stages <= 10
+            _require(self.stages <= 10, "Invalid configuration: self.stages <= 10")
         if self.dataset == "cifar100":
-            assert self.stages <= (len(self.class_subset) or 100)
+            _require(self.stages <= (len(self.class_subset) or 100), "Invalid configuration: self.stages <= (len(self.class_subset) or 100)")
         return self
 
     def to_dict(self):

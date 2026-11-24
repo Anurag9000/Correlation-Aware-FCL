@@ -61,18 +61,27 @@ def audit_job(job,root):
             if json.loads(json.dumps(expected.to_dict()))!=config:
                 raise ValueError('Full execution configuration differs from declared manifest job')
             receipts=sorted((directory/'launch_receipts').glob('*.json'))
+            if not receipts:raise ValueError('Missing mandatory launch receipts')
             for launch in receipts:
                 record=json.loads(launch.read_text())
-                if record['config_signature']!=expected.signature() or record['plan_hash']!=job['plan_hash']:
+                if (record['config_signature']!=expected.signature() or record['plan_hash']!=job['plan_hash']
+                        or record.get('job_id')!=job['job_id'] or not record.get('git_commit')
+                        or record.get('tracked_worktree_dirty') is not False):
                     raise ValueError('Launch receipt configuration mismatch')
             identity_path=directory/'run_identity.json'
-            if identity_path.exists():
-                identity=json.loads(identity_path.read_text())
-                revisions={json.loads(p.read_text()).get('git_commit') for p in receipts}
-                if revisions and revisions!={identity['runtime'].get('git_revision')}:
-                    raise ValueError('Run identity and launch revisions differ')
+            if not identity_path.is_file():raise ValueError('Missing mandatory run identity')
+            identity=json.loads(identity_path.read_text())
+            revisions={json.loads(p.read_text()).get('git_commit') for p in receipts}
+            if revisions!={identity['runtime'].get('git_revision')}:
+                raise ValueError('Run identity and launch revisions differ')
+            for key in ('source_sha256','dependencies','tracked_diff_sha256'):
+                if not identity['runtime'].get(key):raise ValueError('Incomplete runtime identity: '+key)
+            if not identity.get('dataset') or not identity.get('curriculum_sha256'):
+                raise ValueError('Incomplete data or curriculum identity')
             history=json.loads((directory/'metrics.json').read_text())
             if len(history)!=len(plan['intervals']):raise ValueError('Incomplete metrics')
+            if any(not r.get('sync_accuracy_report',{}).get('artifact_sha256') for r in history):
+                raise ValueError('Missing mandatory per-sync artifact checksum receipts')
             assert_sync_reports_complete(directory,history)
             from .knowledge_audit import audit_knowledge
             ledger=audit_knowledge(directory,plan)
@@ -95,7 +104,9 @@ def audit_job(job,root):
                 if {x['occurrence_id'] for x in record['local_occurrences']}!=set(r['occurrences']):
                     raise ValueError('Executed occurrence mismatch')
             if not (directory/'model_final.pt').exists():raise ValueError('Missing final model')
-            json.loads((directory/'summary.json').read_text())
+            summary=json.loads((directory/'summary.json').read_text())
+            if summary.get('final_metrics')!=history[-1] or summary.get('job_id')!=job['job_id']:
+                raise ValueError('Summary differs from authoritative terminal metrics')
             row['status']='artifact_verified'
             sync=directory/'per_sync_accuracy'/f'sync_{len(history):03d}.json'
             terminal=json.loads(sync.read_text())

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import json
+from hashlib import sha256
 from collections import Counter
 from pathlib import Path
 
@@ -177,7 +178,8 @@ def render_sync_report(run_dir, *, round_number, model_version, num_clients,
              f'Online clients {list(selected_clients)}',
              fontsize=9,color='#374862')
     fig.savefig(root/(stem+'.png'),dpi=130,facecolor=fig.get_facecolor())
-    return {'stem':stem,'relative_dir':'per_sync_accuracy',
+    artifact_sha256={ext:sha256((root/(stem+ext)).read_bytes()).hexdigest() for ext in ('.json','.csv','.md','.png')}
+    return {'stem':stem,'relative_dir':'per_sync_accuracy','artifact_sha256':artifact_sha256,
             'test_accuracy':accuracy if report_split=='test' else None,'seen_class_count':len(seen),
             'report_split':report_split,
             'never_predicted_classes':len(zero_labels)}
@@ -215,6 +217,44 @@ def assert_sync_reports_complete(run_dir, round_metrics):
                 saved.get('integrated_only_test_accuracy')!=metrics.get(
                     'per_sync_server_integrated_only_accuracy')):
             raise RuntimeError(f'Integrated-only per-sync accuracy mismatch: {stem}')
+        receipt=metrics.get('sync_accuracy_report',{}).get('artifact_sha256')
+        if receipt is not None:
+            extensions=('.json','.csv','.md','.png')
+            if set(receipt)!=set(extensions):raise RuntimeError(f'Incomplete artifact checksum receipt: {stem}')
+            for ext in extensions:
+                if sha256((root/(stem+ext)).read_bytes()).hexdigest()!=receipt[ext]:
+                    raise RuntimeError(f'Per-sync artifact checksum mismatch: {stem}{ext}')
+            split=saved['report_split']
+            if split not in ('validation','test'):raise RuntimeError('Invalid report split')
+            accuracy=saved[split+'_accuracy']
+            with (root/(stem+'.csv')).open(newline='') as handle:
+                rows=list(csv.DictReader(handle))
+            expected={}
+            for entry in saved['entries']:
+                for cls in entry['classes']:
+                    key=(entry['client_id'],entry['first_round'],cls)
+                    if key in expected:raise RuntimeError('Duplicate report key')
+                    expected[key]=entry['per_class'][str(cls)]
+            actual={}
+            for row in rows:
+                key=(int(row['client_id']),int(row['introduced_sync']),int(row['class_id']))
+                total=int(row[split+'_total']);correct=int(row[split+'_correct'])
+                if key in actual or int(row['server_sync'])!=stage or not 0<=correct<=total:
+                    raise RuntimeError('Invalid per-sync CSV identity/counts')
+                if total and abs(float(row[split+'_accuracy'])-correct/total)>5.1e-7:
+                    raise RuntimeError('Per-sync CSV accuracy/count mismatch')
+                if accuracy is not None and abs(float(row['seen_class_global_accuracy'])-accuracy)>5.1e-7:
+                    raise RuntimeError('Per-sync CSV global accuracy mismatch')
+                actual[key]=float(row[split+'_accuracy'])
+            if set(actual)!=set(expected) or any(abs(actual[k]-expected[k])>5.1e-7 for k in expected):
+                raise RuntimeError('Per-sync CSV differs from JSON entries')
+            md=(root/(stem+'.md')).read_text()
+            if f'# Server sync {stage} — global model v{saved["version"]}' not in md:
+                raise RuntimeError('Per-sync Markdown identity mismatch')
+            from PIL import Image
+            with Image.open(root/(stem+'.png')) as im:
+                if im.format!='PNG' or min(im.size)<=0:raise RuntimeError('Invalid sync PNG')
+                im.verify()
         expected_heads=metrics.get('per_sync_server_integrated_task_heads')
         if expected_heads is not None:
             actual_heads=saved.get('server_integrated_task_heads',())
