@@ -1,0 +1,57 @@
+name: Joint CIFAR-100 real-data CPU smoke
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/joint-real-data-smoke.yml'
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      CUDA_VISIBLE_DEVICES: ''
+    strategy:
+      fail-fast: false
+      matrix:
+        setting: [task_il, class_il]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test]'
+      - name: Compile real CIFAR-100 training assignments
+        run: |
+          python -m cafcl.joint.runner plan --suite smoke --output runs/smoke_plan
+          python -m cafcl.joint.runner validate --manifest runs/smoke_plan/manifest.json --no-download
+      - name: Train one overlapping two-task condition
+        run: |
+          python -m cafcl.joint.runner run --manifest runs/smoke_plan/manifest.json --job-id J-SMOKE-O1-L2-${{ matrix.setting }} --output runs/smoke_results --no-download --local-evaluation --checkpoint-policy latest
+      - name: Independently verify and report
+        run: |
+          python -m cafcl.joint.runner audit --manifest runs/smoke_plan/manifest.json --output runs/smoke_results
+          python -m cafcl.joint.runner report --run-dir runs/smoke_results/J-SMOKE-O1-L2-${{ matrix.setting }}
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          audit=json.loads(Path('runs/smoke_results/joint_campaign_audit.json').read_text())
+          assert audit['counts'].get('artifact_verified') == 1, audit
+          print('REAL_DATA_SMOKE_AUDIT='+json.dumps(audit['counts']))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: joint-real-data-smoke-${{ matrix.setting }}
+          path: |
+            runs/smoke_plan/manifest.json
+            runs/smoke_results/joint_campaign_audit.*
+            runs/smoke_results/*/*.json
+            runs/smoke_results/*/joint_analysis/
+            runs/smoke_results/*/per_sync_accuracy/
+          if-no-files-found: warn

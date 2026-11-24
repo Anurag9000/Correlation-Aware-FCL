@@ -93,7 +93,7 @@ def run_broker(args):
         write_json(receipt_root/'campaign.json',{'git_commit':head,'manifest_hash':digest(catalog),
             'gpus':args.gpus,'minimum_free_mib':args.min_free_mib,'min_disk_gib':args.min_disk_gib,
             'job_ids':[j['job_id'] for j in jobs],'started_at':utc(),
-            'local_evaluation':args.local_evaluation,'mechanistic_probes':args.mechanistic_probes,'client_concurrency':args.concurrency})
+            'local_evaluation':args.local_evaluation,'mechanistic_probes':args.mechanistic_probes,'checkpoint_policy':args.checkpoint_policy,'client_concurrency':args.concurrency})
         queue=deque(jobs);lock=Lock();results=[];blocked_gpus={}
         def record(row):
             with lock:
@@ -120,7 +120,14 @@ def run_broker(args):
                         jid=job['job_id']
                         prior=audit_job(job,root)
                         if prior['status']=='artifact_verified':
-                            record({'job_id':jid,'gpu':gpu,'status':'already_verified'})
+                            config=json.loads((root/jid/'config.json').read_text())
+                            requested={'joint_local_evaluation':args.local_evaluation,
+                                       'joint_mechanistic_probes':args.mechanistic_probes,
+                                       'joint_checkpoint_policy':args.checkpoint_policy,
+                                       'client_training_concurrency':args.concurrency}
+                            if any(config.get(k)!=v for k,v in requested.items()):
+                                record({'job_id':jid,'gpu':gpu,'status':'failed','reason':'existing_run_execution_options_differ'})
+                            else:record({'job_id':jid,'gpu':gpu,'status':'already_verified'})
                             continue
                         if prior['status']=='audit_failed':
                             record({'job_id':jid,'gpu':gpu,'status':'failed','reason':prior.get('reason')})
@@ -134,7 +141,7 @@ def run_broker(args):
                             log=receipt_root/f'{jid}.attempt{attempt+1:03d}.log'
                             cmd=[sys.executable,'-m','cafcl.joint.runner','run','--manifest',str(manifest),
                                  '--job-id',jid,'--output',str(root),'--data-root',str(Path(args.data_root).resolve()),
-                                 '--no-download','--concurrency',str(args.concurrency)]
+                                 '--no-download','--concurrency',str(args.concurrency),'--checkpoint-policy',args.checkpoint_policy]
                             if args.local_evaluation:cmd.append('--local-evaluation')
                             if args.mechanistic_probes:cmd.append('--mechanistic-probes')
                             env=dict(os.environ,CUDA_VISIBLE_DEVICES=snapshot['uuid'],

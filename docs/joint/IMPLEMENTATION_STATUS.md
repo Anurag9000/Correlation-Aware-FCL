@@ -156,3 +156,15 @@ backbone/classifier, current/historical gradient alignment, feature-centroid
 drift and per-example validation predictions. Candidate deltas are applied
 rebased updates; they are not raw gradients. These diagnostics never select
 clients or tune training, and do not establish causal attribution.
+
+## Checkpoint durability and real-data verification
+
+The opt-in --checkpoint-policy latest retains the latest resumable full
+checkpoint and final model, while omitting redundant numbered full-state
+and stage checkpoints. Existing all-policy behavior remains the default.
+Joint checkpoint writes fsync the temporary file before atomic replacement
+and fsync the parent directory; a serialization failure preserves the
+previous checkpoint. Runner jobs use exclusive advisory leases. The
+real-data CPU smoke workflow exercises one overlapping depth-two condition
+in each learning setting and independently audits the artifacts. It is
+not a substitute for the full eight-cell smoke suite or GPU runs.

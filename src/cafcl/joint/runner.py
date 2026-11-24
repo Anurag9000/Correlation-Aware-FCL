@@ -107,7 +107,7 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
                'implementation_blocked':['minibatch-level joint synchronization; compute-matched pooled controls']})
     return jobs
 
-def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evaluation=False,mechanistic_probes=False):
+def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evaluation=False,mechanistic_probes=False,checkpoint_policy='all'):
     from ..config import RunConfig
     from ..simulator import run_experiment
     if os.environ.get('CAFCL_REQUIRE_CUDA')=='1':
@@ -138,13 +138,20 @@ def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evalua
         client_training_concurrency=concurrency,seed=job['seed'],
         joint_plan_path=str(path),joint_plan_hash=job['plan_hash'],
         joint_local_evaluation=local_evaluation,joint_mechanistic_probes=mechanistic_probes,
+        joint_checkpoint_policy=checkpoint_policy,
         joint_allow_partial_coverage=job.get('allow_partial_coverage',False),
         joint_control_kind=plan['allocation_audit'].get('control_kind','federated'),
         joint_domain_mode=job.get('domain_mode','none'),
         joint_epoch_segments=plan['allocation_audit'].get('epoch_slicing',{}).get('segments',1),
         stream_terminal_flush=plan['intervals'][-1]['terminal_flush'],
         checkpoint_every=1,job_id=job_id)
-    job_dir=Path(output)/job_id
+    from .joint.checkpoint_io import job_lease
+    with job_lease(Path(output)/job_id):
+        return execute_locked(cfg,job,output,data_root,download,run_experiment)
+
+
+def execute_locked(cfg,job,output,data_root,download,run_experiment):
+    job_id=job['job_id'];job_dir=Path(output)/job_id
     if (job_dir/'config.json').exists():
         existing=json.loads((job_dir/'config.json').read_text())
         expected=json.loads(json.dumps(cfg.to_dict(),default=str))
@@ -174,17 +181,17 @@ def main(argv=None):
     a=sub.add_parser('run');a.add_argument('--manifest',required=True)
     a.add_argument('--job-id',required=True);a.add_argument('--output',required=True)
     a.add_argument('--concurrency',type=int,default=1)
-    a.add_argument('--local-evaluation',action='store_true');a.add_argument('--mechanistic-probes',action='store_true')
+    a.add_argument('--local-evaluation',action='store_true');a.add_argument('--mechanistic-probes',action='store_true');a.add_argument('--checkpoint-policy',choices=['all','latest'],default='all')
     a.add_argument('--gpu',type=int)
     a=sub.add_parser('run-suite');a.add_argument('--manifest',required=True)
     a.add_argument('--output',required=True);a.add_argument('--family')
     a.add_argument('--concurrency',type=int,default=1);a.add_argument('--gpu',type=int)
-    a.add_argument('--local-evaluation',action='store_true');a.add_argument('--mechanistic-probes',action='store_true')
+    a.add_argument('--local-evaluation',action='store_true');a.add_argument('--mechanistic-probes',action='store_true');a.add_argument('--checkpoint-policy',choices=['all','latest'],default='all')
     a=sub.add_parser('broker');a.add_argument('--manifest',required=True);a.add_argument('--output',required=True)
     a.add_argument('--gpus',type=int,nargs='+',required=True);a.add_argument('--min-free-mib',type=int,required=True)
     a.add_argument('--min-disk-gib',type=float,default=20);a.add_argument('--retries',type=int,default=0)
     a.add_argument('--family');a.add_argument('--limit',type=int,default=0)
-    a.add_argument('--concurrency',type=int,default=1);a.add_argument('--local-evaluation',action='store_true');a.add_argument('--mechanistic-probes',action='store_true')
+    a.add_argument('--concurrency',type=int,default=1);a.add_argument('--local-evaluation',action='store_true');a.add_argument('--mechanistic-probes',action='store_true');a.add_argument('--checkpoint-policy',choices=['all','latest'],default='all')
     a.add_argument('--allow-shared-gpu',action='store_true')
     a=sub.add_parser('validate');a.add_argument('--manifest',required=True)
     a=sub.add_parser('audit');a.add_argument('--manifest',required=True);a.add_argument('--output',required=True)
@@ -222,7 +229,7 @@ def main(argv=None):
         if a.gpu is not None:os.environ['CUDA_VISIBLE_DEVICES']=str(a.gpu)
         if a.command=='run':
             print(run_job(a.manifest,a.job_id,a.output,a.data_root,
-                          not a.no_download,a.concurrency,a.local_evaluation,a.mechanistic_probes))
+                          not a.no_download,a.concurrency,a.local_evaluation,a.mechanistic_probes,a.checkpoint_policy))
         else:
             # Sequential controller: resource-broker integration is intentionally
             # deferred rather than oversubscribing available GPUs.
@@ -231,7 +238,7 @@ def main(argv=None):
             for job in jobs:
                 if a.family and a.family not in job.get('families',[job.get('family')]):continue
                 try:print(run_job(a.manifest,job['job_id'],a.output,a.data_root,
-                              not a.no_download,a.concurrency,a.local_evaluation,a.mechanistic_probes),flush=True)
+                              not a.no_download,a.concurrency,a.local_evaluation,a.mechanistic_probes,a.checkpoint_policy),flush=True)
                 except Exception as exc:
                     failures.append({'job_id':job['job_id'],'error':repr(exc)})
                     write_json(Path(a.output)/'campaign_failures.json',failures)

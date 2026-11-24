@@ -425,7 +425,10 @@ def save_round_state(path,cfg,round_id,global_state,version,clients,observed,pea
              'cuda_rng':torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []}
     path=Path(path)
     tmp=path.with_suffix(path.suffix+'.tmp')
-    torch.save(payload,tmp);os.replace(tmp,path)
+    if cfg.joint_plan_path:
+        from .joint.checkpoint_io import durable_torch_save
+        durable_torch_save(payload,path)
+    else:torch.save(payload,tmp);os.replace(tmp,path)
 
 
 def atomic_json(path,obj):
@@ -447,8 +450,12 @@ def save_checkpoint(path,weights,cfg,version,states=None,full_state=False,server
         payload['clients']={cid:asdict(s) for cid,s in states.items()}
         payload['server_cl_state']=server_cl_state
         # Retain resumable client memory and model state at full-state checkpoints.
-    torch.save(payload,tmp)
-    os.replace(tmp,path)
+    if cfg.joint_plan_path:
+        from .joint.checkpoint_io import durable_torch_save
+        durable_torch_save(payload,path)
+    else:
+        torch.save(payload,tmp)
+        os.replace(tmp,path)
 
 
 def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=True,verbose=True,*,fork_from_checkpoint=None):
@@ -476,6 +483,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 assert_sync_reports_complete(
                     run_dir,json.loads((run_dir/'metrics.json').read_text()))
             return {'status':'already_completed','run_dir':str(run_dir)}
+    if cfg.joint_plan_path and config_file.exists() and json.loads(config_file.read_text())!=json.loads(json.dumps(cfg.to_dict(),default=str)):
+        raise RuntimeError('Existing joint run configuration differs; use a new output root')
     atomic_json(config_file,cfg.to_dict())
     atomic_json(status_file,{'status':'running','protocol_version':protocol_version_for(cfg),'started_at':time.time()})
     try:
@@ -1172,12 +1181,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 save_round_state(latest_checkpoint,cfg,round_id,global_state,version,
                                  clients,observed,peak,integrated,history,rng,
                                  server_optimizer_state,server_class_update_counts,server_cl_state)
-                if cfg.checkpoint_every:
+                if cfg.checkpoint_every and not (cfg.joint_plan_path and cfg.joint_checkpoint_policy=='latest'):
                     save_round_state(run_dir/f'checkpoint_round_{round_id+1:04d}.pt',
                                      cfg,round_id,global_state,version,
                                      clients,observed,peak,integrated,history,rng,
                                      server_optimizer_state,server_class_update_counts,server_cl_state)
-            if (cfg.stream_protocol or (round_id+1)%cfg.rounds_per_stage==0):
+            if (cfg.stream_protocol or (round_id+1)%cfg.rounds_per_stage==0) and not (cfg.joint_plan_path and cfg.joint_checkpoint_policy=='latest'):
                 save_checkpoint(run_dir/f'model_stage_{current_stage+1:02d}.pt',global_state,
                                 cfg,version,clients,full_state=True,server_cl_state=server_cl_state)
             if verbose:

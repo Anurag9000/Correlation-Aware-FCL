@@ -60,6 +60,14 @@ def audit_job(job,root):
             row.update(acknowledged_occurrences=ledger['acknowledged'],pending_occurrences=ledger['pending'],
                        committed_versions=ledger['commits'])
             for r in plan['intervals']:
+                interval_id=r['interval_id']
+                if config.get('joint_mechanistic_probes'):
+                    probe=json.loads((directory/f'joint_mechanistic_{interval_id:05d}.json').read_text())
+                    if probe['interval']!=interval_id or probe['split']!='validation' or not probe['no_feedback']:
+                        raise ValueError('Invalid mechanistic probe receipt')
+                if config.get('joint_local_evaluation'):
+                    communication=json.loads((directory/f'joint_communication_{interval_id:05d}.json').read_text())
+                    if communication['interval']!=interval_id:raise ValueError('Invalid communication diagnostics receipt')
                 record=json.loads((directory/f"joint_interval_{r['interval_id']:05d}.json").read_text())
                 if record['server_state_digest_before']!=record['server_state_digest_after']:
                     raise ValueError('Server mutated inside interval')
