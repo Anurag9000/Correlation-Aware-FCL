@@ -284,8 +284,6 @@ class RunConfig:
             if self.method in {'native_glfc','native_lga','native_feat'}:
                 raise ValueError(
                     f'{self.method} has no task-head adaptation; refusing to report the generic Task-IL fallback as that method')
-            if self.method in {'der','derpp'} and self.sample_overlap_fraction>0:
-                raise ValueError('Task-IL DER/DER++ cannot disambiguate one sample reused by multiple source task heads')
         if self.learning_setting=='domain_il':
             assert self.scenario in {"domain","gradual_drift"}
         if self.learning_setting=='boundary_free':

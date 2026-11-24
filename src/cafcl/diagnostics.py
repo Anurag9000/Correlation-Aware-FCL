@@ -68,7 +68,7 @@ def _physical64_inputs(images,device):
     return x,valid
 
 
-def feature_class_means(model, bank, class_ids, device, samples_per_class=32):
+def feature_class_means(model, bank, class_ids, device, samples_per_class=32,*,seed=0):
     """Compute means from training samples with deterministic sample selection."""
     if samples_per_class<=0:raise ValueError('samples_per_class must be positive')
     previous_training=model.training
@@ -76,7 +76,8 @@ def feature_class_means(model, bank, class_ids, device, samples_per_class=32):
     means={}
     with torch.no_grad():
         for cls in sorted(set(map(int,class_ids))):
-            ids=[i for i,c in enumerate(bank.train.targets) if int(c)==cls][:samples_per_class]
+            pool=[i for i,c in enumerate(bank.train.targets) if int(c)==cls]
+            ids=random.Random(seed+100003*cls).sample(pool,min(samples_per_class,len(pool)))
             if not ids:continue
             x,valid=_physical64_inputs([bank.train[i][0] for i in ids],device)
             if hasattr(model,'features'):
@@ -88,8 +89,8 @@ def feature_class_means(model, bank, class_ids, device, samples_per_class=32):
     return means
 
 
-def feature_relationships(model,bank,class_ids,device,samples_per_class=32):
-    means=feature_class_means(model,bank,class_ids,device,samples_per_class)
+def feature_relationships(model,bank,class_ids,device,samples_per_class=32,*,seed=0):
+    means=feature_class_means(model,bank,class_ids,device,samples_per_class,seed=seed)
     return {f'{a}:{b}':vector_cosine(means[a],means[b])
             for a,b in itertools.combinations(sorted(means),2)}
 
@@ -145,7 +146,7 @@ def class_gradient_representations(model,bank,class_ids,device,*,allowed_indices
         model.train(previous_training)
 
 
-def arrived_feature_means(model,bank,class_ids,device,*,allowed_indices,samples_per_class=16):
+def arrived_feature_means(model,bank,class_ids,device,*,allowed_indices,samples_per_class=16,seed=0):
     """Feature prototypes from already-arrived training examples only."""
     allowed=set(allowed_indices)
     means={}
@@ -153,8 +154,9 @@ def arrived_feature_means(model,bank,class_ids,device,*,allowed_indices,samples_
     model.eval()
     with torch.no_grad():
         for cls in sorted(set(map(int,class_ids))):
-            ids=[i for i,y in enumerate(bank.train.targets)
-                 if i in allowed and int(y)==cls][:samples_per_class]
+            pool=[i for i,y in enumerate(bank.train.targets)
+                  if i in allowed and int(y)==cls]
+            ids=random.Random(seed+100003*cls).sample(pool,min(samples_per_class,len(pool)))
             if not ids:continue
             x,valid=_physical64_inputs([bank.train[i][0] for i in ids],device)
             embeddings=(model.features(x) if hasattr(model,'features') else model(x))[:valid]

@@ -31,11 +31,11 @@ from .task_ids import task_instance_id
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v8'
+PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v9'
 
 def protocol_version_for(cfg):
     if getattr(cfg,'joint_plan_path',''):
-        return 'joint_spatiotemporal_fcl_v9_audit_'+cfg.learning_setting
+        return 'joint_spatiotemporal_fcl_v10_audit_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -729,7 +729,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 arrived=set().union(*(c.seen_indices for c in clients.values()))
                 if cfg.selector.startswith('feature'):
                     vectors=arrived_feature_means(model,bank,observed,device,
-                                                  allowed_indices=arrived)
+                                                  allowed_indices=arrived,seed=cfg.seed)
                 else:
                     vectors=class_gradient_representations(model,bank,observed,device,
                                                            allowed_indices=arrived,task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,seed=cfg.seed)
@@ -827,7 +827,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 model.to(device)
                 arrived=set(server_cl_state.acknowledged_optimized_indices)
                 pre_representation=arrived_feature_means(model,bank,old,device,
-                                                          allowed_indices=arrived)
+                                                          allowed_indices=arrived,seed=cfg.seed)
             aggregation_norm_diagnostics=None
             custom_head_fusion=False
             server_cl_state.last_archive_upload_bytes=0
@@ -1009,7 +1009,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             representation_drift=None
             if pre_representation is not None:
                 arrived=set(pre_representation_ids)
-                after=arrived_feature_means(model,bank,old,device,allowed_indices=arrived)
+                after=arrived_feature_means(model,bank,old,device,allowed_indices=arrived,seed=cfg.seed)
                 representation_drift={str(c):float(torch.linalg.vector_norm(
                     after[c].float()-v.float())) for c,v in pre_representation.items()
                     if c in after}

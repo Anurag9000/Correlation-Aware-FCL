@@ -68,9 +68,9 @@ class FederatedCLState:
     """Central history, persisted with the round and final checkpoints."""
     version:int=0
     memory:dict[int,list[int]]=field(default_factory=dict)
-    memory_logits:dict[int,torch.Tensor]=field(default_factory=dict)
+    memory_logits:dict[int|tuple[int,str],torch.Tensor]=field(default_factory=dict)
     exemplar_payloads:dict[int,tuple[torch.Tensor,int]]=field(default_factory=dict)
-    logits_source:dict[int,tuple[int,int]]=field(default_factory=dict)
+    logits_source:dict[int|tuple[int,str],tuple[int,int]]=field(default_factory=dict)
     importance:dict[str,dict]=field(default_factory=dict)
     teacher:dict[str,torch.Tensor]|None=None
     teacher_version:int=-1
@@ -172,27 +172,31 @@ class FederatedCLState:
                             self.exemplar_payloads[idx]=(pixels,int(label))
                             self.last_archive_upload_bytes+=pixels.numel()*pixels.element_size()
                 if method_by_client[client.client_id] in {'der','derpp'}:
-                    for idx,logits in client.memory_logits.items():
-                        idx=int(idx)
-                        if idx not in ids:continue
-                        if idx not in self.memory_logits:
-                            if task_ids_by_index is None:
-                                expected_width=bank.num_classes
-                            else:
-                                source_tasks=task_ids_by_index.get(idx,())
-                                if len(source_tasks)!=1:
-                                    raise ValueError('DER logit target has ambiguous source task provenance')
-                                source=source_tasks[0]
-                                if isinstance(source,str):
-                                    from .models import task_class_sets_from_state_dict
-                                    task_map=task_class_sets_from_state_dict(teacher_model)
-                                    expected_width=len(task_map[source])
-                                else:
-                                    expected_width=len(source)
-                            if logits.ndim!=1 or logits.shape[0]!=expected_width:
-                                raise ValueError('DER logit target/class count mismatch')
-                            self.memory_logits[idx]=logits.detach().cpu().clone()
-                            self.logits_source[idx]=(int(version),int(client.client_id))
+                    task_map=None
+                    for key,logits in client.memory_logits.items():
+                        idx=int(key[0] if isinstance(key,tuple) else key)
+                        if idx not in ids or key in self.memory_logits:continue
+                        if task_ids_by_index is None:
+                            if isinstance(key,tuple):raise ValueError('Class-IL logits must use sample IDs')
+                            expected_width=bank.num_classes
+                        else:
+                            if not isinstance(key,tuple):
+                                raise ValueError('Task-IL logits require explicit (sample, head) keys')
+                            head=key[1]
+                            if head not in client.joint_local_source_heads.get(idx,set()):
+                                # Previously received targets are already owned by the server.
+                                # An evicted server target cannot be reintroduced by a non-origin.
+                                continue
+                            if head not in task_ids_by_index.get(idx,()):
+                                raise ValueError('DER target head is not in the sample curriculum')
+                            if task_map is None:
+                                from .models import task_class_sets_from_state_dict
+                                task_map=task_class_sets_from_state_dict(teacher_model)
+                            expected_width=len(task_map[head])
+                        if logits.ndim!=1 or logits.shape[0]!=expected_width or not torch.isfinite(logits).all():
+                            raise ValueError('DER logit target/class count mismatch or nonfinite target')
+                        self.memory_logits[key]=logits.detach().cpu().clone()
+                        self.logits_source[key]=(int(version),int(client.client_id))
             if server_memory_per_class>0:
                 # Deterministic uniform-priority reservoir over uploaded unique IDs.
                 # Evictions are real: payloads, logits and origins cannot survive the cap.
@@ -203,7 +207,7 @@ class FederatedCLState:
                 for table in (self.exemplar_payloads,self.memory_logits,self.logits_source,
                               self.memory_provenance,self.memory_origins):
                     for i in list(table):
-                        if i not in retained:del table[i]
+                        if (i[0] if isinstance(i,tuple) else i) not in retained:del table[i]
             self.memory=pool
         for kind in REGULARIZERS:
             if not any(m==kind for m in method_by_client.values()):continue
@@ -257,7 +261,7 @@ class FederatedCLState:
         client.received_server_class_sample_exposure=dict(self.class_sample_exposure)
         client.received_gradient_supports={int(c):tuple(map(int,ids))
             for c,ids in self.memory.items()}
-        client.received_memory_logits={int(i):v.detach().cpu().clone()
+        client.received_memory_logits={i:v.detach().cpu().clone()
             for i,v in self.memory_logits.items()}
         client.received_importance={kind:{key:{str(n):x.detach().cpu().clone()
             for n,x in stat.items()} for key,stat in table.items()}
@@ -281,9 +285,11 @@ class FederatedCLState:
         # Fisher, SI, MAS and LwF continue to use their own original updates.
         # Passive snapshots alone are insufficient when methods change or
         # mixed-method clients arrive later; keep full active copies as well.
-        private_only={int(i):v.detach().cpu().clone()
-            for i,v in client.memory_logits.items() if int(i) not in self.memory_logits}
-        client.memory_logits={**private_only,**{int(i):v.detach().cpu().clone()
+        private_ids={i for ids in client.private_memory.values() for i in ids}
+        private_only={i:v.detach().cpu().clone()
+            for i,v in client.memory_logits.items() if i not in self.memory_logits
+            and (i[0] if isinstance(i,tuple) else i) in private_ids}
+        client.memory_logits={**private_only,**{i:v.detach().cpu().clone()
                               for i,v in self.memory_logits.items()}}
         for cls in self.integrated_classes:
             client.first_seen_stage.setdefault(int(cls),int(self.version))

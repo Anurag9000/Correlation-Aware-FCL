@@ -41,7 +41,7 @@ class LocalState:
     train_steps:int=0
     selection_count:int=0
     trained_classes:set[int]=field(default_factory=set)
-    memory_logits:dict[int,torch.Tensor]=field(default_factory=dict)
+    memory_logits:dict[int|tuple[int,str],torch.Tensor]=field(default_factory=dict)
     mas_omega:dict|None=None
     mas_anchor:dict|None=None
     lwf_teacher:dict|None=None
@@ -87,7 +87,7 @@ class LocalState:
     sample_first_local_experience:dict[int,int]=field(default_factory=dict)
     received_sample_origins:dict[int,tuple[int,int]]=field(default_factory=dict)
     received_importance:dict[str,dict]=field(default_factory=dict)
-    received_memory_logits:dict[int,torch.Tensor]=field(default_factory=dict)
+    received_memory_logits:dict[int|tuple[int,str],torch.Tensor]=field(default_factory=dict)
     received_server_class_sample_exposure:dict[int,int]=field(default_factory=dict)
     received_lwf_teacher:dict|None=None
     received_lwf_teacher_version:int=-1
@@ -201,7 +201,7 @@ class LocalState:
         self.memory=combined_memory(self.private_memory,self.received_memory)
         retained={int(i) for group in self.memory.values() for i in group}
         for i in tuple(self.memory_logits):
-            if i not in retained:
+            if (i[0] if isinstance(i,tuple) else i) not in retained:
                 del self.memory_logits[i]
 
 
@@ -891,7 +891,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                     logits=model(x)
                 if original_ids is not None and current_head_by_index is None:
                     for idx,z in zip(original_ids.tolist(),logits.detach().cpu()):
-                        captured_logits[int(idx)]=z.clone()
+                        key=(int(idx),task_head_key(task_id)) if cfg.learning_setting=='task_il' else int(idx)
+                        captured_logits[key]=z.clone()
                 objective_logits=logits[:loss_example_count]
                 objective_y=y[:loss_example_count]
                 if cfg.method not in NATIVE_METHODS or cfg.learning_setting=='task_il':
@@ -1038,29 +1039,36 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                                 task_ids_by_example=source_task_ids,
                                 features=replay_features)
                             if cfg.method in {'der','derpp'}:
-                                if any(len(task_ids)!=1 for task_ids in source_task_ids):
-                                    raise ValueError('Task-IL DER requires one source task per replay sample')
-                                replay_logits=torch.cat([
-                                    model.classifier(replay_features[j:j+1],task_ids[0])
-                                    for j,task_ids in enumerate(source_task_ids)],dim=0)
-                                positions=[j for j,index in enumerate(ids[:valid])
-                                           if index in client.memory_logits]
+                                # Each exemplar may have independent pre-update targets for
+                                # several source heads. Never compare logits across heads.
                                 terms=[]
-                                if positions:
-                                    losses=[]
-                                    for j in positions:
-                                        target=client.memory_logits[ids[j]].to(device)
-                                        if target.shape!=replay_logits[j].shape:
+                                losses=[]
+                                missing=[]
+                                missing_heads=[]
+                                for j,heads in enumerate(source_task_ids):
+                                    per_example=[]
+                                    absent=[]
+                                    for head in heads:
+                                        target=client.memory_logits.get((int(ids[j]),head))
+                                        if target is None:
+                                            absent.append(head)
+                                            continue
+                                        prediction=model.classifier(replay_features[j:j+1],head)[0]
+                                        target=target.to(device)
+                                        if target.shape!=prediction.shape:
                                             raise RuntimeError('Task-IL DER source-head logits changed shape')
-                                        losses.append(F.mse_loss(replay_logits[j],target))
-                                    terms.append(cfg.der_alpha*torch.stack(losses).mean())
+                                        per_example.append(F.mse_loss(prediction,target))
+                                    if per_example:losses.append(torch.stack(per_example).mean())
+                                    if absent:
+                                        missing.append(j)
+                                        missing_heads.append(tuple(absent))
+                                if losses:terms.append(cfg.der_alpha*torch.stack(losses).mean())
                                 if cfg.method=='derpp':
                                     terms.append(cfg.der_beta*supervised)
-                                elif len(positions)<valid:
-                                    missing=[j for j in range(valid) if j not in set(positions)]
+                                elif missing:
                                     terms.append(model.loss_for_labels(
                                         hx[missing],hy[missing],task_ids=known_task_ids,
-                                        task_ids_by_example=[source_task_ids[j] for j in missing],
+                                        task_ids_by_example=missing_heads,
                                         features=replay_features[missing]))
                                 replay_loss=sum(terms,torch.zeros((),device=device))
                             else:
@@ -1234,8 +1242,9 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                         cfg.memory_per_class,rng,cfg.memory_policy)
                     retained={int(i) for group in client.private_memory.values() for i in group}
                     for idx in retained:
-                        if idx in captured_logits and idx not in client.memory_logits:
-                            client.memory_logits[idx]=captured_logits[idx]
+                        key=(idx,task_head_key(task_id)) if cfg.learning_setting=='task_il' else idx
+                        if key in captured_logits and key not in client.memory_logits:
+                            client.memory_logits[key]=captured_logits[key]
                 if should_step_optimizer:
                     step_count+=1
                 microbatch_count+=1
