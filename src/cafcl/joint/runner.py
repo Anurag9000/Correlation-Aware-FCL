@@ -29,13 +29,16 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
     bank=get_data_bank('cifar100',data_root,download=download,seed=seed)
     root=Path(output).resolve()
     jobs=[]
-    if suite in ('screening','interactions','short','all'):
+    if suite in ('screening','interactions','short','extensions','all'):
         from .family_catalog import screening_designs,Design
         from .interactions import interaction_designs,short_designs
         generators=[]
         if suite in ('screening','all'):generators.append(screening_designs())
         if suite in ('interactions','all'):generators.append(interaction_designs())
         if suite in ('short','all'):generators.append(short_designs())
+        if suite in ('extensions','all'):
+            from .extensions import extension_designs
+            generators.append(extension_designs())
         if suite=='all':
             generators.append((Design(f'H-{s}-O{o}-L{l}','H',foundational_stream(s,o),local_depth=l)
                 for s in ('S1','S2','S3') for o in (0,1) for l in depths))
@@ -50,7 +53,8 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
                     offline_clients=design.offline_clients,outage_duration=design.outage_duration,
                     allocation_order=design.allocation_order,
                     raw_sample_overlap=design.raw_sample_overlap,
-                    allow_cross_semantic_reuse=design.allow_cross_semantic_reuse).to_dict()
+                    allow_cross_semantic_reuse=design.allow_cross_semantic_reuse,
+                    allocation_weights=design.allocation_weights).to_dict()
             except ValueError as exc:
                 blocked.append({'design':design.name,'reason':str(exc),'status':'infeasible'})
                 continue
@@ -73,7 +77,7 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
             else:unique[key]=job
         jobs=list(unique.values())
         write_json(root/'manifest.json',{'dataset':'cifar100','jobs':jobs,'aliases':aliases,'infeasible':blocked,
-                   'implementation_blocked':['P: domain allocation and distribution skew']})
+                   'implementation_blocked':['P: domain transformations; intra-task sync; centralized/mixed-access controls']})
         return jobs
     for item in foundational_registry(depths,seed=seed):
         events=foundational_stream(item['spatial'],item['local_overlap'])
@@ -137,7 +141,7 @@ def main(argv=None):
     sub=p.add_subparsers(dest='command',required=True)
     a=sub.add_parser('plan');a.add_argument('--output',required=True)
     a.add_argument('--seed',type=int,default=0)
-    a.add_argument('--suite',choices=['foundational','screening','interactions','short','all'],default='foundational')
+    a.add_argument('--suite',choices=['foundational','screening','interactions','short','extensions','all'],default='foundational')
     a.add_argument('--depths',type=int,nargs='+',default=[1,2,3,5])
     a=sub.add_parser('run');a.add_argument('--manifest',required=True)
     a.add_argument('--job-id',required=True);a.add_argument('--output',required=True)

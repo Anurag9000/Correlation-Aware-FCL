@@ -11,6 +11,7 @@ from dataclasses import asdict, dataclass
 from hashlib import sha256
 import json
 import random
+import math
 from typing import Mapping, Sequence
 
 
@@ -148,7 +149,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
                  offline_clients=0, outage_duration=1, terminal_flush=True,
                  minimum_samples=1, require_all_classes=True,
                  interval_boundaries=None, upload_cohorts=None,
-                 allocation_order='timeline',raw_sample_overlap=0.0,allow_cross_semantic_reuse=False):
+                 allocation_order='timeline',raw_sample_overlap=0.0,allow_cross_semantic_reuse=False,allocation_weights=None):
     """Compile exact explicit events (atomic_step, client, class tuple).
 
     Fixed unique-data allocation: each observed class's entire TRAIN pool is
@@ -213,6 +214,12 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
         if len(pool[c]) < n*minimum_samples:
             raise ValueError(f"Insufficient TRAIN samples for class {c}: {len(pool[c])}/{n}")
         random.Random(stable_seed(seed, "allocation", c)).shuffle(pool[c])
+    weights=dict(allocation_weights or {})
+    valid_keys={f'{t}:{i}:{label}' for t,i,classes in ordered for label in classes}
+    if not set(weights)<=valid_keys or any(not math.isfinite(float(v)) or float(v)<=0 for v in weights.values()):
+        raise ValueError('Allocation weights must be finite positive values for existing class occurrences')
+    if weights and raw_sample_overlap:
+        raise ValueError('Combined weighted allocation and raw reuse is not yet a supported control')
     seen_occ = Counter()
     # Order by client/semantic task for sequence-order ablations. Each
     # client's semantic occurrences receive identical sample subsets when
@@ -220,21 +227,41 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
     allocation_events=(ordered if allocation_order=='timeline' else
                        sorted(ordered,key=lambda x:(x[1],x[2],x[0])))
     allocated={}
+    weighted_counts={}
+    if weights:
+        by_label=defaultdict(list)
+        for t,i,classes in allocation_events:
+            for label in classes:by_label[label].append(f'{t}:{i}:{label}')
+        for label,keys in by_label.items():
+            values=[float(weights.get(k,1.0)) for k in keys]
+            budget=len(pool[label])-minimum_samples*len(keys)
+            # Largest remainder allocation, with deterministic tie breaking.
+            ideal=[budget*v/sum(values) for v in values]
+            sizes=[math.floor(v) for v in ideal]
+            for j in sorted(range(len(keys)),key=lambda j:(-(ideal[j]-sizes[j]),j))[:budget-sum(sizes)]:
+                sizes[j]+=1
+            weighted_counts.update({k:n+minimum_samples for k,n in zip(keys,sizes)})
     shared_counts={c:int((len(pool[c])//n)*raw_sample_overlap) if n>1 else 0
                    for c,n in counts.items()}
     private_cursor=Counter(shared_counts)
+    allocated_class_sizes=[]
     for t,i,classes in allocation_events:
         ids=[]
         for label in classes:
             j=seen_occ[label];seen_occ[label]+=1;n=len(pool[label])
             size=(j+1)*n//counts[label]-j*n//counts[label]
             shared=shared_counts[label]
-            if shared:
+            if weights:
+                size=weighted_counts[f'{t}:{i}:{label}']
+                start=private_cursor[label];end=start+size
+                ids.extend(pool[label][start:end]);private_cursor[label]=end
+            elif shared:
                 start=private_cursor[label];end=start+size-shared
                 ids.extend(pool[label][:shared]);ids.extend(pool[label][start:end])
                 private_cursor[label]=end
             else:
                 ids.extend(pool[label][j*n//counts[label]:(j+1)*n//counts[label]])
+            allocated_class_sizes.append(size)
         allocated[t,i]=tuple(ids)
     local_exp = Counter()
     tasks = []
@@ -313,10 +340,15 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
     allocation = {"unique_assigned": len(set(all_indices)), "assignments": len(all_indices),
                   "unused_training_indices": sorted(set(range(len(train_targets)))-set(all_indices)),
                   "minimum_samples_per_occurrence": min(len(x.train_indices) for x in tasks),
-                  "minimum_samples_per_class_occurrence": min(len(pool[c])//n for c,n in counts.items()),
+                  "minimum_samples_per_class_occurrence": min(allocated_class_sizes),
                   "raw_sample_overlap": float(raw_sample_overlap),
                   "allocation_order": allocation_order,
                   "training_target_hash": digest(list(map(int, train_targets)))}
+    if weights:
+        allocation['allocation_weights']={k:float(v) for k,v in sorted(weights.items())}
+        allocation['allocation_minimum_samples']=minimum_samples
+        allocation['realized_class_occurrence_sizes']=weighted_counts
+        allocation['allocation_contract']='fixed_unique_data_weighted_occurrence_partition'
     if allow_cross_semantic_reuse:
         allocation['allow_cross_semantic_reuse']=True
     if raw_sample_overlap:

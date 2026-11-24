@@ -96,3 +96,13 @@ accepted occurrence receipts and per-interval knowledge JSON. Cross-semantic
 raw reuse can be explicitly enabled. V1 checkpoints cannot resume into v2.
 Commit-level durability remains boundary-based; full failure-injection and
 resume equivalence still require tests. No GPU claims are made.
+
+## Exact overlap and sample-skew extensions
+
+The extensions suite adds a bounded exact integer overlap solver (2–12
+clients, full pairwise intersection matrix), per-class occurrence weighted
+sample partitioning, wider/deeper joint grids, and explicit split/merge/
+recombination motifs. Weighted partitioning preserves unique training
+support, but changes per-task sample count and optimizer work. No claim
+of matched compute or domain adaptation is made. The all suite includes
+these new designs; use generated manifests for counts.

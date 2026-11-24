@@ -30,6 +30,7 @@ class Design:
     head_policy: str = 'semantic_shared'
     raw_sample_overlap: float = 0.0
     allow_cross_semantic_reuse: bool = False
+    allocation_weights: dict = field(default_factory=dict)
 
 
 def coverage_tail(events,k):
