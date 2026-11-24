@@ -84,7 +84,8 @@ def _train_one(runtime, client, bank, cfg, device, round_id, event,
             groups={k:runtime.model.classifier.task_classes[k] for k in known_task_sets}
             labels={c for classes in groups.values() for c in classes}
         result,_=evaluate(runtime.model,bank,labels,cfg.batch_size,device,
-                          task_class_groups=groups,split='validation')
+                          task_class_groups=groups,split='validation',
+                          loader_seed=0)
         return result
     def measure_before():
         runtime.model.load_state_dict(client.shared_weights)
@@ -188,8 +189,19 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
     local_details = []
     locally_trained = []
     barriers = []
-    for task_index in range(max(map(len, prepared.values()), default=0)):
-        active = [cid for cid in sorted(prepared) if task_index < len(prepared[cid])]
+    if cfg.joint_plan_path:
+        slots={int(e['atomic_step']):{} for events in prepared.values() for e in events}
+        for cid,events in prepared.items():
+            for e in events:
+                slot=slots[int(e['atomic_step'])]
+                if cid in slot:raise ValueError('Duplicate client atomic step')
+                slot[cid]=e
+        schedule=[(step,slots[step]) for step in sorted(slots)]
+    else:
+        schedule=[(j,{cid:prepared[cid][j] for cid in sorted(prepared) if j<len(prepared[cid])})
+                  for j in range(max(map(len,prepared.values()),default=0))]
+    for task_index,(atomic_step,slot) in enumerate(schedule):
+        active = sorted(slot)
         if not active:
             continue
         concurrency = cfg.client_training_concurrency or len(active)
@@ -205,7 +217,7 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
             pending = []
             for cid in wave:
                 client = clients[cid]
-                raw = prepared[cid][task_index]
+                raw = slot[cid]
                 has_new = has_new_events[cid]
                 if has_new:
                     classes = tuple(int(c) for c in raw['class_ids'])
@@ -228,6 +240,9 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                         'global_stage': raw['global_stage'],
                         'recurrence': raw['is_recurrence'],
                         'selected_for_upload': False})
+                    if cfg.joint_plan_path:
+                        client.local_training_events[-1].update(atomic_step=raw['atomic_step'],
+                            occurrence_id=raw['occurrence_id'],semantic_task_id=raw['semantic_task_id'])
                     client.current_indices = list(raw['indices'])
                     if cfg.pending_policy == 'bounded' and cfg.max_pending_samples > 0:
                         client.current_indices = client.current_indices[-cfg.max_pending_samples:]
@@ -295,11 +310,14 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                     client.pending_upload_class_counts.get(cls, 0) + count)
             locally_trained.append(cid)
             local_details.append({
+                **({'atomic_step':atomic_step,'occurrence_id':slot[cid]['occurrence_id'],
+                    'semantic_task_id':slot[cid]['semantic_task_id']} if cfg.joint_plan_path else {}),
                 'client': cid, 'local_experience': client.local_experience,
                 'task_ordinal': task_index + 1,
                 'is_selected': False,
                 **{k: v for k, v in result.items() if k != 'weights'}})
         barriers.append({
+            **({'atomic_step':atomic_step} if cfg.joint_plan_path else {}),
             'task_ordinal': task_index + 1,
             'client_ids': active,
             'completed_count': len(outcomes),

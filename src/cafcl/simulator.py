@@ -602,7 +602,11 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             # the local learner before it has processed earlier class events.
             # This is essential for ER-ACE masking and true within-round CL.
             new_events={cid:[] for cid in clients}
-            for arrival in scenario.arrivals_at(round_id):
+            joint_events=[]
+            if cfg.joint_plan_path:
+                lookup={x['occurrence_id']:x for x in scenario.joint_plan['tasks']}
+                joint_events=[lookup[oid] for oid in scenario.joint_plan['intervals'][round_id]['occurrences']]
+            for arrival_index,arrival in enumerate(scenario.arrivals_at(round_id)):
                 if cfg.stream_protocol:
                     new_events[arrival.client_id].append({
                         'indices':list(map(int,arrival.indices)),
@@ -611,6 +615,11 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         'task_id':arrival.task_id,
                         'global_stage':int(arrival.stage),
                         'is_recurrence':bool(arrival.recurrence)})
+                    if cfg.joint_plan_path:
+                        atomic=joint_events[arrival_index]
+                        assert atomic['client_id']==arrival.client_id and tuple(atomic['classes'])==arrival.labels
+                        new_events[arrival.client_id][-1].update(atomic_step=atomic['atomic_step'],
+                            occurrence_id=atomic['occurrence_id'],semantic_task_id=atomic['semantic_task_id'])
                     observed.update(arrival.labels)
                     continue
                 for cls in arrival.labels:
@@ -633,6 +642,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             # separate GPU models. Every client's first task is submitted
             # concurrently; only after all complete does any Task 2 begin.
             # Federation is forbidden until the final task barrier finishes.
+            if cfg.joint_plan_path:
+                from .joint.audit import server_boundary_digest
+                boundary_before=server_boundary_digest(global_state,version,server_cl_state)
             local_details,local_trained_clients,task_barriers=(
                 train_round_task_barriers(
                     runtimes=client_runtimes,executor=client_executor,
@@ -641,6 +653,16 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     scenario=scenario,new_events=new_events,
                     known_task_sets=(() if cfg.joint_plan_path else active_task_ids),
                     task_ids_by_index=task_ids_by_index))
+            if cfg.joint_plan_path:
+                boundary_after=server_boundary_digest(global_state,version,server_cl_state)
+                if boundary_before!=boundary_after:
+                    raise RuntimeError('Server changed during private local continual learning')
+                if [b['atomic_step'] for b in task_barriers]!=scenario.joint_plan['intervals'][round_id]['atomic_steps']:
+                    raise RuntimeError('Executed atomic barriers differ from the plan')
+                atomic_json(run_dir/f'joint_interval_{round_id:05d}.json',{
+                    'interval':round_id,'server_version_during_local_learning':version,
+                    'server_state_digest_before':boundary_before,'server_state_digest_after':boundary_after,
+                    'atomic_barriers':task_barriers,'local_occurrences':local_details})
             class_relationships=None
             if cfg.selector in {'feature_max','feature_min','gradient_align','gradient_conflict'}:
                 # Simulation-privileged: historical data that have *arrived*,

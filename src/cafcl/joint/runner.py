@@ -22,11 +22,35 @@ def write_json(path, value):
     temp.replace(path)
 
 
-def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5)):
+def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundational'):
     from ..data import get_data_bank
     bank=get_data_bank('cifar100',data_root,download=download,seed=seed)
     root=Path(output).resolve()
     jobs=[]
+    if suite=='screening':
+        from .family_catalog import screening_designs
+        blocked=[]
+        for design in screening_designs():
+            try:
+                plan=compile_plan(design.events,bank.train.targets,num_clients=design.num_clients,
+                    num_classes=100,local_depth=design.local_depth,seed=seed,
+                    head_policy='semantic_shared',minimum_samples=1,
+                    interval_boundaries=design.boundaries,upload_cohorts=design.cohorts,
+                    offline_clients=design.offline_clients,outage_duration=design.outage_duration,
+                    allocation_order=design.allocation_order).to_dict()
+            except ValueError as exc:
+                blocked.append({'design':design.name,'reason':str(exc),'status':'infeasible'})
+                continue
+            for setting in ('task_il','class_il'):
+                job_id='J-'+design.name+'-'+setting
+                filename=job_id+'.json';write_json(root/'plans'/filename,plan)
+                jobs.append({'job_id':job_id,'family':design.family,'metadata':design.metadata,
+                    'learning_setting':setting,'epochs':5,'seed':seed,'plan_file':'plans/'+filename,
+                    'plan_hash':plan['plan_hash'],'atomic_hash':plan['atomic_hash'],'status':'planned',
+                    'low_support_warning':plan['allocation_audit']['minimum_samples_per_occurrence']<16})
+        write_json(root/'manifest.json',{'dataset':'cifar100','jobs':jobs,'infeasible':blocked,
+                   'implementation_blocked':['P: raw sample overlap and domain allocation']})
+        return jobs
     for item in foundational_registry(depths,seed=seed):
         events=foundational_stream(item['spatial'],item['local_overlap'])
         plan=compile_plan(events,bank.train.targets,num_clients=5,num_classes=100,
@@ -77,6 +101,7 @@ def main(argv=None):
     sub=p.add_subparsers(dest='command',required=True)
     a=sub.add_parser('plan');a.add_argument('--output',required=True)
     a.add_argument('--seed',type=int,default=0)
+    a.add_argument('--suite',choices=['foundational','screening'],default='foundational')
     a.add_argument('--depths',type=int,nargs='+',default=[1,2,3,5])
     a=sub.add_parser('run');a.add_argument('--manifest',required=True)
     a.add_argument('--job-id',required=True);a.add_argument('--output',required=True)
@@ -87,7 +112,7 @@ def main(argv=None):
         a.add_argument('--no-download',action='store_true')
     a=p.parse_args(argv)
     if a.command=='plan':
-        jobs=plan_campaign(a.output,a.data_root,a.seed,not a.no_download,a.depths)
+        jobs=plan_campaign(a.output,a.data_root,a.seed,not a.no_download,a.depths,a.suite)
         print(f'Planned {len(jobs)} conditions; no training launched')
     else:
         print(run_job(a.manifest,a.job_id,a.output,a.data_root,

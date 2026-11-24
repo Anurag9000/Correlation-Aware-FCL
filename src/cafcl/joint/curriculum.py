@@ -147,7 +147,8 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
                  local_depth=1, seed=0, head_policy="occurrence_specific",
                  offline_clients=0, outage_duration=1, terminal_flush=True,
                  minimum_samples=1, require_all_classes=True,
-                 interval_boundaries=None, upload_cohorts=None):
+                 interval_boundaries=None, upload_cohorts=None,
+                 allocation_order='timeline'):
     """Compile exact explicit events (atomic_step, client, class tuple).
 
     Fixed unique-data allocation: each observed class's entire TRAIN pool is
@@ -159,6 +160,8 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
         raise ValueError("Invalid client/class/depth count")
     if not 0 <= offline_clients < num_clients or outage_duration < 1:
         raise ValueError("Invalid outage specification")
+    if allocation_order not in ('timeline','client_semantic'):
+        raise ValueError('Unsupported allocation order')
     if minimum_samples < 1:
         raise ValueError("Minimum sample support must be positive")
     if head_policy not in ("occurrence_specific", "semantic_shared", "client_semantic"):
@@ -198,6 +201,18 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
             raise ValueError(f"Insufficient TRAIN samples for class {c}: {len(pool[c])}/{n}")
         random.Random(stable_seed(seed, "allocation", c)).shuffle(pool[c])
     seen_occ = Counter()
+    # Order by client/semantic task for sequence-order ablations. Each
+    # client's semantic occurrences receive identical sample subsets when
+    # only their task order is permuted (repetitions retain their local rank).
+    allocation_events=(ordered if allocation_order=='timeline' else
+                       sorted(ordered,key=lambda x:(x[1],x[2],x[0])))
+    allocated={}
+    for t,i,classes in allocation_events:
+        ids=[]
+        for label in classes:
+            j=seen_occ[label];seen_occ[label]+=1;n=len(pool[label])
+            ids.extend(pool[label][j*n//counts[label]:(j+1)*n//counts[label]])
+        allocated[t,i]=tuple(ids)
     local_exp = Counter()
     tasks = []
     for t, i, classes in ordered:
@@ -208,14 +223,8 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
         head = (f'{task_key}__client_{i:03d}__atomic_{t:06d}' if head_policy == 'occurrence_specific' else
                 task_key if head_policy == 'semantic_shared' else
                 f'{task_key}__client_{i:03d}')
-        ids = []
-        for c in classes:
-            j = seen_occ[c]
-            seen_occ[c] += 1
-            n = len(pool[c])
-            ids.extend(pool[c][j*n//counts[c]:(j+1)*n//counts[c]])
         tasks.append(AtomicTask(occ, semantic, head, i, t, local_exp[i],
-                                classes, tuple(ids)))
+                                classes, allocated[t,i]))
     horizon = ordered[-1][0]+1
     active_steps = sorted({t for t, _, _ in ordered})
     if active_steps != list(range(horizon)):
@@ -280,6 +289,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
                   "unused_training_indices": sorted(set(range(len(train_targets)))-set(all_indices)),
                   "minimum_samples_per_occurrence": min(len(x.train_indices) for x in tasks),
                   "raw_sample_overlap": 0.0,
+                  "allocation_order": allocation_order,
                   "training_target_hash": digest(list(map(int, train_targets)))}
     return JointPlan(num_classes, num_clients, seed, head_policy, tuple(tasks),
                      tuple(intervals), audit, allocation)

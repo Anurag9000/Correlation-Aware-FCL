@@ -42,3 +42,22 @@ and knowledge-flow instrumentation, complete campaign controller/resource
 broker, resume/regression validation and empirical experiments. Explicit
 schedules can encode many family motifs but are not equivalent to automated
 validated family-specific experiment generators.
+
+## Expanded screening and atomic-time audit
+
+The screening catalog contains constructive initial A–G and I–O, Q–R
+motifs in both learning settings, with H in the foundational registry.
+The screening planner reports rejected schedules and low sample support.
+Family P is explicitly blocked. Sequence permutations use client/semantic
+sample allocation to match each client's raw sample multiset. The runtime
+now schedules true atomic coordinates (including idle client gaps) and
+checks a server model/archive metadata digest before and after private
+learning. It emits an interval-level JSON trace with atomic occurrences.
+
+Run the screening planner:
+    PYTHONPATH=src python -m cafcl.joint.runner plan --suite screening --output runs/joint_screening
+
+These are first-pass constructive screens, not the full proposed A–R
+factorial catalog. Coverage tails, planned novelty, and oracle omission
+must be interpreted as declared interventions; do not infer causal
+isolation where other variables change. No test execution is claimed yet.

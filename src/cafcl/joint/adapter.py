@@ -36,7 +36,8 @@ def load_plan(path, expected_hash, train_targets):
         require_all_classes=False,
         interval_boundaries=[max(r['atomic_steps'])+1 for r in learning],
         upload_cohorts=[r['upload_clients'] for r in learning],
-        terminal_flush=saved['intervals'][-1]['terminal_flush'])
+        terminal_flush=saved['intervals'][-1]['terminal_flush'],
+        allocation_order=saved['allocation_audit'].get('allocation_order','timeline'))
     if rebuilt.to_dict()['plan_hash']!=claimed:
         raise ValueError('Joint plan reconstruction differs from saved plan')
     return saved
