@@ -1,9 +1,13 @@
-# CAFCL 121-cell campaign archive
+# CAFCL campaign archive
 
-The complete local campaign archive is stored in [`campaign_archive/cafcl_121_2026-11-22`](../campaign_archive/cafcl_121_2026-11-22/). Its `ARCHIVE_MANIFEST.json` lists each included file with its size and SHA-256.
+The local campaign archive is stored in [`campaign_archive/cafcl_121_2026-11-22`](../campaign_archive/cafcl_121_2026-11-22/). `ARCHIVE_MANIFEST.json` lists each included file with its size and SHA-256.
 
-The archive contains the authoritative 121-cell ledger and summary, run plans, source and runner files, audit snapshots, transferred terminal outputs, V100 result artifacts already held on Kakarot, and the fresh Mtech terminal-output transfer. The Mtech transfer manifest records 15 terminal runs and 4 provisional snapshots; all 1,193 file hashes recorded for terminal runs were checked locally with no mismatch.
+The archive includes the authoritative 121-cell ledger and summary, plans, source and runner files, audit snapshots, locally held V100 outputs, and Mtech result directories. The Mtech transfer receipt records the ledger roots and attempt paths found on Mtech, absent paths, worker status files, source hashes, and transfer exclusions.
 
-The ledger snapshot has 121 terminal execution states. At the latest audit refresh, 41 cells were `completed_verified`, 24 were `completed_verified_with_metadata_reconciliation`, and 56 remained `needs_audit`. Execution completion and audit completion are separate; the archive preserves this distinction.
+The latest ledger snapshot has 121 terminal execution states: 41 `completed_verified`, 24 `completed_verified_with_metadata_reconciliation`, and 56 `needs_audit`. Training completion and result-audit completion remain separate ledger states.
 
-Model checkpoints and weight files (`.pt`, except `scenario.pt` inputs), temporary files, lock/PID files, the transport test directory, the vendored rclone executable, and the 900 MiB transport write-through probe are excluded. The source campaign archive on this machine is retained unchanged. No remote files were deleted as part of synchronization.
+The expanded Mtech transfer found 131 existing locations among 173 ledger-linked paths. It copied 8,436 result, source, and run-evidence files totaling 693,475,438 bytes after excluding 41,602 Python bytecode cache files. Every retained file matched its Mtech SHA-256 after transfer. The source status files include 149 `completed`, 31 `running`, 4 `failed`, and 2 `interrupted` snapshots; the `running` values are preserved as historical records. A contemporaneous Mtech check found no CAFCL campaign process and 4 MiB VRAM in use.
+
+Forty-two ledger-linked paths were absent from Mtech. Many belong to V100-assigned attempts. The local archive retains the V100 artifacts that were already available on Kakarot; direct V100 SSH still rejects authentication, so these missing paths are listed in the Mtech transfer receipt rather than represented as transferred.
+
+Model/checkpoint `.pt` files were excluded except `scenario.pt` run inputs, along with `.tmp`, `.lock`, `.pid`, Python bytecode caches, the vendored rclone executable, transport-test files, and the 900 MiB write-through probe. Source files on Mtech and V100 were not deleted by synchronization.

@@ -1,0 +1,46 @@
+{
+  "attempt_id": "attempt_02",
+  "broker_log": "/home/anurag24092/Projects/Correlation-Aware-FCL-tasksize45-disjoint-ablation-20261122/results/task_il/task_5/offline_2/attempts/attempt_02/broker.log",
+  "cell_id": "TASKSIZE5_TASK_IL_DISJOINT_OFF2_REPLAY_FEDAVG_SEED0",
+  "command": [
+    "/home/anurag24092/Projects/Correlation-Aware-FCL/.venv/bin/python",
+    "/home/anurag24092/Projects/Correlation-Aware-FCL-vram-broker-20261122/vram_broker.py",
+    "--run-id",
+    "TASKSIZE5_TASK_IL_DISJOINT_OFF2_REPLAY_FEDAVG_SEED0-retry-02",
+    "--estimate-mib",
+    "8192",
+    "--margin-mib",
+    "1024",
+    "--receipt",
+    "/home/anurag24092/Projects/Correlation-Aware-FCL-tasksize45-disjoint-ablation-20261122/results/task_il/task_5/offline_2/attempts/attempt_02/vram_admission.json",
+    "--",
+    "/home/anurag24092/Projects/Correlation-Aware-FCL-tasksize45-disjoint-ablation-20261122/taskil_src/.venv/bin/python",
+    "/home/anurag24092/Projects/Correlation-Aware-FCL-tasksize45-disjoint-ablation-20261122/scripts/tasksize45_campaign.py",
+    "--worker-spec",
+    "/home/anurag24092/Projects/Correlation-Aware-FCL-tasksize45-disjoint-ablation-20261122/queue/recovery_attempts/TASKSIZE5_TASK_IL_DISJOINT_OFF2_REPLAY_FEDAVG_SEED0_attempt_02.json"
+  ],
+  "config_sha256": "088ef865376d712b3e3b2da7c9e57294785c241be57224dc781d3ab2e1ede7de",
+  "estimate_mib": 8192,
+  "host": "MtechDEServer1",
+  "margin_mib": 1024,
+  "pid": 24962,
+  "plan_validation": {
+    "classes_once_each": true,
+    "head_width": 5,
+    "job_id": "TASKSIZE5_TASK_IL_DISJOINT_OFF2_REPLAY_FEDAVG_SEED0",
+    "learning_syncs": 4,
+    "status": "plan_validated",
+    "task_heads": 20,
+    "tasks_per_client": 4,
+    "terminal_flush": true
+  },
+  "run_id": "TASKSIZE5_TASK_IL_DISJOINT_OFF2_REPLAY_FEDAVG_SEED0-retry-02",
+  "source_sha256": {
+    "/home/anurag24092/Projects/Correlation-Aware-FCL-intratask-sync-ablation-20261122/scripts/intratask_sync_campaign.py": "0b24d69db5dc4187d965af009ca622159599c25ee9ad262966b562f1c1bf1f02",
+    "/home/anurag24092/Projects/Correlation-Aware-FCL-intratask-sync-ablation-20261122/scripts/parallel_sync_campaign.py": "80ca2118cb000698ca4c4ba19694eeb4520fc163dd8996165608a0988a6025fe",
+    "/home/anurag24092/Projects/Correlation-Aware-FCL-intratask-sync-ablation-20261122/scripts/retry_sync_failed.py": "9c3baa225b82dd827a27f3a19dad3f49589451e45f24fb402071a3fcdb8ee352",
+    "/home/anurag24092/Projects/Correlation-Aware-FCL-tasksize45-disjoint-ablation-20261122/scripts/parallel_tasksize_campaign.py": "82de585ab614c44b745a1cac4293a1cd39100bfc6b51c0ccda7013f5796d4e4a",
+    "/home/anurag24092/Projects/Correlation-Aware-FCL-tasksize45-disjoint-ablation-20261122/scripts/tasksize45_campaign.py": "efea697276895f28b7e7e057a53e62344e66797b8771b41bf492e697e442d237"
+  },
+  "started_at": 1795345520.330188
+}

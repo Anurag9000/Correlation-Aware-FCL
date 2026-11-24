@@ -1,0 +1,1356 @@
+{
+  "config": {
+    "aggregator": "fedavg",
+    "arrival_lag_by_client": {},
+    "batch_size": 64,
+    "block_id": "G",
+    "boundary_mode": "known",
+    "causal_diagnostics": false,
+    "causal_max_clients": 6,
+    "checkpoint_every": 0,
+    "class_holder_weights": {},
+    "class_imbalance_power": 0.0,
+    "class_order_override": [],
+    "class_pair_protocol": "strict",
+    "class_sample_fraction": {},
+    "class_subset": [],
+    "classes_per_local_task": 5,
+    "classwise_head_merge": false,
+    "client_heterogeneity": false,
+    "client_sample_skew": 0.0,
+    "client_training_concurrency": 5,
+    "dataset": "cifar100",
+    "der_alpha": 0.5,
+    "der_beta": 0.5,
+    "dirichlet_alpha": 0.5,
+    "epochs": 10,
+    "evaluate_final_only": false,
+    "fedadam_epsilon": 1e-08,
+    "fedprox_mu": 0.0,
+    "feedback_gain": 0.5,
+    "feedback_threshold": 0.25,
+    "force_target": "none",
+    "fork_checkpoint_round": 0,
+    "fork_source_job": "",
+    "full_sync": false,
+    "gem_grouping": "class",
+    "gradient_diagnostics": false,
+    "holders_override": {},
+    "intervention_round": -1,
+    "job_id": "CAFCL_G_G_width5_overlap_3_seed0__attempt_03",
+    "label_noise_rate": 0.0,
+    "learning_setting": "task_il",
+    "local_optimizer": "sgd",
+    "local_tasks_per_round": 1,
+    "lr": 0.03,
+    "max_pending_samples": 0,
+    "memory_per_class": 50,
+    "memory_policy": "random_per_class",
+    "method": "replay",
+    "model": "resnet18_cifar32",
+    "momentum": 0.9,
+    "num_clients": 5,
+    "offline_duration_rounds": 0,
+    "optimizer_state_policy": "persist",
+    "overlap": 0.5,
+    "participation": 1.0,
+    "participation_overrides": {},
+    "participation_schedule": "constant",
+    "pending_policy": "latest",
+    "prepost_diagnostics": false,
+    "recurrence_client_policy": "different",
+    "recurrence_delay": 1,
+    "recurrence_period": 0,
+    "recurrence_repeats": 1,
+    "recurrence_round_delay": 0,
+    "regularization_strength": 10.0,
+    "relation": "natural",
+    "replay_bn_policy": "batch_update",
+    "replay_buffer_order_policy": "archive_order",
+    "replay_padding_policy": "repeat_chunk",
+    "replay_ratio": 1.0,
+    "replay_reservoir_fraction": 0.1111111111111111,
+    "replay_update_policy": "sampled_mixed",
+    "representation_diagnostics": false,
+    "reset_memory_on_sync": false,
+    "resume": false,
+    "rounds_per_stage": 1,
+    "sample_overlap_fraction": 0.0,
+    "scenario": "disjoint",
+    "seed": 0,
+    "selection_temperature": 1.0,
+    "selector": "random",
+    "server_beta1": 0.9,
+    "server_beta2": 0.999,
+    "server_lr": 1.0,
+    "si_xi": 0.1,
+    "spurious_ood_eval": false,
+    "spurious_strength": 0.0,
+    "stage_participation": [],
+    "stages": 1,
+    "stream_client_chain": false,
+    "stream_offline_policy": "random",
+    "stream_overlap_fraction": 0.0,
+    "stream_overlap_kind": "none",
+    "stream_partial_batch_policy": "include_padding",
+    "stream_protocol": true,
+    "stream_recurrence_rounds": 0,
+    "stream_schedule_override": [
+      [
+        0,
+        0,
+        0,
+        [
+          63,
+          15,
+          58,
+          4,
+          7
+        ],
+        false
+      ],
+      [
+        0,
+        2,
+        0,
+        [
+          4,
+          15,
+          58,
+          40,
+          95
+        ],
+        true
+      ],
+      [
+        0,
+        1,
+        0,
+        [
+          40,
+          4,
+          95,
+          69,
+          80
+        ],
+        true
+      ],
+      [
+        0,
+        3,
+        0,
+        [
+          4,
+          40,
+          95,
+          86,
+          16
+        ],
+        true
+      ],
+      [
+        0,
+        4,
+        0,
+        [
+          16,
+          86,
+          4,
+          12,
+          18
+        ],
+        true
+      ],
+      [
+        1,
+        3,
+        0,
+        [
+          26,
+          96,
+          71,
+          91,
+          55
+        ],
+        false
+      ],
+      [
+        1,
+        0,
+        0,
+        [
+          71,
+          55,
+          26,
+          90,
+          10
+        ],
+        true
+      ],
+      [
+        1,
+        1,
+        0,
+        [
+          10,
+          90,
+          55,
+          45,
+          61
+        ],
+        true
+      ],
+      [
+        1,
+        4,
+        0,
+        [
+          90,
+          10,
+          55,
+          72,
+          19
+        ],
+        true
+      ],
+      [
+        1,
+        2,
+        0,
+        [
+          90,
+          19,
+          10,
+          79,
+          82
+        ],
+        true
+      ],
+      [
+        2,
+        0,
+        0,
+        [
+          53,
+          44,
+          92,
+          1,
+          64
+        ],
+        false
+      ],
+      [
+        2,
+        3,
+        0,
+        [
+          53,
+          64,
+          92,
+          93,
+          21
+        ],
+        true
+      ],
+      [
+        2,
+        1,
+        0,
+        [
+          21,
+          93,
+          64,
+          94,
+          22
+        ],
+        true
+      ],
+      [
+        2,
+        4,
+        0,
+        [
+          22,
+          94,
+          64,
+          51,
+          3
+        ],
+        true
+      ],
+      [
+        2,
+        2,
+        0,
+        [
+          3,
+          94,
+          64,
+          76,
+          88
+        ],
+        true
+      ],
+      [
+        3,
+        3,
+        0,
+        [
+          97,
+          98,
+          34,
+          36,
+          78
+        ],
+        false
+      ],
+      [
+        3,
+        4,
+        0,
+        [
+          97,
+          78,
+          34,
+          52,
+          85
+        ],
+        true
+      ],
+      [
+        3,
+        0,
+        0,
+        [
+          97,
+          34,
+          78,
+          35,
+          28
+        ],
+        true
+      ],
+      [
+        3,
+        2,
+        0,
+        [
+          97,
+          78,
+          28,
+          65,
+          30
+        ],
+        true
+      ],
+      [
+        3,
+        1,
+        0,
+        [
+          78,
+          30,
+          65,
+          60,
+          77
+        ],
+        true
+      ],
+      [
+        4,
+        4,
+        0,
+        [
+          87,
+          66,
+          31,
+          83,
+          54
+        ],
+        false
+      ],
+      [
+        4,
+        3,
+        0,
+        [
+          87,
+          66,
+          83,
+          49,
+          9
+        ],
+        true
+      ],
+      [
+        4,
+        1,
+        0,
+        [
+          66,
+          87,
+          83,
+          0,
+          38
+        ],
+        true
+      ],
+      [
+        4,
+        2,
+        0,
+        [
+          0,
+          38,
+          83,
+          5,
+          33
+        ],
+        true
+      ],
+      [
+        4,
+        0,
+        0,
+        [
+          33,
+          5,
+          38,
+          23,
+          56
+        ],
+        true
+      ],
+      [
+        5,
+        3,
+        0,
+        [
+          84,
+          46,
+          70,
+          20,
+          68
+        ],
+        false
+      ],
+      [
+        5,
+        1,
+        0,
+        [
+          46,
+          70,
+          68,
+          75,
+          24
+        ],
+        true
+      ],
+      [
+        5,
+        2,
+        0,
+        [
+          46,
+          75,
+          70,
+          14,
+          62
+        ],
+        true
+      ],
+      [
+        5,
+        0,
+        0,
+        [
+          62,
+          75,
+          70,
+          17,
+          47
+        ],
+        true
+      ],
+      [
+        5,
+        4,
+        0,
+        [
+          62,
+          17,
+          75,
+          39,
+          57
+        ],
+        true
+      ],
+      [
+        6,
+        0,
+        0,
+        [
+          41,
+          8,
+          6,
+          37,
+          50
+        ],
+        false
+      ],
+      [
+        6,
+        4,
+        0,
+        [
+          6,
+          8,
+          37,
+          29,
+          42
+        ],
+        true
+      ],
+      [
+        6,
+        1,
+        0,
+        [
+          6,
+          29,
+          42,
+          25,
+          2
+        ],
+        true
+      ],
+      [
+        6,
+        2,
+        0,
+        [
+          2,
+          6,
+          42,
+          11,
+          73
+        ],
+        true
+      ],
+      [
+        6,
+        3,
+        0,
+        [
+          11,
+          2,
+          6,
+          43,
+          13
+        ],
+        true
+      ],
+      [
+        7,
+        2,
+        0,
+        [
+          27,
+          48,
+          89,
+          81,
+          32
+        ],
+        false
+      ],
+      [
+        7,
+        0,
+        0,
+        [
+          48,
+          27,
+          81,
+          99,
+          74
+        ],
+        true
+      ],
+      [
+        7,
+        3,
+        0,
+        [
+          74,
+          48,
+          99,
+          67,
+          59
+        ],
+        true
+      ],
+      [
+        7,
+        1,
+        0,
+        [
+          74,
+          48,
+          67,
+          63,
+          15
+        ],
+        true
+      ],
+      [
+        7,
+        4,
+        0,
+        [
+          63,
+          15,
+          67,
+          58,
+          4
+        ],
+        true
+      ]
+    ],
+    "stream_sync_every_batch": false,
+    "stream_terminal_flush": true,
+    "subset_diagnostics": false,
+    "target_client": -1,
+    "training_augmentation": "cifar_crop_flip",
+    "weight_decay": 0.0005
+  },
+  "config_sha256": "27d7af79b210e2f3ac9862c379b6eb7d19ff5aa9a80ee157bed8e44eadd51704",
+  "schedule": [
+    {
+      "classes": [
+        63,
+        15,
+        58,
+        4,
+        7
+      ],
+      "client": 0,
+      "intersection_with_previous": null,
+      "ordered_client_slot": 0,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 0,
+      "task_instance": "r00_c00"
+    },
+    {
+      "classes": [
+        4,
+        15,
+        58,
+        40,
+        95
+      ],
+      "client": 2,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 1,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 0,
+      "task_instance": "r00_c02"
+    },
+    {
+      "classes": [
+        40,
+        4,
+        95,
+        69,
+        80
+      ],
+      "client": 1,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 2,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 0,
+      "task_instance": "r00_c01"
+    },
+    {
+      "classes": [
+        4,
+        40,
+        95,
+        86,
+        16
+      ],
+      "client": 3,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 3,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 0,
+      "task_instance": "r00_c03"
+    },
+    {
+      "classes": [
+        16,
+        86,
+        4,
+        12,
+        18
+      ],
+      "client": 4,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 4,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 0,
+      "task_instance": "r00_c04"
+    },
+    {
+      "classes": [
+        26,
+        96,
+        71,
+        91,
+        55
+      ],
+      "client": 3,
+      "intersection_with_previous": null,
+      "ordered_client_slot": 0,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 1,
+      "task_instance": "r01_c03"
+    },
+    {
+      "classes": [
+        71,
+        55,
+        26,
+        90,
+        10
+      ],
+      "client": 0,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 1,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 1,
+      "task_instance": "r01_c00"
+    },
+    {
+      "classes": [
+        10,
+        90,
+        55,
+        45,
+        61
+      ],
+      "client": 1,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 2,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 1,
+      "task_instance": "r01_c01"
+    },
+    {
+      "classes": [
+        90,
+        10,
+        55,
+        72,
+        19
+      ],
+      "client": 4,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 3,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 1,
+      "task_instance": "r01_c04"
+    },
+    {
+      "classes": [
+        90,
+        19,
+        10,
+        79,
+        82
+      ],
+      "client": 2,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 4,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 1,
+      "task_instance": "r01_c02"
+    },
+    {
+      "classes": [
+        53,
+        44,
+        92,
+        1,
+        64
+      ],
+      "client": 0,
+      "intersection_with_previous": null,
+      "ordered_client_slot": 0,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 2,
+      "task_instance": "r02_c00"
+    },
+    {
+      "classes": [
+        53,
+        64,
+        92,
+        93,
+        21
+      ],
+      "client": 3,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 1,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 2,
+      "task_instance": "r02_c03"
+    },
+    {
+      "classes": [
+        21,
+        93,
+        64,
+        94,
+        22
+      ],
+      "client": 1,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 2,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 2,
+      "task_instance": "r02_c01"
+    },
+    {
+      "classes": [
+        22,
+        94,
+        64,
+        51,
+        3
+      ],
+      "client": 4,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 3,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 2,
+      "task_instance": "r02_c04"
+    },
+    {
+      "classes": [
+        3,
+        94,
+        64,
+        76,
+        88
+      ],
+      "client": 2,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 4,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 2,
+      "task_instance": "r02_c02"
+    },
+    {
+      "classes": [
+        97,
+        98,
+        34,
+        36,
+        78
+      ],
+      "client": 3,
+      "intersection_with_previous": null,
+      "ordered_client_slot": 0,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 3,
+      "task_instance": "r03_c03"
+    },
+    {
+      "classes": [
+        97,
+        78,
+        34,
+        52,
+        85
+      ],
+      "client": 4,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 1,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 3,
+      "task_instance": "r03_c04"
+    },
+    {
+      "classes": [
+        97,
+        34,
+        78,
+        35,
+        28
+      ],
+      "client": 0,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 2,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 3,
+      "task_instance": "r03_c00"
+    },
+    {
+      "classes": [
+        97,
+        78,
+        28,
+        65,
+        30
+      ],
+      "client": 2,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 3,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 3,
+      "task_instance": "r03_c02"
+    },
+    {
+      "classes": [
+        78,
+        30,
+        65,
+        60,
+        77
+      ],
+      "client": 1,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 4,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 3,
+      "task_instance": "r03_c01"
+    },
+    {
+      "classes": [
+        87,
+        66,
+        31,
+        83,
+        54
+      ],
+      "client": 4,
+      "intersection_with_previous": null,
+      "ordered_client_slot": 0,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 4,
+      "task_instance": "r04_c04"
+    },
+    {
+      "classes": [
+        87,
+        66,
+        83,
+        49,
+        9
+      ],
+      "client": 3,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 1,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 4,
+      "task_instance": "r04_c03"
+    },
+    {
+      "classes": [
+        66,
+        87,
+        83,
+        0,
+        38
+      ],
+      "client": 1,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 2,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 4,
+      "task_instance": "r04_c01"
+    },
+    {
+      "classes": [
+        0,
+        38,
+        83,
+        5,
+        33
+      ],
+      "client": 2,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 3,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 4,
+      "task_instance": "r04_c02"
+    },
+    {
+      "classes": [
+        33,
+        5,
+        38,
+        23,
+        56
+      ],
+      "client": 0,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 4,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 4,
+      "task_instance": "r04_c00"
+    },
+    {
+      "classes": [
+        84,
+        46,
+        70,
+        20,
+        68
+      ],
+      "client": 3,
+      "intersection_with_previous": null,
+      "ordered_client_slot": 0,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 5,
+      "task_instance": "r05_c03"
+    },
+    {
+      "classes": [
+        46,
+        70,
+        68,
+        75,
+        24
+      ],
+      "client": 1,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 1,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 5,
+      "task_instance": "r05_c01"
+    },
+    {
+      "classes": [
+        46,
+        75,
+        70,
+        14,
+        62
+      ],
+      "client": 2,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 2,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 5,
+      "task_instance": "r05_c02"
+    },
+    {
+      "classes": [
+        62,
+        75,
+        70,
+        17,
+        47
+      ],
+      "client": 0,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 3,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 5,
+      "task_instance": "r05_c00"
+    },
+    {
+      "classes": [
+        62,
+        17,
+        75,
+        39,
+        57
+      ],
+      "client": 4,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 4,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 5,
+      "task_instance": "r05_c04"
+    },
+    {
+      "classes": [
+        41,
+        8,
+        6,
+        37,
+        50
+      ],
+      "client": 0,
+      "intersection_with_previous": null,
+      "ordered_client_slot": 0,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 6,
+      "task_instance": "r06_c00"
+    },
+    {
+      "classes": [
+        6,
+        8,
+        37,
+        29,
+        42
+      ],
+      "client": 4,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 1,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 6,
+      "task_instance": "r06_c04"
+    },
+    {
+      "classes": [
+        6,
+        29,
+        42,
+        25,
+        2
+      ],
+      "client": 1,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 2,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 6,
+      "task_instance": "r06_c01"
+    },
+    {
+      "classes": [
+        2,
+        6,
+        42,
+        11,
+        73
+      ],
+      "client": 2,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 3,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 6,
+      "task_instance": "r06_c02"
+    },
+    {
+      "classes": [
+        11,
+        2,
+        6,
+        43,
+        13
+      ],
+      "client": 3,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 4,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 6,
+      "task_instance": "r06_c03"
+    },
+    {
+      "classes": [
+        27,
+        48,
+        89,
+        81,
+        32
+      ],
+      "client": 2,
+      "intersection_with_previous": null,
+      "ordered_client_slot": 0,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 7,
+      "task_instance": "r07_c02"
+    },
+    {
+      "classes": [
+        48,
+        27,
+        81,
+        99,
+        74
+      ],
+      "client": 0,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 1,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 7,
+      "task_instance": "r07_c00"
+    },
+    {
+      "classes": [
+        74,
+        48,
+        99,
+        67,
+        59
+      ],
+      "client": 3,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 2,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 7,
+      "task_instance": "r07_c03"
+    },
+    {
+      "classes": [
+        74,
+        48,
+        67,
+        63,
+        15
+      ],
+      "client": 1,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 3,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 7,
+      "task_instance": "r07_c01"
+    },
+    {
+      "classes": [
+        63,
+        15,
+        67,
+        58,
+        4
+      ],
+      "client": 4,
+      "intersection_with_previous": 3,
+      "ordered_client_slot": 4,
+      "overlap_group": "overlap_3",
+      "recurrence_kind": "within_step_class_overlap",
+      "source_task": null,
+      "sync": 7,
+      "task_instance": "r07_c04"
+    }
+  ],
+  "schedule_plan": {
+    "adjacent_shared_classes": 3,
+    "aggregator": "fedavg",
+    "attempt_id": "attempt_03",
+    "batch_size": 64,
+    "classes_covered": 100,
+    "classes_per_task": 2,
+    "classes_per_task_target": 5,
+    "dataset": "cifar100",
+    "epochs_per_task": 10,
+    "family": "G",
+    "learning_setting": "task_il",
+    "learning_syncs": 8,
+    "lr": 0.03,
+    "memory_per_class": 50,
+    "method": "replay",
+    "momentum": 0.9,
+    "num_clients": 5,
+    "optimizer_state_policy": "persist",
+    "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/results/G/G_width5_overlap_3_seed0__attempt_03",
+    "participation": "full",
+    "replay_ratio": 1.0,
+    "replay_reservoir_fraction": 0.1111111111111111,
+    "replay_update_policy": "sampled_mixed",
+    "run_id": "G_width5_overlap_3_seed0__attempt_03",
+    "schedule_rng_seed": 500,
+    "schedule_validated": true,
+    "seed": 0,
+    "sync_boundary": "after_complete_client_task",
+    "task_instances": 40,
+    "task_width_histogram": {
+      "5": 40
+    },
+    "tasks_per_client": {
+      "0": 8,
+      "1": 8,
+      "2": 8,
+      "3": 8,
+      "4": 8
+    },
+    "terminal_flush": "communication_only",
+    "training_augmentation": "cifar_crop_flip",
+    "weight_decay": 0.0005
+  },
+  "schedule_sha256": "106848297d6ea2c52aae19553dde15c5995ea65b518831485cf00298db5422f2",
+  "source_variant": "runtime_baseline_taskil"
+}

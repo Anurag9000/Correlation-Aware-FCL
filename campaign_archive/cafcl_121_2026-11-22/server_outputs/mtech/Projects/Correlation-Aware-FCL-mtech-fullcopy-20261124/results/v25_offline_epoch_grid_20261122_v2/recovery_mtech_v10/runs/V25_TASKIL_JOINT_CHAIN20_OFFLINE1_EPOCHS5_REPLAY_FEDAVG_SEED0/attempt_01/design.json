@@ -1,0 +1,367 @@
+{
+  "backbone": "resnet18_cifar32",
+  "block_id": "block_10_TASK_IL_JOINT_offline0to3_ep5",
+  "class_occurrence_values": [
+    1,
+    2,
+    3
+  ],
+  "config": {
+    "aggregator": "fedavg",
+    "arrival_lag_by_client": {},
+    "batch_size": 64,
+    "block_id": "",
+    "boundary_mode": "known",
+    "causal_diagnostics": false,
+    "causal_max_clients": 6,
+    "checkpoint_every": 0,
+    "class_holder_weights": {},
+    "class_imbalance_power": 0.0,
+    "class_order_override": [],
+    "class_pair_protocol": "strict",
+    "class_sample_fraction": {},
+    "class_subset": [],
+    "classes_per_local_task": 2,
+    "classwise_head_merge": false,
+    "client_heterogeneity": false,
+    "client_sample_skew": 0.0,
+    "client_training_concurrency": 5,
+    "dataset": "cifar100",
+    "der_alpha": 0.5,
+    "der_beta": 0.5,
+    "dirichlet_alpha": 0.5,
+    "epochs": 5,
+    "evaluate_final_only": true,
+    "fedadam_epsilon": 1e-08,
+    "fedprox_mu": 0.0,
+    "feedback_gain": 0.5,
+    "feedback_threshold": 0.25,
+    "force_target": "none",
+    "fork_checkpoint_round": 0,
+    "fork_source_job": "",
+    "full_sync": false,
+    "gem_grouping": "class",
+    "gradient_diagnostics": false,
+    "holders_override": {},
+    "intervention_round": -1,
+    "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+    "label_noise_rate": 0.0,
+    "learning_setting": "task_il",
+    "local_optimizer": "sgd",
+    "local_tasks_per_round": 1,
+    "lr": 0.03,
+    "max_pending_samples": 0,
+    "memory_per_class": 50,
+    "memory_policy": "random_per_class",
+    "method": "replay",
+    "model": "resnet18_cifar32",
+    "momentum": 0.9,
+    "num_clients": 5,
+    "offline_duration_rounds": 0,
+    "optimizer_state_policy": "persist",
+    "overlap": 0.5,
+    "participation": 0.8,
+    "participation_overrides": {},
+    "participation_schedule": "constant",
+    "pending_policy": "latest",
+    "prepost_diagnostics": false,
+    "recurrence_client_policy": "different",
+    "recurrence_delay": 1,
+    "recurrence_period": 0,
+    "recurrence_repeats": 1,
+    "recurrence_round_delay": 0,
+    "regularization_strength": 10.0,
+    "relation": "natural",
+    "replay_bn_policy": "batch_update",
+    "replay_buffer_order_policy": "archive_order",
+    "replay_padding_policy": "repeat_chunk",
+    "replay_ratio": 1.0,
+    "replay_reservoir_fraction": 0.1111111111111111,
+    "replay_update_policy": "sampled_mixed",
+    "representation_diagnostics": false,
+    "reset_memory_on_sync": false,
+    "resume": true,
+    "rounds_per_stage": 1,
+    "sample_overlap_fraction": 0.0,
+    "scenario": "disjoint",
+    "seed": 0,
+    "selection_temperature": 1.0,
+    "selector": "random",
+    "server_beta1": 0.9,
+    "server_beta2": 0.999,
+    "server_lr": 1.0,
+    "si_xi": 0.1,
+    "spurious_ood_eval": false,
+    "spurious_strength": 0.0,
+    "stage_participation": [],
+    "stages": 1,
+    "stream_client_chain": true,
+    "stream_offline_policy": "random",
+    "stream_overlap_fraction": 0.0,
+    "stream_overlap_kind": "none",
+    "stream_partial_batch_policy": "include_padding",
+    "stream_protocol": true,
+    "stream_recurrence_rounds": 0,
+    "stream_sync_every_batch": false,
+    "stream_terminal_flush": true,
+    "subset_diagnostics": false,
+    "target_client": -1,
+    "training_augmentation": "cifar_crop_flip",
+    "weight_decay": 0.0005
+  },
+  "curriculum": "joint",
+  "epochs_per_task": 5,
+  "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+  "learning_syncs": 20,
+  "offline_count": 1,
+  "online_count_per_learning_sync": 4,
+  "participation": 0.8,
+  "randomized_online_cohorts": [
+    {
+      "offline_clients": [
+        4
+      ],
+      "selected_clients": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "sync": 1
+    },
+    {
+      "offline_clients": [
+        2
+      ],
+      "selected_clients": [
+        0,
+        1,
+        3,
+        4
+      ],
+      "sync": 2
+    },
+    {
+      "offline_clients": [
+        1
+      ],
+      "selected_clients": [
+        0,
+        2,
+        3,
+        4
+      ],
+      "sync": 3
+    },
+    {
+      "offline_clients": [
+        0
+      ],
+      "selected_clients": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "sync": 4
+    },
+    {
+      "offline_clients": [
+        4
+      ],
+      "selected_clients": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "sync": 5
+    },
+    {
+      "offline_clients": [
+        2
+      ],
+      "selected_clients": [
+        0,
+        1,
+        3,
+        4
+      ],
+      "sync": 6
+    },
+    {
+      "offline_clients": [
+        3
+      ],
+      "selected_clients": [
+        0,
+        1,
+        2,
+        4
+      ],
+      "sync": 7
+    },
+    {
+      "offline_clients": [
+        2
+      ],
+      "selected_clients": [
+        0,
+        1,
+        3,
+        4
+      ],
+      "sync": 8
+    },
+    {
+      "offline_clients": [
+        0
+      ],
+      "selected_clients": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "sync": 9
+    },
+    {
+      "offline_clients": [
+        4
+      ],
+      "selected_clients": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "sync": 10
+    },
+    {
+      "offline_clients": [
+        2
+      ],
+      "selected_clients": [
+        0,
+        1,
+        3,
+        4
+      ],
+      "sync": 11
+    },
+    {
+      "offline_clients": [
+        0
+      ],
+      "selected_clients": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "sync": 12
+    },
+    {
+      "offline_clients": [
+        4
+      ],
+      "selected_clients": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "sync": 13
+    },
+    {
+      "offline_clients": [
+        0
+      ],
+      "selected_clients": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "sync": 14
+    },
+    {
+      "offline_clients": [
+        1
+      ],
+      "selected_clients": [
+        0,
+        2,
+        3,
+        4
+      ],
+      "sync": 15
+    },
+    {
+      "offline_clients": [
+        4
+      ],
+      "selected_clients": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "sync": 16
+    },
+    {
+      "offline_clients": [
+        3
+      ],
+      "selected_clients": [
+        0,
+        1,
+        2,
+        4
+      ],
+      "sync": 17
+    },
+    {
+      "offline_clients": [
+        0
+      ],
+      "selected_clients": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "sync": 18
+    },
+    {
+      "offline_clients": [
+        2
+      ],
+      "selected_clients": [
+        0,
+        1,
+        3,
+        4
+      ],
+      "sync": 19
+    },
+    {
+      "offline_clients": [
+        0
+      ],
+      "selected_clients": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "sync": 20
+    }
+  ],
+  "seed": 0,
+  "setting": "task_il",
+  "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/taskil_src",
+  "task_instances": 100,
+  "terminal_flush": true,
+  "total_server_syncs_including_flush": 21
+}

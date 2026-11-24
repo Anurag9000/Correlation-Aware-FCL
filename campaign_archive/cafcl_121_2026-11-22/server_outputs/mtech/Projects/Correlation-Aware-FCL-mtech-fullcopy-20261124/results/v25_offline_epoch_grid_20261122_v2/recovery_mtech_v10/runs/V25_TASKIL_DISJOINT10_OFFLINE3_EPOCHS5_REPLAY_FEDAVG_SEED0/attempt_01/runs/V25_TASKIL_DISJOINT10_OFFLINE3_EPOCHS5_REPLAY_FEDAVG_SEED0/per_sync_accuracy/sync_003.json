@@ -1,0 +1,454 @@
+{
+  "round": 3,
+  "version": 3,
+  "terminal_communication_only_flush": false,
+  "test_accuracy": 0.529,
+  "validation_accuracy": 0.5293333333333333,
+  "observed_classes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29
+  ],
+  "observed_class_count": 30,
+  "server_integrated_classes": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    22,
+    23,
+    26,
+    27
+  ],
+  "server_integrated_class_count": 20,
+  "server_integrated_task_heads": [
+    {
+      "task_id": "task_002_003__client_001__round_00000__ordinal_000",
+      "classes": [
+        2,
+        3
+      ]
+    },
+    {
+      "task_id": "task_004_005__client_002__round_00000__ordinal_000",
+      "classes": [
+        4,
+        5
+      ]
+    },
+    {
+      "task_id": "task_006_007__client_003__round_00000__ordinal_000",
+      "classes": [
+        6,
+        7
+      ]
+    },
+    {
+      "task_id": "task_008_009__client_004__round_00000__ordinal_000",
+      "classes": [
+        8,
+        9
+      ]
+    },
+    {
+      "task_id": "task_012_013__client_001__round_00001__ordinal_000",
+      "classes": [
+        12,
+        13
+      ]
+    },
+    {
+      "task_id": "task_014_015__client_002__round_00001__ordinal_000",
+      "classes": [
+        14,
+        15
+      ]
+    },
+    {
+      "task_id": "task_016_017__client_003__round_00001__ordinal_000",
+      "classes": [
+        16,
+        17
+      ]
+    },
+    {
+      "task_id": "task_018_019__client_004__round_00001__ordinal_000",
+      "classes": [
+        18,
+        19
+      ]
+    },
+    {
+      "task_id": "task_022_023__client_001__round_00002__ordinal_000",
+      "classes": [
+        22,
+        23
+      ]
+    },
+    {
+      "task_id": "task_026_027__client_003__round_00002__ordinal_000",
+      "classes": [
+        26,
+        27
+      ]
+    }
+  ],
+  "pending_unintegrated_classes": [
+    0,
+    1,
+    10,
+    11,
+    20,
+    21,
+    24,
+    25,
+    28,
+    29
+  ],
+  "integrated_only_test_accuracy": 0.517,
+  "selected_clients": [
+    1,
+    3
+  ],
+  "zero_prediction_classes": [
+    13,
+    14,
+    17,
+    24,
+    27
+  ],
+  "predicted_class_counts": {
+    "0": 37,
+    "1": 163,
+    "2": 26,
+    "3": 174,
+    "4": 199,
+    "5": 1,
+    "6": 7,
+    "7": 193,
+    "8": 195,
+    "9": 5,
+    "10": 135,
+    "11": 65,
+    "12": 200,
+    "15": 200,
+    "16": 200,
+    "18": 2,
+    "19": 198,
+    "20": 8,
+    "21": 192,
+    "22": 197,
+    "23": 3,
+    "25": 200,
+    "26": 200,
+    "28": 21,
+    "29": 179
+  },
+  "backbone": "resnet18_cifar32",
+  "optimizer": {
+    "name": "sgd",
+    "lr": 0.03,
+    "momentum": 0.9,
+    "weight_decay": 0.0005
+  },
+  "classifier_bias_diagnostics": {},
+  "per_class_true_logit_margin": {
+    "0": -0.032099419832229616,
+    "1": 0.2486126035451889,
+    "2": -0.5349904495477676,
+    "3": 2.44915771484375,
+    "4": 0.3366909748315811,
+    "5": -0.25834197878837584,
+    "6": -0.615932300388813,
+    "7": 0.7156485110521317,
+    "8": 3.113897776603699,
+    "9": -2.277622059583664,
+    "10": -0.015811352133750914,
+    "11": 0.009476302862167359,
+    "12": 0.9766456872224808,
+    "13": -0.9325483518838883,
+    "14": -0.21728047311306,
+    "15": 0.21939982414245607,
+    "16": 0.19371520817279816,
+    "17": -0.07761621057987213,
+    "18": -0.6108802652359009,
+    "19": 0.6594230264425278,
+    "20": 0.01042747676372528,
+    "21": 0.048000653386116025,
+    "22": 0.18601173043251037,
+    "23": -0.12486414790153504,
+    "24": -0.13195689976215363,
+    "25": 0.12356082558631896,
+    "26": 0.32385313749313355,
+    "27": -0.22391612350940704,
+    "28": 0.0037466192245483396,
+    "29": 0.03505568206310272
+  },
+  "test_only_no_feedback": true,
+  "entries": [
+    {
+      "client_id": 0,
+      "first_round": 1,
+      "classes": [
+        0,
+        1
+      ],
+      "mean_accuracy": 0.635,
+      "per_class": {
+        "0": 0.32,
+        "1": 0.95
+      },
+      "pending_not_accepted_classes": [
+        0,
+        1
+      ]
+    },
+    {
+      "client_id": 0,
+      "first_round": 2,
+      "classes": [
+        10,
+        11
+      ],
+      "mean_accuracy": 0.585,
+      "per_class": {
+        "10": 0.76,
+        "11": 0.41
+      },
+      "pending_not_accepted_classes": [
+        10,
+        11
+      ]
+    },
+    {
+      "client_id": 0,
+      "first_round": 3,
+      "classes": [
+        20,
+        21
+      ],
+      "mean_accuracy": 0.54,
+      "per_class": {
+        "20": 0.08,
+        "21": 1.0
+      },
+      "pending_not_accepted_classes": [
+        20,
+        21
+      ]
+    },
+    {
+      "client_id": 1,
+      "first_round": 1,
+      "classes": [
+        2,
+        3
+      ],
+      "mean_accuracy": 0.63,
+      "per_class": {
+        "2": 0.26,
+        "3": 1.0
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 1,
+      "first_round": 2,
+      "classes": [
+        12,
+        13
+      ],
+      "mean_accuracy": 0.5,
+      "per_class": {
+        "12": 1.0,
+        "13": 0.0
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 1,
+      "first_round": 3,
+      "classes": [
+        22,
+        23
+      ],
+      "mean_accuracy": 0.495,
+      "per_class": {
+        "22": 0.98,
+        "23": 0.01
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 2,
+      "first_round": 1,
+      "classes": [
+        4,
+        5
+      ],
+      "mean_accuracy": 0.505,
+      "per_class": {
+        "4": 1.0,
+        "5": 0.01
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 2,
+      "first_round": 2,
+      "classes": [
+        14,
+        15
+      ],
+      "mean_accuracy": 0.5,
+      "per_class": {
+        "14": 0.0,
+        "15": 1.0
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 2,
+      "first_round": 3,
+      "classes": [
+        24,
+        25
+      ],
+      "mean_accuracy": 0.5,
+      "per_class": {
+        "24": 0.0,
+        "25": 1.0
+      },
+      "pending_not_accepted_classes": [
+        24,
+        25
+      ]
+    },
+    {
+      "client_id": 3,
+      "first_round": 1,
+      "classes": [
+        6,
+        7
+      ],
+      "mean_accuracy": 0.525,
+      "per_class": {
+        "6": 0.06,
+        "7": 0.99
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 3,
+      "first_round": 2,
+      "classes": [
+        16,
+        17
+      ],
+      "mean_accuracy": 0.5,
+      "per_class": {
+        "16": 1.0,
+        "17": 0.0
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 3,
+      "first_round": 3,
+      "classes": [
+        26,
+        27
+      ],
+      "mean_accuracy": 0.5,
+      "per_class": {
+        "26": 1.0,
+        "27": 0.0
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 4,
+      "first_round": 1,
+      "classes": [
+        8,
+        9
+      ],
+      "mean_accuracy": 0.515,
+      "per_class": {
+        "8": 0.99,
+        "9": 0.04
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 4,
+      "first_round": 2,
+      "classes": [
+        18,
+        19
+      ],
+      "mean_accuracy": 0.5,
+      "per_class": {
+        "18": 0.01,
+        "19": 0.99
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 4,
+      "first_round": 3,
+      "classes": [
+        28,
+        29
+      ],
+      "mean_accuracy": 0.505,
+      "per_class": {
+        "28": 0.11,
+        "29": 0.9
+      },
+      "pending_not_accepted_classes": [
+        28,
+        29
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+# Server sync 1 — global model v1
+
+Backbone: resnet18_cifar32; held-out CIFAR-100 TEST diagnostic only.
+Seen-class global accuracy: 9.35% on 20 observed labels.
+Validation accuracy: 0.074; seen labels never predicted: 16.
+Server-accepted classes: 12; pending private classes: 8.
+Accepted-only TEST accuracy: 0.15583333333333332.
+Terminal flush: False. Selected clients: [0, 1, 4].
+**Test diagnostics MUST NOT control training, optimizer choice, selection, or tuning.**
+
+| Client | U1 |
+|:--|:--:|
+| Client 0 | **39.2%** (0: 0%, 1: 0%, 2: 67%, 3: 90%) |
+| Client 1 | **0.0%** (4: 0%, 5: 0%, 6: 0%, 7: 0%) |
+| Client 2 | **0.0%** (8: 0%, 9: 0%, 10: 0%, 11: 0%) [PENDING upload] |
+| Client 3 | **0.0%** (12: 0%, 13: 0%, 14: 0%, 15: 0%) [PENDING upload] |
+| Client 4 | **7.5%** (16: 0%, 17: 0%, 18: 30%, 19: 0%) |

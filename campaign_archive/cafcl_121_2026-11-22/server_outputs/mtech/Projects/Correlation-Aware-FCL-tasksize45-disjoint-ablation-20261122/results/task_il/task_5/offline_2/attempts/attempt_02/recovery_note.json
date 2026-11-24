@@ -1,0 +1,20 @@
+{
+  "attempt_id": "attempt_02",
+  "backup_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-tasksize45-disjoint-ablation-20261122/recovery_oom_20261122_1631",
+  "cell_id": "TASKSIZE5_TASK_IL_DISJOINT_OFF2_REPLAY_FEDAVG_SEED0",
+  "config_sha256": "088ef865376d712b3e3b2da7c9e57294785c241be57224dc781d3ab2e1ede7de",
+  "created_at": 1795345520.3265285,
+  "failure": "CUDA OOM with 9.12 MiB free; original broker estimate 4096 MiB plus 1024 MiB margin; expected 4-sync schedule but committed sync count unknown",
+  "plan_validation": {
+    "classes_once_each": true,
+    "head_width": 5,
+    "job_id": "TASKSIZE5_TASK_IL_DISJOINT_OFF2_REPLAY_FEDAVG_SEED0",
+    "learning_syncs": 4,
+    "status": "plan_validated",
+    "task_heads": 20,
+    "tasks_per_client": 4,
+    "terminal_flush": true
+  },
+  "repair": "raise Mtech task-size/sync VRAM estimate to 8192 MiB with existing 1024 MiB margin; preserve same config/seed; use isolated output_dir",
+  "retry_of": "attempt_01"
+}
