@@ -250,6 +250,8 @@ def run_suite(jobs,all_jobs,args,root,devices):
                     write_status(root,all_jobs,failures)
                     schedule(device)
         write_status(root,all_jobs,failures)
+        from .diagnostic_analysis import analyze
+        analyze(root,all_jobs)
         return int(bool(failures))
     finally:lock.rmdir()
 

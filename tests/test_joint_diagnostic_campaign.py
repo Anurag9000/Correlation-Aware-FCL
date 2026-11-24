@@ -123,3 +123,36 @@ def test_artifact_validation_rejects_incomplete(tmp_path):
     j=load_jobs()[0]
     with pytest.raises(ValueError,match="Missing"):
         validate_artifacts(j,tmp_path)
+
+
+def test_exact_weighted_gradient_equivalence():
+    from torch.nn import functional as F
+    torch.manual_seed(0)
+    model=torch.nn.Linear(4,3)
+    x=torch.randn(13,4);y=torch.arange(13)%3
+    params=list(model.parameters())
+    central=torch.autograd.grad(F.cross_entropy(model(x),y),params)
+    for k in (2,3,5,10):
+        pieces=torch.tensor_split(torch.arange(len(y)),k)
+        accumulated=[torch.zeros_like(p) for p in params]
+        for idx in pieces:
+            g=torch.autograd.grad(F.cross_entropy(model(x[idx]),y[idx]),params)
+            for a,v in zip(accumulated,g):a.add_(v,alpha=len(idx)/len(y))
+        for a,b in zip(accumulated,central):torch.testing.assert_close(a,b)
+
+
+def test_fixed_buffer_weighted_branch():
+    from cafcl.matched_diagnostic import weighted_parameter_branch
+    base={"p":torch.tensor([1.]),"bn":torch.tensor([4.])}
+    a={"p":torch.tensor([3.]),"bn":torch.tensor([8.])}
+    b={"p":torch.tensor([5.]),"bn":torch.tensor([9.])}
+    result=weighted_parameter_branch(base,[(.25,a),(.75,b)],{"p"})
+    assert result["p"].item()==4.5 and result["bn"].item()==4
+
+
+def test_empty_analysis(tmp_path):
+    from cafcl.diagnostic_analysis import analyze
+    from cafcl.diagnostic_campaign import effective_jobs
+    result=analyze(tmp_path,effective_jobs(True,False))
+    assert result["completed_jobs"]==0 and len(result["unavailable_jobs"])==142
+    assert (tmp_path/"analysis"/"job_summary.csv").is_file()

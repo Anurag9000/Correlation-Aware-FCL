@@ -24,7 +24,7 @@ PYTHONPATH=src python -m cafcl.diagnostic_campaign preflight --all --allow-recon
 PYTHONPATH=src python -m cafcl.diagnostic_campaign run --all --allow-reconstruction --gpus 0 1 --data-root data --retries 1
 ```
 
-Use actual visible GPU indices; for one GPU use `--device cuda:0`. The suite uses one worker process per GPU and assigns the next pending job to the first free device. There is no CPU fallback. `--download` is optional and fetches the data once during preflight. `--subset-probes` enables computationally expensive size-two/three cohort diagnostics for K<=5 and changes the effective configuration signature.
+Use actual visible GPU indices; for one GPU use `--device cuda:0`. The suite uses one worker process per GPU and assigns the next pending job to the first free device. There is no CPU fallback. `--download` is optional and fetches the data once during preflight. `--subset-probes` enables computationally expensive all nonempty cohort diagnostics for K<=5 and changes the effective configuration signature.
 
 Resume at the job level using the same flags and output root:
 ```bash
@@ -46,4 +46,26 @@ Without reconstruction opt-in, select `--family FL`, `MC`, `CM`, or `MO`, or use
 - Historical reconstruction: archived class sequences and exact archived 40%/60% cohorts (or explicit OF cycles); unique occurrence-specific heads, final duplicate pair in joint chain, local-known competitor CE in original CIL, global observed CE intervention. Repeated rounds preserve parent task/cohort. Replay cap 50/class occurrence; deterministic independent sample partition and crop/flip; paired physical-batch padding. Task-ID accuracy and documented class-membership union evaluation are distinct outputs.
 - ST: beta 0/2; fresh-only discards stale pending upload and refreshes selected clients while retaining private replay; pre-train download discards unsent displacement; reset momentum; TRAIN-only BN recalibration on received data/shared replay. These are explicitly new diagnostic policies, not verified original mechanisms.
 - FCL: persistent client SGD unless reset intervention, sample-weighted full-model FedAvg, stale parameter rebasing, stale BN buffers retained. Shared replay is simulated TRAIN-index sharing and is not privacy preserving. Global-seen objective shares current label metadata even with offline clients; no future labels enter the loss.
-- Diagnostics: local/pre/post aggregation/download fixed validation panels, sampled current objective gradient norm and pairwise backbone gradient cosine at each stage's first communication; official test by stage and terminal flush; optional subset evaluation. Full exact gradient norm, matched-acquisition checkpoint forks, full-state checkpoint/resume, and automatic inferential multi-seed confirmation remain open. No GPU validation is claimed by the authoring session.
+- Diagnostics: local/pre/post aggregation/download fixed validation panels, sampled current and current-plus-replay gradient norm and backbone cosine before and after each communication, historical gradient-to-update alignment, candidate-update geometry; official test by stage and terminal flush; optional subset evaluation. Full exact gradient norm, matched-acquisition checkpoint forks, full-state checkpoint/resume, and automatic inferential multi-seed confirmation remain open. No GPU validation is claimed by the authoring session.
+
+
+## Central scientific analysis
+
+The run suite automatically generates `analysis/job_summary.csv`,
+`learning_trajectories.csv`, `controlled_contrasts.csv`,
+`compute_matching.json` and `analysis_summary.json` after execution.
+Rebuild without training:
+```bash
+PYTHONPATH=src python -m cafcl.diagnostic_analysis --allow-reconstruction
+```
+Use the same `--subset-probes` flag if used for execution. The report reads
+only terminal artifact-validated attempts with matching effective job specs.
+Acquisition-conditioned retention uses 50/70/90% thresholds and a fixed
+mid-horizon cohort. CM reports actual budget equality, not nominal epochs.
+All contrasts are descriptive at seed zero; no test results drive training.
+The optional subset probes evaluate all nonempty cohorts (K<=5) and
+parameter-only pair nonadditivity for actual uploaders using fixed base BN
+buffers. Gradient norms use fixed sampled TRAIN panels, not full exact
+population gradients. Historical directional probes use fixed validation
+panels. Exact full-gradient convergence claims and shared-checkpoint
+forks remain future work.

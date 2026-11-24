@@ -26,6 +26,8 @@ from .diagnostic_campaign import atomic_json
 from .diagnostic_designs import (compile_matched, compile_reconstructed, batch_stream,
     plan_audit, stable_seed, head_labels, model_head)
 from .stationary_diagnostic import average
+from .joint.mechanistic import alignment
+from .joint.update_diagnostics import update_geometry
 
 
 def to_cpu(value):
@@ -192,24 +194,30 @@ def aggregate(base,clients,cohort,version,param_names,beta=1.,fresh_only=False):
                for c,w in zip(uploads,weights)]
 
 
-def grad_probe(model,base,bank,units,setting,observed,device,limit=32,competitors=None):
+def grad_probe(model,base,bank,units,setting,observed,device,limit=32,competitors=None,replay=None):
     """Sampled TRAIN current-objective gradient at identical server weights.
 
     Per-client sample count weights estimate global gradient; not a claim
     of exact full-dataset stationarity. Eval-mode normalization is explicit.
     """
     params=[p for p in model.parameters() if p.requires_grad]
-    grads=[];weights=[]
+    grads=[];weights=[];loss_values=[];active_ids=[]
     model.load_state_dict(base);model.eval()
     for cid,us in enumerate(units):
         rr=records(us)
         if not rr:
             continue
-        sample=random.Random(stable_seed("gradient",len(rr))).sample(rr,min(limit,len(rr)))
+        rng=random.Random(stable_seed("gradient",cid,len(rr)))
+        sample=rng.sample(rr,min(limit,len(rr)))
+        if replay is not None and replay[cid]:
+            by=defaultdict(list)
+            for row in replay[cid]:by[int(bank.train.targets[row[0]])].append(row)
+            sample=sample+[rng.choice(by[rng.choice(sorted(by))]) for _ in range(len(sample))]
         x,y,h=load_records(bank.train,sample,device)
         loss=classification_loss(model,x,y,h,setting,competitors[cid] if competitors is not None else observed)
         g=torch.autograd.grad(loss,params,allow_unused=True)
         grads.append([v.detach().cpu() if v is not None else None for v in g]);weights.append(len(rr))
+        loss_values.append(float(loss.detach()));active_ids.append(cid)
     total=sum(weights);norm=0.;pairs={}
     for j,p in enumerate(params):
         agg=torch.zeros_like(p,device="cpu",dtype=torch.float64)
@@ -227,9 +235,44 @@ def grad_probe(model,base,bank,units,setting,observed,device,limit=32,competitor
             if a is not None:ni+=float(a.double().square().sum())
             if b is not None:nj+=float(b.double().square().sum())
             if a is not None and b is not None:dot+=float((a.double()*b.double()).sum())
-        pairs[f"{i}:{j}"]=dot/math.sqrt(ni*nj) if ni and nj else None
+        pairs[f"{active_ids[i]}:{active_ids[j]}"]=dot/math.sqrt(ni*nj) if ni and nj else None
     return {"sampled_weighted_current_objective_gradient_norm_squared":norm,"pairwise_backbone_cosine":pairs,
+            "sampled_weighted_objective_loss":sum(w*l for w,l in zip(weights,loss_values))/total,
+            "data_objective":"current_plus_class_uniform_replay" if replay is not None else "current_only",
             "split":"train","objective":"local_competitor_union" if competitors is not None else "common_global","max_examples_per_client":limit,"bn_mode":"eval","no_feedback":True}
+
+
+def historical_gradient(model,state,dataset,heads,setting,observed,device,limit=4):
+    """Fixed validation historical panel, no influence on training/selection."""
+    if not heads:return {}
+    by=defaultdict(list)
+    for i,y in enumerate(dataset.targets):by[int(y)].append(i)
+    if setting=="class_il":
+        rr=[(i,next(h for h in sorted(heads) if c in head_labels(h)))
+            for c in sorted({c for h in heads for c in head_labels(h)}) for i in by[c][:limit]]
+    else:
+        rr=[(i,h) for h in sorted(heads) for c in head_labels(h) for i in by[c][:limit]]
+    if not rr:return {}
+    model.load_state_dict(state);model.eval()
+    params=[(n,p) for n,p in model.named_parameters() if p.requires_grad]
+    result={}
+    for start in range(0,len(rr),64):
+        rows=rr[start:start+64]
+        x,y,h=load_records(dataset,rows,device)
+        loss=classification_loss(model,x,y,h,setting,observed)*len(rows)/len(rr)
+        grads=torch.autograd.grad(loss,[p for _,p in params],allow_unused=True)
+        for (n,_),g in zip(params,grads):
+            if g is not None:
+                v=g.detach().cpu()
+                if n in result:result[n].add_(v)
+                else:result[n]=v.clone()
+    return result
+
+
+def weighted_parameter_branch(base,weighted_candidates,param_names):
+    """Linear parameter-only branch with fixed base buffers."""
+    return {k:(v+sum((w*(s[k]-v) for w,s in weighted_candidates),torch.zeros_like(v))
+               if k in param_names else v) for k,v in base.items()}
 
 
 def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",subset_probes=False):
@@ -281,9 +324,15 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
         after=eval_panel(updated,prior|current)
         hist_before=macro(before,history_keys);hist_after=macro(after,history_keys)
         current_before=macro(before,current_keys);current_after=macro(after,current_keys)
-        subsets=[]
+        g_history=historical_gradient(model,base,bank.validation,prior,setting,observed,device)
+        candidate_uploads=[{"client_id":u["client"],"examples":u["unique_pending_samples"],
+            "weights":candidate(base,clients[u["client"]]["state"],clients[u["client"]]["anchor"],u["lag"],param_names,beta)} for u in uploads]
+        geometry=update_geometry(model,base,candidate_uploads) if candidate_uploads else None
+        history_alignment=alignment(g_history,base,updated,sorted(param_names)) if g_history else None
+        individual_alignment={str(u["client_id"]):alignment(g_history,base,u["weights"],sorted(param_names)) for u in candidate_uploads} if g_history else {}
+        subsets=[];interactions=[]
         if subset_probes and len(clients)<=5 and not flush:
-            for n in (2,3):
+            for n in range(1,len(clients)+1):
                 for ids in combinations(range(len(clients)),n):
                     alt,alt_uploads=aggregate(base,clients,ids,version,param_names,beta,fresh_only)
                     if intervention=="bn_recalibration" and alt_uploads:
@@ -291,7 +340,18 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
                         alt=recalibrate_bn(model,alt,bank.train,received+[i for i,_ in archive],device,stable_seed(seed,ctr))
                     ev=eval_panel(alt,prior|current)
                     subsets.append({"cohort":list(ids),"history_accuracy":macro(ev,history_keys),
-                        "current_accuracy":macro(ev,current_keys),"history_loss":macro(ev,history_keys,"loss")})
+                        "current_accuracy":macro(ev,current_keys),"history_loss":macro(ev,history_keys,"loss"),
+                        "history_gain":difference(macro(ev,history_keys),hist_before),"current_gain":difference(macro(ev,current_keys),current_before)})
+            if g_history:
+                for u,v in combinations(candidate_uploads,2):
+                    total=u["examples"]+v["examples"]
+                    wi,wj=u["examples"]/total,v["examples"]/total
+                    a,b=weighted_parameter_branch(base,[(wi,u["weights"])],param_names),weighted_parameter_branch(base,[(wj,v["weights"])],param_names)
+                    both=weighted_parameter_branch(base,[(wi,u["weights"]),(wj,v["weights"])],param_names)
+                    losses=[macro(eval_panel(st,prior),history_keys,"loss") for st in (a,b,both)]
+                    baseline=macro(before,history_keys,"loss")
+                    interactions.append({"pair":[u["client_id"],v["client_id"]],"weights":[wi,wj],
+                        "historical_loss_nonadditivity":losses[2]-losses[0]-losses[1]+baseline,"buffers":"fixed_base"})
         server=updated
         if uploads:version+=1
         actual=[u["client"] for u in uploads]
@@ -316,6 +376,8 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
              "shared_replay_size":len(archive),"uploads":uploads,"rejected_stale_clients":rejected,
              "integrated_classes":sorted(integrated),"pending_classes":sorted(observed-integrated),"local":local or [],
              "download":sync,"counts":train_counts or {},"gradient":gradient,"counterfactual_subsets":subsets,
+             "update_geometry":geometry,"historical_gradient_alignment":history_alignment,
+             "individual_historical_alignment":individual_alignment,"pair_interactions":interactions,
              "diagnostic_split":"validation","panel_examples_per_class":4}
         atomic_json(diagnostics/f"sync_{ctr:04d}.json",row)
         return row
@@ -339,7 +401,9 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
                 frozen=[cap([(i,h) for i,h in c["memory"]+c["shared"] if tuple(h) not in current]) for c in clients]
             competitor_sets=[competitors(c,us) for c,us in zip(clients,s["units"])]
             gradient=grad_probe(model,server,bank,s["units"],setting,observed,device,
-                competitors=competitor_sets if reconstructed and setting=="class_il" and job["objective"]=="original" else None) if rr==0 else None
+                competitors=competitor_sets if reconstructed and setting=="class_il" and job["objective"]=="original" else None)
+            gradient_replay=grad_probe(model,server,bank,s["units"],setting,observed,device,
+                competitors=competitor_sets if reconstructed and setting=="class_il" and job["objective"]=="original" else None,replay=frozen)
             for cid,us in enumerate(s["units"]):
                 if not us:continue
                 c=clients[cid];hist_keys=targets(prior,setting)
@@ -362,6 +426,12 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
                     c["memory"]=cap(c["memory"]+records(us))
             row=commit(s["cohort"],t,current,train_counts=dict(counts),local=local,gradient=gradient)
             row["round_in_stage"]=rr+1
+            row["pre_current_replay_gradient"]=gradient_replay
+            row["post_current_gradient"]=grad_probe(model,server,bank,s["units"],setting,observed,device,
+                competitors=competitor_sets if reconstructed and setting=="class_il" and job["objective"]=="original" else None)
+            row["post_current_replay_gradient"]=grad_probe(model,server,bank,s["units"],setting,observed,device,
+                competitors=competitor_sets if reconstructed and setting=="class_il" and job["objective"]=="original" else None,replay=frozen)
+            atomic_json(diagnostics/f"sync_{ctr:04d}.json",row)
             rows.append(row)
         # Official test is diagnostic only. Fixed historical keys distinguish
         # forgetting from the newly expanded evaluation denominator.
@@ -377,6 +447,7 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
         legacy=evaluate_union(model,server,bank.test,prior|current,device) if reconstructed and setting=="task_il" else None
         if legacy is not None:rows[-1]["legacy_union_accuracy"]=macro(legacy,set(legacy))
         atomic_json(output/f"stage_{t:02d}_evaluation.json",{"stage":t,"test":test,"validation":val,"current":sorted(targets(current,setting)),"historical":sorted(keys),"class_membership_union_test":legacy})
+        atomic_json(diagnostics/f"sync_{ctr:04d}.json",rows[-1])
         torch.save({"server":server,"version":version,"stage":t},checkpoints/"latest.pt")
         prior.update(current)
     if job["participation"]<1 or reconstructed:
@@ -389,6 +460,7 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
             atomic_json(output/"terminal_union_evaluation.json",union)
         row["test_forgetting"]=sum(max(0.,peak[k]-v["accuracy"]) for k,v in final.items())/len(final)
         rows.append(row);atomic_json(output/"terminal_evaluation.json",final)
+        atomic_json(diagnostics/f"sync_{ctr:04d}.json",row)
         torch.save({"server":server,"version":version,"stage":len(stages)},checkpoints/"latest.pt")
     else:
         final=test
