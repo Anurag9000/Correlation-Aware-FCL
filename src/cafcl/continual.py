@@ -613,7 +613,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         if count<=0 or not replay_by_class:
             raise ValueError('Cannot draw a replay minibatch from an empty archive')
         ids=[]
-        if len(oldmemory)>=count:
+        if len(oldmemory)>=count and cfg.replay_class_sampling_policy=='distinct_first':
             remaining={cls:list(group) for cls,group in replay_by_class.items()}
             for _ in range(count):
                 classes=tuple(cls for cls,group in remaining.items() if group)
@@ -658,6 +658,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         model.train(was_train)
         return value
     old_loss_before=local_old_loss() if cfg.prepost_diagnostics else None
+    physical_forward_draws=0
     step_count=0; microbatch_count=0; loss_total=0.; last_projection=0.; num_violations=0;qp_calls=0
     def load_memory_microbatch(ids,tag,padding_pool=None):
         x,y=next(iter(_example_loader(training_data,ids,cfg.batch_size,
@@ -795,6 +796,20 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                            replay_count=len(hy) if cfg.learning_setting=='task_il' else None,
                            replay_ids=history_ids if cfg.learning_setting=='task_il' else None)
             return
+        if cfg.physical_batch_policy=='variable':
+            for offset in range(0,len(y),fresh):
+                nx,ny=x[offset:offset+fresh],y[offset:offset+fresh]
+                current_ids=original_ids[offset:offset+fresh] if current_head_by_index is not None else None
+                n=min(cfg.batch_size-len(ny),int(round(len(ny)*cfg.replay_ratio)))
+                if n<=0:
+                    yield emit(nx,ny,current_ids)
+                    continue
+                hx,hy,_,history_ids=draw_history(n)
+                yield emit(torch.cat((nx,hx),dim=0),torch.cat((ny,hy),dim=0),current_ids,
+                           current_count=len(ny) if cfg.learning_setting=='task_il' else None,
+                           replay_count=len(hy) if cfg.learning_setting=='task_il' else None,
+                           replay_ids=history_ids if cfg.learning_setting=='task_il' else None)
+            return
         for offset in range(0,len(y),fresh):
             nx,ny=x[offset:offset+fresh],y[offset:offset+fresh]
             current_ids=original_ids[offset:offset+fresh] if current_head_by_index is not None else None
@@ -818,8 +833,9 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         for loaded in _example_loader(training_data,indices,cfg.batch_size,
                                    cfg.seed+rng_round*100_003+client.client_id*127+epoch+epoch_offset,
                                    include_indices=(online_der or keep_padding_mask or current_head_by_index is not None),
-                                   full_batch=True,padding_indices=padding_indices):
+                                   full_batch=cfg.physical_batch_policy=='fixed_pad',padding_indices=padding_indices):
             microbatches=list(full_training_batches(loaded))
+            valid_sizes=[(int(p[3])+(int(p[4]) if len(p)>=5 else 0)) if len(p)>=4 else len(p[1]) for p in microbatches]
             for micro_index,packed in enumerate(microbatches):
                 replay_example_count=0
                 replay_sample_ids=()
@@ -838,13 +854,14 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                     bool(oldmemory) and cfg.replay_ratio>0)
                 if not accumulate_optimizer_step or micro_index==0:
                     optimizer.zero_grad(set_to_none=True)
-                gradient_accumulation_scale=(1.0/len(microbatches) if accumulate_optimizer_step else 1.0)
+                gradient_accumulation_scale=(valid_sizes[micro_index]/sum(valid_sizes) if accumulate_optimizer_step else 1.0)
                 logical_size=len(y)
+                physical_forward_draws+=logical_size
                 macro_loss=0.
                 si_task_grads=None
                 captured_logits={}
-                if logical_size!=cfg.batch_size:
-                    raise RuntimeError('Training forward does not have exactly 64 images')
+                if not 1<=logical_size<=cfg.batch_size or (cfg.physical_batch_policy=='fixed_pad' and logical_size!=cfg.batch_size):
+                    raise RuntimeError('Training forward violates the configured physical batch policy')
                 if loss_example_count<1 or loss_example_count>logical_size:
                     raise RuntimeError('Training forward has an invalid loss-example count')
                 if cfg.method in {'native_glfc','native_lga'} and cfg.dataset=='cifar100':
@@ -1324,7 +1341,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
     joint_work=None
     if cfg.joint_plan_path and (cfg.method=='sgd' or (cfg.method=='replay' and cfg.replay_update_policy in {'sampled_mixed','sampled_mixed_accumulated'})):
         replay_draws=int(sum(replay_sampled_class_counts.values()))
-        current_draws=microbatch_count*cfg.batch_size-replay_draws
+        current_draws=physical_forward_draws-replay_draws
         planned_current_draws=len(indices)*cfg.epochs
         if current_draws<planned_current_draws:raise RuntimeError('Joint training omitted declared current sample draws')
         joint_work={'current_draws_including_padding':current_draws,

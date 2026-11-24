@@ -149,7 +149,8 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
                  offline_clients=0, outage_duration=1, terminal_flush=True,
                  minimum_samples=1, require_all_classes=True,
                  interval_boundaries=None, upload_cohorts=None,
-                 allocation_order='timeline',raw_sample_overlap=0.0,allow_cross_semantic_reuse=False,allocation_weights=None,control_kind='federated',epoch_segments=1):
+                 allocation_order='timeline',raw_sample_overlap=0.0,allow_cross_semantic_reuse=False,allocation_weights=None,control_kind='federated',epoch_segments=1,
+                 samples_per_class_occurrence=None):
     """Compile exact explicit events (atomic_step, client, class tuple).
 
     Fixed unique-data allocation: each observed class's entire TRAIN pool is
@@ -158,6 +159,11 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
     No automatic tail events, padding or class insertion.
     Explicit interval boundaries are exclusive atomic-step endpoints.
     """
+    if samples_per_class_occurrence is not None:
+        if not isinstance(samples_per_class_occurrence,int) or samples_per_class_occurrence<minimum_samples:
+            raise ValueError('Invalid fixed class-occurrence support')
+        if raw_sample_overlap or allocation_weights:
+            raise ValueError('Fixed class-occurrence support is separate from raw reuse and weighting')
     if not isinstance(epoch_segments,int) or epoch_segments<1:
         raise ValueError('Invalid epoch segment count')
     if epoch_segments>1 and (local_depth!=1 or interval_boundaries is not None or upload_cohorts is not None or offline_clients or raw_sample_overlap or control_kind!='federated'):
@@ -221,7 +227,8 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
             raise ValueError("Invalid training label")
         pool[c].append(index)
     for c, n in counts.items():
-        if len(pool[c]) < n*minimum_samples:
+        required=n*(samples_per_class_occurrence if samples_per_class_occurrence is not None else minimum_samples)
+        if len(pool[c]) < required:
             raise ValueError(f"Insufficient TRAIN samples for class {c}: {len(pool[c])}/{n}")
         random.Random(stable_seed(seed, "allocation", c)).shuffle(pool[c])
     weights=dict(allocation_weights or {})
@@ -261,7 +268,10 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
             j=seen_occ[label];seen_occ[label]+=1;n=len(pool[label])
             size=(j+1)*n//counts[label]-j*n//counts[label]
             shared=shared_counts[label]
-            if weights:
+            if samples_per_class_occurrence is not None:
+                size=samples_per_class_occurrence
+                ids.extend(pool[label][j*size:(j+1)*size])
+            elif weights:
                 size=weighted_counts[f'{t}:{i}:{label}']
                 start=private_cursor[label];end=start+size
                 ids.extend(pool[label][start:end]);private_cursor[label]=end
@@ -358,6 +368,9 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
                   "raw_sample_overlap": float(raw_sample_overlap),
                   "allocation_order": allocation_order,
                   "training_target_hash": digest(list(map(int, train_targets)))}
+    if samples_per_class_occurrence is not None:
+        allocation['samples_per_class_occurrence']=samples_per_class_occurrence
+        allocation['allocation_contract']='fixed_per_occurrence_unique_support'
     if control_kind!='federated':allocation['control_kind']=control_kind
     if weights:
         allocation['allocation_weights']={k:float(v) for k,v in sorted(weights.items())}

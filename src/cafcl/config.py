@@ -8,6 +8,7 @@ import json
 class RunConfig:
     dataset: str = "cifar100"
     batch_size: int = 64
+    physical_batch_policy: str = 'fixed_pad'
     num_clients: int = 10
     rounds_per_stage: int = 20
     epochs: int = 1
@@ -48,6 +49,7 @@ class RunConfig:
     pending_policy: str = "latest"
     max_pending_samples: int = 0
     replay_ratio: float = 1.0
+    replay_class_sampling_policy: str = 'distinct_first'
     replay_update_policy: str = "sampled_mixed"
     replay_bn_policy: str = "batch_update"
     replay_buffer_order_policy: str = "archive_order"
@@ -142,7 +144,14 @@ class RunConfig:
         if not __debug__:
             raise RuntimeError('Python -O disables scientific validation assertions; refusing execution')
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
-        assert self.batch_size == 64 or self.dataset == "synthetic", "All production optimization must use physical batch 64"
+        if self.batch_size<2:raise ValueError('Batch size must be at least two')
+        if self.physical_batch_policy not in {'fixed_pad','variable'}:raise ValueError('Unknown physical batch policy')
+        if not self.joint_plan_path:
+            assert self.batch_size == 64 or self.dataset == 'synthetic', 'Legacy production protocols use physical batch 64'
+            if self.physical_batch_policy!='fixed_pad':raise ValueError('Variable physical batches require the joint protocol')
+        if self.physical_batch_policy=='variable' and (self.method not in {'sgd','replay'} or (self.method=='replay' and self.replay_update_policy not in {'sampled_mixed','sampled_mixed_accumulated'})):
+            raise ValueError('Variable batches require SGD or sampled Replay')
+        if self.replay_class_sampling_policy not in {'distinct_first','class_uniform_with_replacement'}:raise ValueError('Unknown replay class-sampling policy')
         assert self.num_clients >= (1 if self.joint_plan_path and self.joint_control_kind=='centralized_sequential' else 2)
         assert 0 <= self.client_training_concurrency <= self.num_clients
         assert self.training_augmentation in {'none','cifar_crop_flip'}
@@ -342,6 +351,8 @@ class RunConfig:
     def to_dict(self):
         data=asdict(self)
         if data['audit_test_every_sync'] is True:data.pop('audit_test_every_sync')
+        if data['physical_batch_policy']=='fixed_pad':data.pop('physical_batch_policy')
+        if data['replay_class_sampling_policy']=='distinct_first':data.pop('replay_class_sampling_policy')
         for key,default in (('server_memory_per_class',0),('stale_update_policy','damped_delta'),('terminal_stale_guard',True),('aggregation_weight_policy','fresh_examples')):
             if data[key]==default:data.pop(key)
         # Preserve old plan-file serialization for unchanged job configurations.

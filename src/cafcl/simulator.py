@@ -31,11 +31,11 @@ from .task_ids import task_instance_id
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v6'
+PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v7'
 
 def protocol_version_for(cfg):
     if getattr(cfg,'joint_plan_path',''):
-        return 'joint_spatiotemporal_fcl_v7_audit_'+cfg.learning_setting
+        return 'joint_spatiotemporal_fcl_v8_audit_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -1283,6 +1283,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         atomic_json(run_dir/'summary.json',{'job_id':job,'dataset':cfg.dataset,
                     'fork_source':str(fork_from_checkpoint) if fork_from_checkpoint else None,
                     'device':str(device),'rounds':total_rounds,'backbone':backbone_description,'final_metrics':history[-1],
+                    'pre_terminal_flush_metrics':history[-2] if cfg.stream_protocol and cfg.stream_terminal_flush and len(history)>1 else None,
                     'model_final':str(run_dir/'model_final.pt'),
                     'shared_continual_state':server_cl_state.statistics(),
                     'per_sync_accuracy_report_dir':str(run_dir/'per_sync_accuracy'),

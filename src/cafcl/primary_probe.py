@@ -19,8 +19,8 @@ from .simulator import run_experiment,atomic_json
 from .selection import participation_budget
 
 
-def make_jobs(*,sync_every_batch=False):
-    seed=0;lr=.03;epochs=10;replay_fraction=1/9
+def make_jobs(*,sync_every_batch=False,seed=0):
+    lr=.03;epochs=10;replay_fraction=1/9
     pct_tag='11p1111'
     variant=('V28_BATCH_SYNC' if sync_every_batch else 'V27_SOURCE_TASK_REPLAY')
     cfg=replace(base(seed=seed,model='cnn'),num_clients=5,batch_size=64,classwise_head_merge=False,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
@@ -273,6 +273,7 @@ def build_report(root,jobs):
 def main(argv=None):
     p=argparse.ArgumentParser(description='Two simultaneous 5-client chain-stream simulations sharing ONE GPU')
     p.add_argument('--data-root',default='data')
+    p.add_argument('--seed',type=int,default=0)
     p.add_argument('--output-dir',default='results')
     p.add_argument('--gpu',type=int,default=0,
                    help='One physical GPU shared by BOTH concurrent runs (default: 0)')
@@ -284,11 +285,11 @@ def main(argv=None):
     p.add_argument('--no-download',action='store_true')
     p.add_argument('--worker',type=int,choices=(0,1),default=None,help=argparse.SUPPRESS)
     args=p.parse_args(argv)
-    jobs=make_jobs(sync_every_batch=args.sync_every_batch)
+    jobs=make_jobs(sync_every_batch=args.sync_every_batch,seed=args.seed)
     design=audited_plan(jobs)
     variant=('v28_batch_sync_source_task_replay' if args.sync_every_batch
              else 'v27_source_task_replay')
-    root=Path(args.output_dir)/f'primary_cifar100_taskil_fedavg_{variant}_resnet18_cropflip_classuniform_sampledmixed_chain20_randomoffline_ratio1_bs64_seed0_audit_v3'
+    root=Path(args.output_dir)/f'primary_cifar100_taskil_fedavg_{variant}_resnet18_cropflip_classuniform_sampledmixed_chain20_randomoffline_ratio1_bs64_seed{args.seed}_audit_v7'
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',design)
     if args.plan_only:
@@ -310,7 +311,7 @@ def main(argv=None):
         available=alias
     cmd=[sys.executable,'-m','cafcl.primary_probe',
          '--data-root',args.data_root,
-         '--output-dir',args.output_dir,'--no-download']
+         '--output-dir',args.output_dir,'--no-download','--seed',str(args.seed)]
     if args.sync_every_batch:cmd.append('--sync-every-batch')
     processes=[]
     for idx,gpu in enumerate(available):

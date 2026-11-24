@@ -44,7 +44,8 @@ def load_plan(path, expected_hash, train_targets):
         allocation_weights=saved['allocation_audit'].get('allocation_weights'),
         minimum_samples=saved['allocation_audit'].get('allocation_minimum_samples',1),
         control_kind=saved['allocation_audit'].get('control_kind','federated'),
-        epoch_segments=slicing['segments'] if slicing else 1)
+        epoch_segments=slicing['segments'] if slicing else 1,
+        samples_per_class_occurrence=saved['allocation_audit'].get('samples_per_class_occurrence'))
     if rebuilt.to_dict()['plan_hash']!=claimed:
         raise ValueError('Joint plan reconstruction differs from saved plan')
     return saved

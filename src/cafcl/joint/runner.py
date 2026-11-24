@@ -124,12 +124,15 @@ def job_config(job,plan,path,concurrency=1,local_evaluation=False,mechanistic_pr
         for oid in r['occurrences']:
             counts[(r['interval_id'],lookup[oid]['client_id'])]+=1
     cfg=RunConfig(dataset='cifar100',model='resnet18_cifar32',stream_protocol=True,
-        num_clients=plan['num_clients'],epochs=job['epochs'],batch_size=64,
+        num_clients=plan['num_clients'],epochs=job['epochs'],batch_size=job.get('batch_size',64),
+        physical_batch_policy=job.get('physical_batch_policy','fixed_pad'),
         participation=1.,selector='random',scenario='overlap',
         stages=1,rounds_per_stage=1,learning_setting=job['learning_setting'],
         local_tasks_per_round=max(counts.values()),method=job.get('method','replay'),
         aggregator='fedavg',memory_per_class=50 if job.get('method','replay')=='replay' else 0,classwise_head_merge=False,
-        replay_ratio=1. if job.get('method','replay')=='replay' else 0.,training_augmentation='cifar_crop_flip',
+        replay_ratio=job.get('replay_ratio',1. if job.get('method','replay')=='replay' else 0.),training_augmentation='cifar_crop_flip',
+        replay_update_policy=job.get('replay_update_policy','sampled_mixed'),
+        replay_class_sampling_policy=job.get('replay_class_sampling_policy','distinct_first'),
         share_continual_state=job.get('share_continual_state',True),
         server_memory_per_class=job.get('server_memory_per_class',0),
         stale_update_policy=job.get('stale_update_policy','damped_delta'),
