@@ -34,6 +34,7 @@ class RunConfig:
     stale_update_policy: str = 'damped_delta'
     terminal_stale_guard: bool = True
     aggregation_weight_policy: str = 'fresh_examples'
+    task_head_weight_policy: str = 'historical_exposure'
     lr: float = 0.03
     model: str = "vit_base_patch16_32"
     seed: int = 0
@@ -261,6 +262,9 @@ class RunConfig:
         if self.server_memory_per_class<0:raise ValueError('Negative server replay capacity')
         if self.server_memory_per_class and not self.share_continual_state:raise ValueError('Server replay cap requires a shared archive')
         if self.stale_update_policy not in {'damped_delta','undamped_delta','direct_model'}:raise ValueError('Unknown stale update policy')
+        if self.task_head_weight_policy not in {'historical_exposure','measured_exposure','equal_contributors'}:raise ValueError('Unknown task-head weight policy')
+        if self.task_head_weight_policy!='historical_exposure' and (not self.joint_plan_path or self.learning_setting!='task_il' or self.aggregator!='fedavg'):
+            raise ValueError('Head weighting controls require joint Task-IL FedAvg')
         if self.aggregation_weight_policy not in {'fresh_examples','optimizer_steps'}:raise ValueError('Unknown aggregation weight policy')
         if self.aggregation_weight_policy!='fresh_examples' and (not self.joint_plan_path or self.aggregator!='fedavg'):raise ValueError('Optimizer-step weighting is a joint FedAvg control')
         _require(self.causal_max_clients >= 1 and self.checkpoint_every >= 0, "Invalid configuration: self.causal_max_clients >= 1 and self.checkpoint_every >= 0")
@@ -362,6 +366,7 @@ class RunConfig:
         if data['audit_test_every_sync'] is True:data.pop('audit_test_every_sync')
         if data['joint_archive_upload_policy']=='selected':data.pop('joint_archive_upload_policy')
         if data['joint_archive_download_policy']=='selected':data.pop('joint_archive_download_policy')
+        if data['task_head_weight_policy']=='historical_exposure':data.pop('task_head_weight_policy')
         if data['physical_batch_policy']=='fixed_pad':data.pop('physical_batch_policy')
         if data['replay_class_sampling_policy']=='distinct_first':data.pop('replay_class_sampling_policy')
         for key,default in (('server_memory_per_class',0),('stale_update_policy','damped_delta'),('terminal_stale_guard',True),('aggregation_weight_policy','fresh_examples')):

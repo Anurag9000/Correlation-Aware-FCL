@@ -599,6 +599,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
     replay_sampled_class_counts=Counter()
     joint_replay_drawn_ids=set()
     replay_task_head_exposure=Counter()
+    current_task_head_draws=Counter()
     def record_task_replay(sample_ids,scale=1.):
         if cfg.learning_setting!='task_il':return
         from .models import task_head_key
@@ -895,6 +896,10 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                         captured_logits[key]=z.clone()
                 objective_logits=logits[:loss_example_count]
                 objective_y=y[:loss_example_count]
+                if cfg.learning_setting=='task_il':
+                    if current_head_by_index is not None:
+                        current_task_head_draws.update(current_head_by_index[int(i)] for i in original_ids[:loss_example_count].tolist())
+                    else:current_task_head_draws[task_head_key(task_id)]+=loss_example_count
                 if cfg.method not in NATIVE_METHODS or cfg.learning_setting=='task_il':
                     if cfg.learning_setting=='task_il' and current_head_by_index is not None:
                         if original_ids is None or len(original_ids)!=loss_example_count:
@@ -1345,6 +1350,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         elif task_classes:
             active_key=task_head_key(task_id)
             task_head_examples[active_key]=float(len(indices)*cfg.epochs)
+        if cfg.task_head_weight_policy=='measured_exposure':task_head_examples=dict(current_task_head_draws)
         for key,value in replay_task_head_exposure.items():
             task_head_examples[key]=task_head_examples.get(key,0.)+float(value)
     joint_work=None
@@ -1361,6 +1367,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
     return {**({'joint_work':joint_work} if cfg.joint_plan_path else {}),'weights':{k:v.detach().cpu().clone() for k,v in model.state_dict().items()},
             'examples':len(indices),'class_counts':class_counts,'class_update_steps':class_update_steps,
             'task_head_examples':task_head_examples,
+            'task_head_current_draws':dict(current_task_head_draws),
+            'task_head_fractional_replay_exposure':dict(replay_task_head_exposure),
             'active_pair_classes':list(active_pair_classes) if active_pair_classes else None,'steps':step_count,'loss':loss_total/max(1,microbatch_count),
             'constraint_violations':num_violations,'qp_calls':qp_calls,
             'projection_norm_last':last_projection,'memory_samples':sum(map(len,client.memory.values())),

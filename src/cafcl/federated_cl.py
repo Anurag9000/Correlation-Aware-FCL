@@ -18,6 +18,14 @@ import torch
 REGULARIZERS=('ewc','si','mas')
 MEMORY_METHODS=frozenset({'replay','gem','agem','er_ace','der','derpp','native_glfc','native_lga','native_feat'})
 
+def tensor_payload_bytes(value):
+    """Logical tensor payload size; deliberately excludes wire metadata."""
+    if torch.is_tensor(value):return value.numel()*value.element_size()
+    if isinstance(value,dict):return sum(tensor_payload_bytes(v) for v in value.values())
+    if isinstance(value,(tuple,list)):return sum(tensor_payload_bytes(v) for v in value)
+    return 0
+
+
 def _cpu_dict(values):
     return {str(k):v.detach().cpu().clone() for k,v in values.items()}
 
@@ -82,6 +90,7 @@ class FederatedCLState:
     acknowledged_train_indices:set[int]=field(default_factory=set)
     acknowledged_optimized_indices:set[int]=field(default_factory=set)
     last_archive_upload_bytes:int=0
+    last_aux_upload_bytes:dict[str,int]=field(default_factory=dict)
     independent_archive_version:int=0
     archive_source_heads:dict[int,set[str]]=field(default_factory=dict)
     joint_source_heads:dict[int,set[str]]=field(default_factory=dict)
@@ -114,12 +123,14 @@ class FederatedCLState:
         """Merge ONLY selected/uploaded private contributions once per source."""
         self.acknowledge_clients(uploaded_clients)
         self.last_archive_upload_bytes=0
+        self.last_aux_upload_bytes={}
         # Each accepted client's source-method artifact ledger becomes visible
         # only at an actual upload. In particular, offline GLFC/LGA entropy
         # and FEAT selection tickets must never leak before reconnection.
         for client in uploaded_clients:
             if (client.last_learning_method or method) in {
                     'native_glfc','native_lga','native_feat'}:
+                self.last_aux_upload_bytes['native_artifacts']=self.last_aux_upload_bytes.get('native_artifacts',0)+tensor_payload_bytes((client.native_memory_state,client.feat_selection_tickets,client.feat_selection_receipts))
                 self.source_method_artifacts[int(client.client_id)] = dict(
                     source_method=str(client.last_learning_method or method),
                     native_memory_state=copy.deepcopy(client.native_memory_state),
@@ -144,6 +155,7 @@ class FederatedCLState:
                     raise RuntimeError('Nonfinite original proto gradient')
                 self.native_prototype_gradients[key]=copy.deepcopy(receipt)
                 self.native_latest_accepted_prototypes.append(key)
+                self.last_aux_upload_bytes['native_prototypes']=self.last_aux_upload_bytes.get('native_prototypes',0)+tensor_payload_bytes(receipt)
         method_by_client={int(c.client_id):(c.last_learning_method or method)
                           for c in uploaded_clients}
         if any(m in MEMORY_METHODS for m in method_by_client.values()):
@@ -199,6 +211,7 @@ class FederatedCLState:
                             raise ValueError('DER logit target/class count mismatch or nonfinite target')
                         self.memory_logits[key]=logits.detach().cpu().clone()
                         self.logits_source[key]=(int(version),int(client.client_id))
+                        self.last_aux_upload_bytes['der_logits']=self.last_aux_upload_bytes.get('der_logits',0)+tensor_payload_bytes(logits)
             if server_memory_per_class>0:
                 # Deterministic uniform-priority reservoir over uploaded unique IDs.
                 # Evictions are real: payloads, logits and origins cannot survive the cap.
@@ -218,6 +231,7 @@ class FederatedCLState:
                 if method_by_client[client.client_id]!=kind:continue
                 delta=client.pending_importance.get(kind)
                 if not delta:continue
+                self.last_aux_upload_bytes[kind]=self.last_aux_upload_bytes.get(kind,0)+tensor_payload_bytes(delta)
                 for key in ('precision','weighted_anchor'):
                     for name,x in delta[key].items():
                         if not torch.isfinite(x).all():raise ValueError(f'Nonfinite {kind} state')
@@ -230,6 +244,7 @@ class FederatedCLState:
             new_receipts=[receipt for client in uploaded_clients
                           for receipt in client.pending_feat_ecc]
             if new_receipts:
+                self.last_aux_upload_bytes['feat_ecc']=tensor_payload_bytes(new_receipts)
                 result=consolidate_original_ecc(new_receipts)
                 if result is not None:
                     self.feat_ecc=clone_feat_ecc(result)
@@ -295,6 +310,14 @@ class FederatedCLState:
         client.received_replay_version=self.independent_archive_version
         client.joint_received_source_heads={i:set(heads) for i,heads in self.archive_source_heads.items()
                                            if i in self.exemplar_payloads}
+
+    def auxiliary_download_bytes(self,method):
+        objects={'der_logits':self.memory_logits,'importance':self.importance,
+                 'teacher':self.teacher,'native_artifacts':self.source_method_artifacts,
+                 'native_prototypes':self.native_prototype_gradients}
+        if method in {'native_glfc','native_lga'}:objects['native_proxy']=self.native_proxy_state
+        if method=='native_feat':objects['feat_ecc']=self.feat_ecc
+        return {k:tensor_payload_bytes(v) for k,v in objects.items()}
 
     def broadcast_to(self,client,method):
         """Receive the whole server state only at actual model synchronization."""

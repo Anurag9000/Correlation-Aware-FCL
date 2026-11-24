@@ -31,11 +31,11 @@ from .task_ids import task_instance_id
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v12'
+PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v13'
 
 def protocol_version_for(cfg):
     if getattr(cfg,'joint_plan_path',''):
-        return 'joint_spatiotemporal_fcl_v13_audit_'+cfg.learning_setting
+        return 'joint_spatiotemporal_fcl_v14_audit_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -773,6 +773,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     continue
                 uploaded['client_id']=cid
                 uploaded['aggregation_weight']=uploaded['accumulated_steps'] if cfg.aggregation_weight_policy=='optimizer_steps' else uploaded['examples']
+                uploaded['measured_head_contributions']=dict(uploaded['task_head_examples'])
+                if cfg.task_head_weight_policy=='equal_contributors':
+                    uploaded['task_head_examples']={h:1. for h,n in uploaded['task_head_examples'].items() if n>0}
                 if not cfg.joint_plan_path:integrated.update(uploaded['accumulated_classes'])
                 accepted.append(uploaded)
             if cfg.joint_plan_path:
@@ -831,6 +834,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             aggregation_norm_diagnostics=None
             custom_head_fusion=False
             server_cl_state.last_archive_upload_bytes=0
+            server_cl_state.last_aux_upload_bytes={}
             independent_archive=(cfg.joint_archive_upload_policy,cfg.joint_archive_download_policy)!=('selected','selected')
             archive_download_clients=list(selected) if cfg.share_continual_state else []
             if accepted:
@@ -1220,6 +1224,19 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     for c,loss in result['per_class_loss'].items()}
             transmitted_bytes=sum(sum(t.numel()*t.element_size()
                     for t in u['weights'].values()) for u in accepted)
+            model_download_clients=list(clients) if cfg.full_sync else list(selected)
+            model_download_bytes=len(model_download_clients)*sum(t.numel()*t.element_size() for t in global_state.values())
+            if cfg.full_sync and cfg.share_continual_state:archive_download_clients=list(clients)
+            archive_bytes=server_cl_state.statistics()['shared_image_bytes']
+            aux_download=Counter()
+            if cfg.share_continual_state and not independent_archive:
+                for cid in model_download_clients:aux_download.update(server_cl_state.auxiliary_download_bytes(clients[cid].last_learning_method or cfg.method))
+            communication={'model_upload_tensor_bytes':transmitted_bytes,'model_download_tensor_bytes':model_download_bytes,
+                'archive_image_upload_bytes':server_cl_state.last_archive_upload_bytes,
+                'archive_image_download_bytes':len(archive_download_clients)*archive_bytes,
+                'auxiliary_upload_bytes':dict(server_cl_state.last_aux_upload_bytes),'auxiliary_download_bytes':dict(aux_download)}
+            communication['total_logical_payload_bytes']=sum(communication[k] for k in ('model_upload_tensor_bytes','model_download_tensor_bytes','archive_image_upload_bytes','archive_image_download_bytes'))+sum(communication['auxiliary_upload_bytes'].values())+sum(aux_download.values())
+            result['communication_payload']=communication
             if cfg.joint_plan_path:
                 # Pooled rows repeat occurrence metrics but group-level work
                 # appears exactly once. Do not multiply group compute by depth.
@@ -1234,7 +1251,10 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'archive_image_download_bytes':len(archive_download_clients)*archive_bytes,
                     'archive_image_upload_bytes':server_cl_state.last_archive_upload_bytes,
                     'total_model_and_archive_payload_bytes':transmitted_bytes+len(selected)*sum(t.numel()*t.element_size() for t in global_state.values())+(len(archive_download_clients)*archive_bytes)+server_cl_state.last_archive_upload_bytes,
-                    'accounting_scope':'model tensor and newly uploaded/delivered archive image payload sizes; excludes serialization, headers and metadata'})
+                    'auxiliary_upload_bytes':communication['auxiliary_upload_bytes'],
+                    'auxiliary_download_bytes':communication['auxiliary_download_bytes'],
+                    'total_logical_payload_bytes':communication['total_logical_payload_bytes'],
+                    'accounting_scope':'logical model, archive and method-specific tensor payloads; excludes serialization, headers and metadata'})
             result.update({'round':round_id,'model_version':version,
                            'terminal_communication_only_flush':bool(cfg.stream_protocol and cfg.stream_terminal_flush and round_id==total_rounds-1),
                            'stage':current_stage,'selected_clients':selected,
@@ -1244,6 +1264,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'uploaded_accumulated_classes':{str(u['client_id']):u['accumulated_classes'] for u in accepted},
                            'uploaded_since_version':{str(u['client_id']):u['anchor_version'] for u in accepted},
                            'uploaded_accumulated_steps':{str(u['client_id']):u['accumulated_steps'] for u in accepted},
+                           'uploaded_head_weight_exposure':{str(u['client_id']):u['task_head_examples'] for u in accepted},
+                           'uploaded_head_contributions':{str(u['client_id']):u['measured_head_contributions'] for u in accepted},
+                           'task_head_weight_policy':cfg.task_head_weight_policy,
                            'client_unsent_steps':{str(cid):c.pending_upload_steps for cid,c in clients.items()},
                            'protocol_version':protocol_version_for(cfg),
                            'aggregation_algorithm':cfg.aggregator,

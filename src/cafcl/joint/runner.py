@@ -140,6 +140,7 @@ def job_config(job,plan,path,concurrency=1,local_evaluation=False,mechanistic_pr
         stale_update_policy=job.get('stale_update_policy','damped_delta'),
         terminal_stale_guard=job.get('terminal_stale_guard',True),
         aggregation_weight_policy=job.get('aggregation_weight_policy','fresh_examples'),
+        task_head_weight_policy=job.get('task_head_weight_policy','historical_exposure'),
         optimizer_state_policy=job.get('optimizer_state_policy','persist'),
         sample_overlap_fraction=plan['allocation_audit']['raw_sample_overlap'],
         client_training_concurrency=concurrency,seed=job['seed'],
