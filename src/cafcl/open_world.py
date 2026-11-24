@@ -16,7 +16,6 @@ import random
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.utils.data import DataLoader,TensorDataset
 from .models import create_model,copy_cpu_state,task_head_key
 from .reference_fcil import seed_for
 from .identity import runtime_identity,dataset_identity,digest
@@ -180,6 +179,7 @@ def _train_event(client,event,factory,bank,device,options):
                 logits=model.classifier(features[indices],h)
                 loss=loss+F.cross_entropy(logits,matches.long().argmax(1),reduction='sum')/len(examples)
                 client.pending_heads[h]=client.pending_heads.get(h,0)+len(positions)
+            if not torch.isfinite(loss):raise RuntimeError('Nonfinite open-world loss')
             opt.zero_grad(set_to_none=True);loss.backward();opt.step()
             client.pending_steps+=1
     client.weights=copy_cpu_state(model)

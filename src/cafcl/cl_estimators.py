@@ -54,8 +54,18 @@ def estimate_diagonal_importance(
             if len(logits)!=64:
                 raise RuntimeError('EWC/MAS must forward a physical batch of 64')
             if active_classes is not None:
-                active_ids=torch.as_tensor(sorted(set(map(int,active_classes))),
-                    dtype=torch.long,device=logits.device)
+                classes=tuple(sorted(set(map(int,active_classes))))
+                classifier=getattr(model,'classifier',None)
+                if hasattr(classifier,'task_classes'):
+                    # The active head already emits task-local columns; global
+                    # class IDs must never be used as output column offsets.
+                    actual=tuple(classifier.classes_for())
+                    if not set(classes)<=set(actual):
+                        raise ValueError('Importance objective exceeds active task classes')
+                    columns=[actual.index(c) for c in classes]
+                else:
+                    columns=list(classes)
+                active_ids=torch.as_tensor(columns,dtype=torch.long,device=logits.device)
                 logits=logits.index_select(1,active_ids)
             if kind=='ewc' and logits.shape[1]<2:
                 raise ValueError('Fisher requires >=2 logits')

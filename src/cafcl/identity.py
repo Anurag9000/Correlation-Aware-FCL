@@ -34,7 +34,7 @@ def runtime_identity():
     return result
 
 
-def dataset_identity(bank):
+def dataset_identity(bank,*,allow_tensor_fixture=False):
     from .data import source_indices
     bases={}
     splits={}
@@ -49,6 +49,10 @@ def dataset_identity(bank):
         key=id(base)
         if key not in bases:
             raw=getattr(base,'data',None)
+            if raw is None and allow_tensor_fixture:
+                raw=getattr(base,'x',None)
+                if not torch.is_tensor(raw) or len(raw)!=len(base):
+                    raise ValueError('Synthetic fixture requires a stable input tensor')
             if raw is None:
                 raise ValueError('Dataset identity requires immutable raw data')
             if torch.is_tensor(raw):raw=raw.detach().cpu().numpy()

@@ -316,7 +316,7 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
     from .diagnostic_campaign import signature,sha_file
     import shutil
     identity={'job_signature':signature(job),'runtime':runtime_identity(),
-              'dataset':dataset_identity(bank),'allocation_sha256':audit['allocation_sha256'],
+              'dataset':dataset_identity(bank,allow_tensor_fixture=model_name.startswith('test_')),'allocation_sha256':audit['allocation_sha256'],
               'model':model_name,'subset_probes':bool(subset_probes),
               'device_type':torch.device(device).type}
     def save_resume(next_stage):
