@@ -121,6 +121,8 @@ class RunConfig:
     stream_sync_every_batch: bool = False
     stream_partial_batch_policy: str = "include_padding"
     evaluate_final_only: bool = False
+    # Historical runs explicitly audited test each sync; opt out for strict final-only test.
+    audit_test_every_sync: bool = True
     # Opt-in joint protocol. Empty values preserve legacy signatures.
     joint_plan_path: str = ''
     joint_plan_hash: str = ''
@@ -182,6 +184,8 @@ class RunConfig:
                 raise ValueError('Masked partial-batch replay currently supports only ratio 1.0')
             assert self.stream_sync_every_batch and self.stream_client_chain and self.stream_protocol
             assert self.method == 'replay' and self.replay_update_policy in {'sampled_mixed','sampled_mixed_accumulated'}
+        if not self.audit_test_every_sync and not self.evaluate_final_only:
+            raise ValueError('Disabling per-sync test audit requires evaluate_final_only')
         if self.evaluate_final_only:
             assert self.selector in {'random','fixed','round_robin'}, 'Test split cannot guide online client selection'
             assert not self.prepost_diagnostics and not self.gradient_diagnostics
@@ -324,6 +328,7 @@ class RunConfig:
 
     def to_dict(self):
         data=asdict(self)
+        if data['audit_test_every_sync'] is True:data.pop('audit_test_every_sync')
         # Preserve old plan-file serialization for unchanged job configurations.
         # Every nondefault protocol variant is still explicitly serialized.
         if data['class_pair_protocol']=='compatible':data.pop('class_pair_protocol')

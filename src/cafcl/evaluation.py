@@ -33,6 +33,8 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
     class_margins={c:0. for c in observed}
     confusion=torch.zeros((bank.num_classes,bank.num_classes),dtype=torch.int64)
     allowed_class_ids=torch.as_tensor(sorted(observed),dtype=torch.long,device=device)
+    chance_by_class={c:1./len(observed) for c in observed}
+    prediction_context_by_class={c:tuple(sorted(observed)) for c in observed}
     for x,y in loader:
         # Evaluation runs the identical physical batch of 64, too. The last
         # group is padded ONLY for forward computation; duplicated predictions
@@ -64,6 +66,11 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
             else:
                 task_map={task_head_key(group):tuple(sorted(set(map(int,group))))
                           for group in task_class_groups}
+            for c in observed:
+                universe={label for classes in task_map.values() if c in classes for label in classes}
+                if not universe:raise ValueError('Observed label has no task head')
+                chance_by_class[c]=1./len(universe)
+                prediction_context_by_class[c]=tuple(sorted(universe))
             task_ids=[tuple(task_id for task_id,classes in sorted(task_map.items())
                             if int(label) in set(classes))
                       for label in evaluation_y.tolist()]
@@ -108,9 +115,8 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
     # that had actually been learned after contributing to global training.
     observed_peak_drop=float(np.mean(list(prior.values()))) if prior else 0.
     integrated=set(map(int, integrated or ()))
-    chance=1.0/bank.num_classes
     eligible={c:drop for c,drop in prior.items()
-              if c in integrated and historical.get(c,0.) > chance+0.02}
+              if c in integrated and historical.get(c,0.) > chance_by_class[c]+0.02}
     forgetting=float(np.mean(list(eligible.values()))) if eligible else 0.
     for c,a in per_class.items():historical[c]=max(a,historical.get(c,0.))
     # The official accuracy always includes every class that has arrived,
@@ -120,7 +126,7 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
     old_observed=sorted(observed & set(old or ()))
     new_observed=sorted(observed & set(new or ()))
     group_accuracy=lambda group: (float(np.mean([per_class[c] for c in group])) if group else None)
-    unlearned=[c for c in per_class if historical[c] <= chance + 0.02]
+    unlearned=[c for c in per_class if historical[c] <= chance_by_class[c] + 0.02]
     return {'accuracy':micro,'macro_accuracy':macro,'per_class':per_class,
             'confusion_matrix':{'labels':list(range(bank.num_classes)),
                                 'counts':confusion.tolist()},
@@ -140,4 +146,7 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
             'task_id_at_inference':task_class_groups is not None,
             'task_id_assignment':('schedule_class_membership_oracle'
                                   if task_class_groups is not None else 'none'),
+            'chance_by_class':chance_by_class,
+            'prediction_context_by_class':prediction_context_by_class,
+            'forgetting_scope':'historical_class_peak_drop; competitor sets may change',
             'unlearned':unlearned},historical

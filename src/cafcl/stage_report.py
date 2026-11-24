@@ -41,20 +41,23 @@ def render_sync_report(run_dir, *, round_number, model_version, num_clients,
     root=Path(run_dir)/'per_sync_accuracy'
     root.mkdir(parents=True,exist_ok=True)
     stem=f'sync_{int(round_number):03d}'
-    per_class={int(k):float(v) for k,v in test_metrics['per_class'].items()}
+    report_split='test' if test_metrics is not None else 'validation'
+    report_metrics=test_metrics if test_metrics is not None else validation_metrics
+    if report_metrics is None:raise ValueError('A test or validation report is required')
+    per_class={int(k):float(v) for k,v in report_metrics['per_class'].items()}
     entries=_entries(arrivals,int(round_number)-1,per_class,int(num_clients))
     integrated=set(map(int,integrated_classes if integrated_classes is not None else per_class))
     for entry in entries:
         entry['pending_not_accepted_classes']=[int(c) for c in entry['classes'] if int(c) not in integrated]
     cells={(r['client_id'],r['first_round']):r for r in entries}
-    confusion=test_metrics['confusion_matrix']['counts']
+    confusion=report_metrics['confusion_matrix']['counts']
     n_classes=len(confusion)
     predicted=[sum(int(row[c]) for row in confusion) for c in range(n_classes)]
     seen=sorted(per_class)
     # Exclude unarrived output slots: they are deliberately masked at
     # inference and MUST NOT be described as collapsed learned classes.
     zero_labels=[int(c) for c in seen if predicted[c]==0]
-    accuracy=float(test_metrics['accuracy'] or 0.0)
+    accuracy=float(report_metrics['accuracy'] or 0.0)
     bias_summary={}
     if classifier_bias is not None:
         biases=classifier_bias.detach().cpu().flatten().tolist()
@@ -73,7 +76,8 @@ def render_sync_report(run_dir, *, round_number, model_version, num_clients,
                     bias_summary['mean_new_bias']-bias_summary['mean_old_bias'])
     metadata=dict(round=int(round_number),version=int(model_version),
         terminal_communication_only_flush=bool(terminal_flush),
-        test_accuracy=accuracy,validation_accuracy=(
+        report_split=report_split,score_scope='global_server_scores_indexed_by_client_task',
+        test_accuracy=accuracy if report_split=='test' else None,validation_accuracy=(
             None if validation_metrics is None else validation_metrics['accuracy']),
         observed_classes=seen,observed_class_count=len(seen),
         server_integrated_classes=sorted(integrated),
@@ -89,25 +93,26 @@ def render_sync_report(run_dir, *, round_number, model_version, num_clients,
         selected_clients=list(map(int,selected_clients)),zero_prediction_classes=zero_labels,
         predicted_class_counts={int(c):int(v) for c,v in enumerate(predicted) if v},
         backbone=backbone,optimizer=optimizer or {},classifier_bias_diagnostics=bias_summary,
-        per_class_true_logit_margin=test_metrics.get('per_class_true_logit_margin',{}),
+        per_class_true_logit_margin=report_metrics.get('per_class_true_logit_margin',{}),
         test_only_no_feedback=True,entries=entries)
     (root/(stem+'.json')).write_text(json.dumps(metadata,indent=2)+'\n')
     with (root/(stem+'.csv')).open('w',newline='') as handle:
         writer=csv.DictWriter(handle,fieldnames=[
-            'server_sync','client_id','introduced_sync','class_id','test_correct',
-            'test_total','test_accuracy','seen_class_global_accuracy'])
+            'server_sync','client_id','introduced_sync','class_id',report_split+'_correct',
+            report_split+'_total',report_split+'_accuracy','seen_class_global_accuracy'])
         writer.writeheader()
         for entry in entries:
             for cls in entry['classes']:
                 totals=sum(int(x) for x in confusion[cls])
                 writer.writerow(dict(server_sync=int(round_number),
                     client_id=entry['client_id'],introduced_sync=entry['first_round'],
-                    class_id=cls,test_correct=int(confusion[cls][cls]),
-                    test_total=totals,test_accuracy=f'{per_class[cls]:.6f}',
-                    seen_class_global_accuracy=f'{accuracy:.6f}'))
+                    class_id=cls,seen_class_global_accuracy=f'{accuracy:.6f}',
+                    **{report_split+'_correct':int(confusion[cls][cls]),report_split+'_total':totals,
+                       report_split+'_accuracy':f'{per_class[cls]:.6f}'}))
     latest=max([e['first_round'] for e in entries],default=0)
     md=[f'# Server sync {round_number} — global model v{model_version}',
-        '',f'Backbone: {backbone}; held-out CIFAR-100 TEST diagnostic only.',
+        '',f'Backbone: {backbone}; held-out {report_split.upper()} server diagnostic.',
+        'Rows index historical client task placements; values are GLOBAL SERVER scores, not private-client accuracy.',
         f'Seen-class global accuracy: {accuracy:.2%} on {len(seen)} observed labels.',
         f'Validation accuracy: {metadata["validation_accuracy"]}; seen labels never predicted: {len(zero_labels)}.',
         f'Server-accepted classes: {len(integrated)}; pending private classes: {len(set(seen)-integrated)}.',
@@ -165,13 +170,14 @@ def render_sync_report(run_dir, *, round_number, model_version, num_clients,
     fig.text(.028,.95,f'Server sync {round_number} · {len(seen)} seen classes · {backbone}',
              fontsize=15,fontweight='bold',color='#152846')
     fig.text(.028,.885,
-             f'Global seen-class TEST accuracy {accuracy:.2%}  |  '
+             f'Global seen-class {report_split.upper()} accuracy {accuracy:.2%}  |  '
              f'Never-predicted output classes {len(zero_labels)}  |  '
              f'Online clients {list(selected_clients)}',
              fontsize=9,color='#374862')
     fig.savefig(root/(stem+'.png'),dpi=130,facecolor=fig.get_facecolor())
     return {'stem':stem,'relative_dir':'per_sync_accuracy',
-            'test_accuracy':accuracy,'seen_class_count':len(seen),
+            'test_accuracy':accuracy if report_split=='test' else None,'seen_class_count':len(seen),
+            'report_split':report_split,
             'never_predicted_classes':len(zero_labels)}
 
 

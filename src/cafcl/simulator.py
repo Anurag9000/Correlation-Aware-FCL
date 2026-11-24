@@ -31,11 +31,11 @@ from .task_ids import task_instance_id
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v2'
+PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v3'
 
 def protocol_version_for(cfg):
     if getattr(cfg,'joint_plan_path',''):
-        return 'joint_spatiotemporal_fcl_v3_audit_'+cfg.learning_setting
+        return 'joint_spatiotemporal_fcl_v4_audit_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -1047,7 +1047,10 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     old=old,new=new,
                     task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,
                     split='validation',feat_ecc=(server_cl_state.feat_ecc if cfg.method=='native_feat' else None))
-            per_sync_test,test_peak=evaluate(model,evaluation_bank,observed,
+            test_this_round=(cfg.audit_test_every_sync or round_id==total_rounds-1)
+            per_sync_test=None
+            if test_this_round:
+                per_sync_test,test_peak=evaluate(model,evaluation_bank,observed,
                 cfg.batch_size,device,peak=test_peak,integrated=integrated,
                 old=old,new=new,
                 task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,
@@ -1061,7 +1064,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 integrated_task_sets=_integrated_task_class_sets(
                     server_cl_state.joint_source_heads if cfg.joint_plan_path else task_ids_by_index,
                     server_cl_state.acknowledged_train_indices,task_class_map)
-            if integrated and not (cfg.learning_setting=='task_il' and
+            if test_this_round and integrated and not (cfg.learning_setting=='task_il' and
                                    not integrated_task_sets):
                 integrated_test,_=evaluate(model,evaluation_bank,set(integrated),
                     cfg.batch_size,device,peak={},integrated=integrated,
@@ -1082,24 +1085,42 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             # Used by validation-based selectors and never by the test audit.
             result['selection_validation_per_class']=(
                 validation_report['per_class'] if validation_report else {})
-            result['per_sync_test_accuracy']=per_sync_test['accuracy']
+            result['per_sync_test_accuracy']=per_sync_test['accuracy'] if per_sync_test is not None else None
             result['per_sync_server_integrated_only_accuracy']=(
                 integrated_test['accuracy'] if integrated_test else None)
             result['per_sync_server_integrated_task_heads']=[
                 {'task_id':task_id,'classes':list(classes)}
                 for task_id,classes in sorted(integrated_task_sets.items())]
             result['per_sync_pending_classes']=sorted(set(observed)-set(integrated))
-            result['per_sync_test_per_class']=per_sync_test['per_class']
+            result['per_sync_test_per_class']=per_sync_test['per_class'] if per_sync_test is not None else {}
             result['per_sync_validation_accuracy']=(
                 validation_report['accuracy'] if validation_report else None)
             result['sync_accuracy_report']=sync_report
-            result['per_sync_forgetting']=per_sync_test['forgetting']
+            result['per_sync_forgetting']=per_sync_test['forgetting'] if per_sync_test is not None else None
+            if cfg.learning_setting=='task_il':
+                from .joint.task_evaluation import evaluate_task_conditioned
+                # Standard independent task-ID evaluation; class-membership
+                # union remains explicitly separate as a historical diagnostic.
+                standard_val=evaluate_task_conditioned(model,evaluation_bank,active_task_sets,cfg.batch_size,device,'validation')
+                result['standard_task_conditioned_validation']=standard_val
+                previous_head_peaks={}
+                for previous in history:
+                    for h,record in previous.get('standard_task_conditioned_validation',{}).get('per_head',{}).items():
+                        value=record.get('accuracy')
+                        if value is not None:previous_head_peaks[h]=max(previous_head_peaks.get(h,0.),value)
+                drops=[max(0.,previous_head_peaks[h]-record['accuracy'])
+                       for h,record in standard_val['per_head'].items()
+                       if h in previous_head_peaks and record['accuracy'] is not None]
+                result['standard_task_conditioned_validation_forgetting']=float(np.mean(drops)) if drops else None
+                if test_this_round:
+                    result['standard_task_conditioned_test']=evaluate_task_conditioned(
+                        model,evaluation_bank,active_task_sets,cfg.batch_size,device,'test')
             if cfg.evaluate_final_only and round_id==total_rounds-1:
                 # Final public TEST score is the same held-out evaluation.
                 # Reuse its peak-based forgetting rather than falsely claiming
                 # zero forgetting because historical testing was deferred.
-                result['forgetting']=per_sync_test['forgetting']
-                result['all_observed_peak_drop']=per_sync_test['all_observed_peak_drop']
+                result['forgetting']=per_sync_test['forgetting'] if cfg.audit_test_every_sync else None
+                result['all_observed_peak_drop']=per_sync_test['all_observed_peak_drop'] if cfg.audit_test_every_sync else None
             if cfg.spurious_ood_eval and cfg.spurious_strength:
                 from .data import DataBank
                 from .domains import SpuriousTest

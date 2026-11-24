@@ -28,7 +28,7 @@ def make_jobs(*,sync_every_batch=False):
         stream_overlap_fraction=0.,stream_client_chain=True,
         classes_per_local_task=2,local_tasks_per_round=1,
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
-        stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=ceil(450*replay_fraction),
+        stream_offline_policy='random',evaluate_final_only=True,audit_test_every_sync=False,lr=lr,epochs=epochs,memory_per_class=ceil(450*replay_fraction),
         optimizer_state_policy='persist',client_training_concurrency=5,
         training_augmentation='cifar_crop_flip',replay_ratio=1.0,
         replay_update_policy='sampled_mixed',
@@ -230,6 +230,11 @@ def build_report(root,jobs):
                  delta=float(partial['accuracy'])-float(full['accuracy']),
                  final_integrated_full=len(full['globally_integrated_classes']),
                  final_integrated_offline=len(partial['globally_integrated_classes']))
+    a=full.get('standard_task_conditioned_test',{}).get('macro_head_accuracy')
+    b=partial.get('standard_task_conditioned_test',{}).get('macro_head_accuracy')
+    overall.update(standard_task_il_full_accuracy=a,standard_task_il_offline_accuracy=b,
+                   standard_task_il_delta=None if a is None or b is None else b-a,
+                   legacy_accuracy_protocol='ground_truth_class_membership_oracle')
     expected=set(range(100))
     if set(map(int,full['globally_integrated_classes']))!=expected or \
        set(map(int,partial['globally_integrated_classes']))!=expected:
@@ -252,8 +257,11 @@ def build_report(root,jobs):
         f"Training augmentation: {jobs[0].training_augmentation}; optimizer-state policy: {jobs[0].optimizer_state_policy}.",
         'Per-sync held-out scores are REPORTING ONLY: never used by client selection/training.',
         'Per-sync CSV, PNG, JSON and MD tables: runs/<job_id>/per_sync_accuracy/sync_###.*', '',
-        f"- Full accuracy: {overall['full_accuracy']:.6f}",
-        f"- Random-offline accuracy: {overall['random_offline_accuracy']:.6f}",
+        f"- Standard task-conditioned full accuracy: {a}",
+        f"- Standard task-conditioned random-offline accuracy: {b}",
+        f"- Standard task-conditioned delta: {overall['standard_task_il_delta']}",
+        f"- Legacy class-membership-oracle full accuracy: {overall['full_accuracy']:.6f}",
+        f"- Legacy class-membership-oracle random-offline accuracy: {overall['random_offline_accuracy']:.6f}",
         f"- Difference (offline minus full): {overall['delta']:+.6f}",
         '- Both models integrated all 100 labels: yes','',
         '| Class | Full | Random offline | Delta |','|---:|---:|---:|---:|']
@@ -280,7 +288,7 @@ def main(argv=None):
     design=audited_plan(jobs)
     variant=('v28_batch_sync_source_task_replay' if args.sync_every_batch
              else 'v27_source_task_replay')
-    root=Path(args.output_dir)/f'primary_cifar100_taskil_fedavg_{variant}_resnet18_cropflip_classuniform_sampledmixed_chain20_randomoffline_ratio1_bs64_seed0'
+    root=Path(args.output_dir)/f'primary_cifar100_taskil_fedavg_{variant}_resnet18_cropflip_classuniform_sampledmixed_chain20_randomoffline_ratio1_bs64_seed0_audit_v3'
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',design)
     if args.plan_only:
