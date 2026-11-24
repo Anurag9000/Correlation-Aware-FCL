@@ -34,6 +34,7 @@ class Design:
     control_kind: str = 'federated'
     terminal_flush: bool = True
     method: str = 'replay'
+    domain_mode: str = 'none'
 
 
 def coverage_tail(events,k):

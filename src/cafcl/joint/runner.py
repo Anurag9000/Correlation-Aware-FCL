@@ -39,6 +39,8 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
         if suite in ('extensions','all'):
             from .extensions import extension_designs
             generators.append(extension_designs())
+            from .distribution_designs import distribution_designs
+            generators.append(distribution_designs(bank.coarse_by_fine))
         if suite=='all':
             generators.append((Design(f'H-{s}-O{o}-L{l}','H',foundational_stream(s,o),local_depth=l)
                 for s in ('S1','S2','S3') for o in (0,1) for l in depths))
@@ -69,19 +71,19 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
                 job_id='J-'+design.name+'-'+setting
                 filename=job_id+'.json';write_json(root/'plans'/filename,plan)
                 jobs.append({'job_id':job_id,'family':design.family,'metadata':design.metadata,
-                    'learning_setting':setting,'epochs':design.epochs,'method':design.method,'seed':seed,'plan_file':'plans/'+filename,
+                    'learning_setting':setting,'epochs':design.epochs,'method':design.method,'domain_mode':design.domain_mode,'seed':seed,'plan_file':'plans/'+filename,
                     'allow_partial_coverage':not design.require_all_classes,
                     'plan_hash':plan['plan_hash'],'atomic_hash':plan['atomic_hash'],'status':'planned',
                     'low_support_warning':plan['allocation_audit']['minimum_samples_per_class_occurrence']<8})
         unique={};aliases=[]
         for job in jobs:
-            key=(job['plan_hash'],job['learning_setting'],job['epochs'],job.get('method','replay'))
+            key=(job['plan_hash'],job['learning_setting'],job['epochs'],job.get('method','replay'),job.get('domain_mode','none'))
             if key in unique:
                 aliases.append({'job_id':job['job_id'],'canonical_job_id':unique[key]['job_id']})
             else:unique[key]=job
         jobs=list(unique.values())
         write_json(root/'manifest.json',{'dataset':'cifar100','jobs':jobs,'aliases':aliases,'infeasible':blocked,
-                   'implementation_blocked':['P: domain transformations; intra-task sync; centralized/mixed-access controls']})
+                   'implementation_blocked':['joint intra-task synchronization; compute-matched pooled controls']})
         return jobs
     for item in foundational_registry(depths,seed=seed):
         events=foundational_stream(item['spatial'],item['local_overlap'])
@@ -126,6 +128,7 @@ def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evalua
         joint_local_evaluation=local_evaluation,
         joint_allow_partial_coverage=job.get('allow_partial_coverage',False),
         joint_control_kind=plan['allocation_audit'].get('control_kind','federated'),
+        joint_domain_mode=job.get('domain_mode','none'),
         stream_terminal_flush=plan['intervals'][-1]['terminal_flush'],
         checkpoint_every=1,job_id=job_id)
     job_dir=Path(output)/job_id

@@ -1170,6 +1170,10 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 'control_kind':cfg.joint_control_kind,'client_metrics':final_private,
                 'server_version':version,'test_only_no_feedback':True})
             model.load_state_dict(global_state)
+        if cfg.joint_plan_path and cfg.joint_domain_mode!='none':
+            from .joint.distribution import terminal_domain_metrics
+            atomic_json(run_dir/'joint_final_domain_test.json',terminal_domain_metrics(
+                model,bank,cfg,clients,observed,task_class_map,device))
         save_checkpoint(run_dir/'model_final.pt',global_state,cfg,version,clients,full_state=True,server_cl_state=server_cl_state)
         atomic_json(run_dir/'summary.json',{'job_id':job,'dataset':cfg.dataset,
                     'fork_source':str(fork_from_checkpoint) if fork_from_checkpoint else None,

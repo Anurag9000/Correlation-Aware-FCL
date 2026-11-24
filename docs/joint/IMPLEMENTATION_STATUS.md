@@ -145,3 +145,13 @@ are reported, not claimed compute-matched. Occurrence rows share the pooled
 before/after measurement, and group-level optimization work is recorded
 once. Raw sample reuse is disallowed in this oracle to preserve unambiguous
 fresh-task routing. Both IL settings are included in the controls suite.
+
+## Distributional and semantic controls
+
+Extensions now include fixed client domains, periodic receiver-domain
+shifts and deterministic client-specific corruption. Raw images are
+transformed after archive retrieval; replay is in the receiving client's
+active domain. Canonical held-out metrics remain comparable; additional
+terminal global-model domain-specific test metrics are stored separately.
+Semantic same/different-superclass treatments use actual CIFAR-100 metadata
+and match class occurrence counts, client counts, widths and horizon.

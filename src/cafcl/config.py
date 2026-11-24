@@ -127,6 +127,7 @@ class RunConfig:
     joint_local_evaluation: bool = False
     joint_allow_partial_coverage: bool = False
     joint_control_kind: str = 'federated'
+    joint_domain_mode: str = 'none'
 
     def validate(self):
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
@@ -139,6 +140,7 @@ class RunConfig:
         assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
         if self.joint_plan_path:
             assert self.joint_control_kind in {'federated','local_only','centralized_sequential','simultaneous_access'}
+            assert self.joint_domain_mode in {'none','client_fixed','client_periodic','client_corruption'}
             if self.joint_control_kind=='centralized_sequential':assert self.num_clients==1
             if self.joint_control_kind=='simultaneous_access':
                 assert self.sample_overlap_fraction==0 and self.replay_update_policy=='sampled_mixed'
@@ -154,7 +156,7 @@ class RunConfig:
             assert self.model in {'resnet18_cifar32','test_linear','test_mlp','test_smallcnn'}
             assert not self.gradient_diagnostics and not self.causal_diagnostics and not self.subset_diagnostics and not self.representation_diagnostics
         else:
-            assert not self.joint_plan_hash and not self.joint_local_evaluation and not self.joint_allow_partial_coverage and self.joint_control_kind=='federated'
+            assert not self.joint_plan_hash and not self.joint_local_evaluation and not self.joint_allow_partial_coverage and self.joint_control_kind=='federated' and self.joint_domain_mode=='none'
         if self.stream_client_chain:
             assert self.stream_protocol and self.class_pair_protocol == 'strict'
             assert self.num_clients == 5 and self.classes_per_local_task == 2
@@ -323,7 +325,7 @@ class RunConfig:
         if data['client_training_concurrency']==0:data.pop('client_training_concurrency')
         if data['training_augmentation']=='none':data.pop('training_augmentation')
         if not data['joint_plan_path']:
-            for key in ('joint_plan_path','joint_plan_hash','joint_local_evaluation','joint_allow_partial_coverage','joint_control_kind'):
+            for key in ('joint_plan_path','joint_plan_hash','joint_local_evaluation','joint_allow_partial_coverage','joint_control_kind','joint_domain_mode'):
                 data.pop(key)
         return data
 

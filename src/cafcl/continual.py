@@ -490,6 +490,11 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         # synchronized image archive, not the simulator's privileged data bank.
         from .federated_cl import ClientArchiveDataset
         training_data=ClientArchiveDataset(training_data,client.received_example_payloads)
+    if cfg.joint_domain_mode!='none':
+        from .joint.distribution import DomainView
+        # Transform both current and replay images in the receiving learner's
+        # active domain, after raw archive retrieval and before crop/flip.
+        training_data=DomainView(training_data,client.client_id,client.local_experience,cfg.joint_domain_mode)
     if cfg.training_augmentation=='cifar_crop_flip':
         augmentation_rng=np.random.default_rng(
             cfg.seed+4_170_001+rng_round*100_003+client.client_id*10_007+
