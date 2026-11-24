@@ -31,11 +31,11 @@ from .task_ids import task_instance_id
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay'
+PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v2'
 
 def protocol_version_for(cfg):
     if getattr(cfg,'joint_plan_path',''):
-        return 'joint_spatiotemporal_fcl_v2_'+cfg.learning_setting
+        return 'joint_spatiotemporal_fcl_v3_audit_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -657,6 +657,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             if cfg.joint_plan_path:
                 from .joint.audit import server_boundary_digest
                 boundary_before=server_boundary_digest(global_state,version,server_cl_state)
+            training_versions={str(cid):c.model_version for cid,c in clients.items()}
             local_details,local_trained_clients,task_barriers=(
                 train_round_task_barriers(
                     runtimes=client_runtimes,executor=client_executor,
@@ -716,7 +717,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             selected=(list(scenario.joint_plan['intervals'][round_id]['upload_clients'])
                       if cfg.joint_plan_path else select_clients(clients,cfg,round_id,rng,old_classes=old,new_classes=new,
                                     coarse_by_fine=bank.coarse_by_fine,
-                                    relationships=class_relationships,class_forgetting=risks))
+                                    relationships=class_relationships,class_forgetting=risks,
+                                    learning_rounds=total_rounds-int(cfg.stream_protocol and cfg.stream_terminal_flush)))
             if cfg.stream_protocol and not cfg.joint_plan_path:
                 is_flush=bool(cfg.stream_terminal_flush and round_id==total_rounds-1)
                 if is_flush:
@@ -1171,7 +1173,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'gradient_relationships':gradient_relationships,
                            'client_update_cosines':client_update_cosines,
                            'old_gradient_vs_client_updates':old_update_alignment,
-                           'client_training_versions':{str(cid):clients[cid].model_version for cid in selected},
+                           'client_training_versions':{str(cid):training_versions[str(cid)] for cid in sorted(set(local_trained_clients))},
+                           'client_post_sync_versions':{str(cid):clients[cid].model_version for cid in selected},
                            'participation_rate_realized':len(selected)/cfg.num_clients})
             history.append(result)
             # Durable intermediate results, so an interrupted run remains auditable.

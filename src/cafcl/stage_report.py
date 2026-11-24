@@ -133,7 +133,9 @@ def render_sync_report(run_dir, *, round_number, model_version, num_clients,
     # Matplotlib uses a noninteractive backend and never touches model state.
     from matplotlib.figure import Figure
     from matplotlib.backends.backend_agg import FigureCanvasAgg
-    cols=latest+1
+    # Keep full JSON/CSV/Markdown history; bound raster rendering to the latest 30 columns.
+    plot_rounds=range(max(1,latest-29),latest+1)
+    cols=len(plot_rounds)+1
     height=max(2.8,1.5+0.82*num_clients)
     width=max(9,2.3*cols)
     fig=Figure(figsize=(width,height),dpi=130,facecolor='#f6f8fc')
@@ -142,7 +144,7 @@ def render_sync_report(run_dir, *, round_number, model_version, num_clients,
     data=[]
     for cid in range(num_clients):
         row=[f'Client {cid}']
-        for rd in range(1,latest+1):
+        for rd in plot_rounds:
             e=cells.get((cid,rd))
             if e:
                 row.append(f'{e["mean_accuracy"]:.1%}\n'+
@@ -150,7 +152,7 @@ def render_sync_report(run_dir, *, round_number, model_version, num_clients,
                            ('\nPENDING upload' if e['pending_not_accepted_classes'] else ''))
             else:row.append('—')
         data.append(row)
-    headers=['CLIENT']+[f'U{n}' for n in range(1,latest+1)]
+    headers=['CLIENT (global scores)']+[f'U{n}' for n in plot_rounds]
     table=ax.table(cellText=data,colLabels=headers,cellLoc='center',colLoc='center',
                    loc='center',bbox=[0,0,1,1])
     table.auto_set_font_size(False)

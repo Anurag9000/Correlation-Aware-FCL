@@ -813,7 +813,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                                    cfg.seed+rng_round*100_003+client.client_id*127+epoch+epoch_offset,
                                    include_indices=(online_der or keep_padding_mask or current_head_by_index is not None),
                                    full_batch=True,padding_indices=padding_indices):
-            for micro_index,packed in enumerate(full_training_batches(loaded)):
+            microbatches=list(full_training_batches(loaded))
+            for micro_index,packed in enumerate(microbatches):
                 replay_example_count=0
                 replay_sample_ids=()
                 if len(packed)==6:
@@ -831,7 +832,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                     bool(oldmemory) and cfg.replay_ratio>0)
                 if not accumulate_optimizer_step or micro_index==0:
                     optimizer.zero_grad(set_to_none=True)
-                gradient_accumulation_scale=(0.5 if accumulate_optimizer_step else 1.0)
+                gradient_accumulation_scale=(1.0/len(microbatches) if accumulate_optimizer_step else 1.0)
                 logical_size=len(y)
                 macro_loss=0.
                 si_task_grads=None
@@ -1191,7 +1192,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                     applied_grad={n:si_task_grads[j].clone()
                                   for j,(n,p) in enumerate(model.named_parameters())}
                 should_step_optimizer=(
-                    not accumulate_optimizer_step or micro_index==1)
+                    not accumulate_optimizer_step or micro_index==len(microbatches)-1)
                 if should_step_optimizer:
                     optimizer.step()
                     if frozen is not None:

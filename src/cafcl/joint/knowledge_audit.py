@@ -7,6 +7,8 @@ def audit_knowledge(directory,plan):
     root=Path(directory)
     expected={t['occurrence_id']:t for t in plan['tasks']}
     trained=set();acknowledged=set();pending=set();version=0
+    trained_at={}
+    last_download={cid:0 for cid in range(plan['num_clients'])}
     for interval in plan['intervals']:
         r=interval['interval_id']
         row=json.loads((root/f'joint_knowledge_{r:05d}.json').read_text())
@@ -14,12 +16,13 @@ def audit_knowledge(directory,plan):
         if len(local)!=len(set(local)) or set(local)!=set(interval['occurrences']) or set(local)&trained:
             raise ValueError(f'Incorrect trained occurrence set at interval {r}')
         trained.update(local);pending.update(local)
+        trained_at.update({oid:r for oid in local})
         cohort=set(interval['upload_clients'])
         if set(row['broadcast_clients'])!=cohort:raise ValueError('Broadcast cohort differs from plan')
         uploaded=set();senders=set()
         for upload in row['uploads']:
             cid=upload['client'];oids=upload['occurrences']
-            if cid not in cohort or cid in senders or upload['steps']<=0 or upload['anchor_version']>version:
+            if cid not in cohort or cid in senders or upload['steps']<=0 or upload['anchor_version']!=last_download[cid]:
                 raise ValueError('Invalid upload receipt')
             if len(oids)!=len(set(oids)) or uploaded.intersection(oids):
                 raise ValueError('Duplicate upload occurrence')
@@ -39,9 +42,12 @@ def audit_knowledge(directory,plan):
                     or receipt['semantic_task_id']!=task['semantic_task_id']
                     or receipt['accepted_server_version']!=version
                     or receipt['accepted_interval']!=r
-                    or receipt['trained_interval']>r):
+                    or receipt['head_id']!=task['head_id']
+                    or list(receipt['classes'])!=list(task['classes'])
+                    or receipt['trained_interval']!=trained_at[oid]):
                 raise ValueError('Invalid occurrence acknowledgement metadata')
         acknowledged.update(uploaded);pending-=uploaded
+        for cid in cohort:last_download[cid]=version
         pending_by_client=row['pending_occurrences']
         actual=[]
         for cid,oids in pending_by_client.items():

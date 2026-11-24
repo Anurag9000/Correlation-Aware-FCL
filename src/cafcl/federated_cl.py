@@ -172,7 +172,13 @@ class FederatedCLState:
                                 source_tasks=task_ids_by_index.get(idx,())
                                 if len(source_tasks)!=1:
                                     raise ValueError('DER logit target has ambiguous source task provenance')
-                                expected_width=len(source_tasks[0])
+                                source=source_tasks[0]
+                                if isinstance(source,str):
+                                    from .models import task_class_sets_from_state_dict
+                                    task_map=task_class_sets_from_state_dict(teacher_model)
+                                    expected_width=len(task_map[source])
+                                else:
+                                    expected_width=len(source)
                             if logits.ndim!=1 or logits.shape[0]!=expected_width:
                                 raise ValueError('DER logit target/class count mismatch')
                             self.memory_logits[idx]=logits.detach().cpu().clone()

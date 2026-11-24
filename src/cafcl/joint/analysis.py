@@ -101,7 +101,8 @@ def analyze_run(directory,output=None,figures=True):
             latency.append({'occurrence_id':oid,'client':receipt['client'],
                 'atomic_step':receipt['atomic_step'],'trained_interval':receipt['trained_interval'],
                 'accepted_interval':r,'server_version':receipt['accepted_server_version'],
-                'interval_latency':r-receipt['trained_interval']})
+                'interval_latency':r-receipt['trained_interval'],
+                'atomic_step_latency':sum(len(x['atomic_steps']) for x in plan['intervals'][:r+1])-1-receipt['atomic_step']})
         report=json.loads((root/'per_sync_accuracy'/f'sync_{r+1:03d}.json').read_text())
         counts=report['predicted_class_counts'];observed=report['observed_classes']
         integrated=set(report['server_integrated_classes'])
@@ -188,6 +189,8 @@ def analyze_run(directory,output=None,figures=True):
              'knowledge_ledger':ledger,'mean_local_acquisition':average([x['acquisition'] for x in local_rows]),
              'mean_signed_local_retention_drop':average([x['signed_retention_drop_to_upload'] for x in local_rows]),
              'mean_integration_latency_intervals':average([x['interval_latency'] for x in latency]),
+             'mean_integration_latency_atomic_steps':average([x['atomic_step_latency'] for x in latency]),
+             'mean_occurrence_weighted_current_task_test_accuracy':average([x['current_task_test_accuracy'] for x in task_rows]),
              'terminal':global_rows[-1],'scope':'Descriptive single-run diagnostics; unmatched Class-IL competitor sets excluded'}
     (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
     if figures:render_figures(plan,global_rows,local_rows,out)

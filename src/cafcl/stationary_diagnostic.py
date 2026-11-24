@@ -27,6 +27,10 @@ def check_data(root, download=False):
 
 
 def partitions(targets,k,policy,seed):
+    if policy not in {"centralized","all_data","iid","disjoint_labels"}:
+        raise ValueError(f"Unsupported stationary partition: {policy}")
+    if k<1 or (policy in {"centralized","all_data"} and k!=1):
+        raise ValueError("Invalid learner count for stationary partition")
     targets=list(map(int,targets))
     rng=random.Random(seed)
     parts=[[] for _ in range(k)]
@@ -104,6 +108,10 @@ def stationary_probe(model,bank,parts,labels,objective,device,limit=128):
 def train(job,output,root,device,download):
     if job["family"]!="FL" or job.get("binding")!="stationary_reference":
         raise ValueError("Unsupported job")
+    if job["objective"] not in {"global","restricted_local"}:
+        raise ValueError(f"Unsupported stationary objective: {job['objective']}")
+    if job["clients"]<0 or job["local_epochs"]<1 or (job["rounds_per_stage"] is not None and job["rounds_per_stage"]<0):
+        raise ValueError("Invalid stationary training budget")
     seed=job["seed"]; random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
     if device.startswith("cuda") and not torch.cuda.is_available():
         raise RuntimeError("CUDA unavailable")

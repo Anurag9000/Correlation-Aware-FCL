@@ -178,6 +178,8 @@ class RunConfig:
         assert self.stream_offline_policy in {'random','rotate_once'}
         assert self.stream_partial_batch_policy in {'include_padding','mask_padding_loss'}
         if self.stream_partial_batch_policy == 'mask_padding_loss':
+            if self.replay_ratio != 1.0:
+                raise ValueError('Masked partial-batch replay currently supports only ratio 1.0')
             assert self.stream_sync_every_batch and self.stream_client_chain and self.stream_protocol
             assert self.method == 'replay' and self.replay_update_policy in {'sampled_mixed','sampled_mixed_accumulated'}
         if self.evaluate_final_only:

@@ -10,15 +10,15 @@ def participation_budget(k, fraction):
     return max(1, min(k, int(math.floor(k*fraction+0.5))))
 
 
-def effective_participation(cfg, round_id,states=None):
+def effective_participation(cfg, round_id,states=None,*,learning_rounds=None):
     if cfg.participation_schedule == 'feedback':
         if not states:return cfg.participation
         fraction=sum(s.last_constraint_violations>0 for s in states.values())/len(states)
         return min(1.,cfg.participation*(1.+cfg.feedback_gain)) if fraction >= cfg.feedback_threshold else cfg.participation
     if cfg.participation_schedule == 'stage':
         return cfg.stage_participation[min(cfg.stages-1,round_id//cfg.rounds_per_stage)]
-    total = max(1, cfg.stages * cfg.rounds_per_stage - 1)
-    progress = round_id / total
+    total = max(1, (learning_rounds if learning_rounds is not None else cfg.stages * cfg.rounds_per_stage) - 1)
+    progress = min(1., max(0., round_id / total))
     if cfg.participation_schedule == 'increasing':
         return max(1.0 / cfg.num_clients, cfg.participation * (0.5 + 0.5 * progress))
     if cfg.participation_schedule == 'decreasing':
@@ -29,9 +29,9 @@ def effective_participation(cfg, round_id,states=None):
 
 
 def select_clients(states, cfg, round_id, rng, *, old_classes=frozenset(),new_classes=frozenset(),coarse_by_fine=None,
-                   relationships=None, class_forgetting=None):
+                   relationships=None, class_forgetting=None, learning_rounds=None):
     ids=sorted(states)
-    m=participation_budget(len(ids),effective_participation(cfg,round_id,states))
+    m=participation_budget(len(ids),effective_participation(cfg,round_id,states,learning_rounds=learning_rounds))
     if str(round_id) in cfg.participation_overrides:
         chosen=sorted(cfg.participation_overrides[str(round_id)])
         if len(chosen)!=m or any(cid not in states for cid in chosen):
