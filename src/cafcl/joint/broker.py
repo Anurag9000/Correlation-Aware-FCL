@@ -93,7 +93,7 @@ def run_broker(args):
         write_json(receipt_root/'campaign.json',{'git_commit':head,'manifest_hash':digest(catalog),
             'gpus':args.gpus,'minimum_free_mib':args.min_free_mib,'min_disk_gib':args.min_disk_gib,
             'job_ids':[j['job_id'] for j in jobs],'started_at':utc(),
-            'local_evaluation':args.local_evaluation,'client_concurrency':args.concurrency})
+            'local_evaluation':args.local_evaluation,'mechanistic_probes':args.mechanistic_probes,'client_concurrency':args.concurrency})
         queue=deque(jobs);lock=Lock();results=[];blocked_gpus={}
         def record(row):
             with lock:
@@ -136,6 +136,7 @@ def run_broker(args):
                                  '--job-id',jid,'--output',str(root),'--data-root',str(Path(args.data_root).resolve()),
                                  '--no-download','--concurrency',str(args.concurrency)]
                             if args.local_evaluation:cmd.append('--local-evaluation')
+                            if args.mechanistic_probes:cmd.append('--mechanistic-probes')
                             env=dict(os.environ,CUDA_VISIBLE_DEVICES=snapshot['uuid'],
                                      CAFCL_REQUIRE_CUDA='1',CAFCL_EXPECT_GIT_HEAD=head,PYTHONUNBUFFERED='1')
                             started=utc()

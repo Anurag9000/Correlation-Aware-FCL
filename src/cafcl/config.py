@@ -129,6 +129,7 @@ class RunConfig:
     joint_control_kind: str = 'federated'
     joint_domain_mode: str = 'none'
     joint_epoch_segments: int = 1
+    joint_mechanistic_probes: bool = False
 
     def validate(self):
         assert self.dataset in {"cifar10", "cifar100", "cifar100_20", "synthetic"}, self.dataset
@@ -161,7 +162,7 @@ class RunConfig:
             assert self.model in {'resnet18_cifar32','test_linear','test_mlp','test_smallcnn'}
             assert not self.gradient_diagnostics and not self.causal_diagnostics and not self.subset_diagnostics and not self.representation_diagnostics
         else:
-            assert not self.joint_plan_hash and not self.joint_local_evaluation and not self.joint_allow_partial_coverage and self.joint_control_kind=='federated' and self.joint_domain_mode=='none' and self.joint_epoch_segments==1
+            assert not self.joint_plan_hash and not self.joint_local_evaluation and not self.joint_allow_partial_coverage and self.joint_control_kind=='federated' and self.joint_domain_mode=='none' and self.joint_epoch_segments==1 and not self.joint_mechanistic_probes
         if self.stream_client_chain:
             assert self.stream_protocol and self.class_pair_protocol == 'strict'
             assert self.num_clients == 5 and self.classes_per_local_task == 2
@@ -330,7 +331,7 @@ class RunConfig:
         if data['client_training_concurrency']==0:data.pop('client_training_concurrency')
         if data['training_augmentation']=='none':data.pop('training_augmentation')
         if not data['joint_plan_path']:
-            for key in ('joint_plan_path','joint_plan_hash','joint_local_evaluation','joint_allow_partial_coverage','joint_control_kind','joint_domain_mode','joint_epoch_segments'):
+            for key in ('joint_plan_path','joint_plan_hash','joint_local_evaluation','joint_allow_partial_coverage','joint_control_kind','joint_domain_mode','joint_epoch_segments','joint_mechanistic_probes'):
                 data.pop(key)
         return data
 

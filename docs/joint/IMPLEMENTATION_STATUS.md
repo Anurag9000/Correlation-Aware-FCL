@@ -143,3 +143,16 @@ confidence interval. Student-t intervals for multiple independent pairs
 are descriptive/unadjusted, not a claim of significance.
 
     PYTHONPATH=src python -m cafcl.joint.runner compare --campaign runs/joint_all/manifest.json runs/joint_results --output runs/joint_comparison
+
+## Optional mechanistic probes
+
+Use --mechanistic-probes on run, run-suite or broker to generate bounded,
+validation-only gradient panels (at most eight targets per group, four
+samples per class), evaluated at common pre/post aggregation checkpoints.
+Task-IL uses exact task-conditioned heads; Class-IL uses the same observed
+competitors on both checkpoints. The output includes first-order loss
+change g dot delta, realized loss change, gradient/update cosine by
+backbone/classifier, current/historical gradient alignment, feature-centroid
+drift and per-example validation predictions. Candidate deltas are applied
+rebased updates; they are not raw gradients. These diagnostics never select
+clients or tune training, and do not establish causal attribution.

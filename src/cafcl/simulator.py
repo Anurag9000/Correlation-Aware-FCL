@@ -724,6 +724,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
             for entry in local_details:
                 entry['is_selected']=entry['client'] in selected_set
             accepted=[]
+            joint_prior_integrated=set(integrated) if cfg.joint_mechanistic_probes else set()
+            joint_prior_heads={r['head_id'] for r in server_cl_state.joint_occurrence_receipts.values()} if cfg.joint_mechanistic_probes else set()
             base_global_state=global_state
             for cid in selected:
                 client=clients[cid]
@@ -901,6 +903,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 clients[cid].selection_count+=1
             model.load_state_dict(global_state)
             model.to(device)
+            if cfg.joint_mechanistic_probes:
+                from .joint.mechanistic import probe_aggregation
+                probes=probe_aggregation(model,bank,device,base_global_state,global_state,accepted,
+                    cfg.learning_setting,observed,joint_prior_integrated,joint_prior_heads,joint_events,active_task_sets,
+                    seed=cfg.seed,interval=round_id)
+                atomic_json(run_dir/f'joint_mechanistic_{round_id:05d}.json',probes)
             if cfg.joint_plan_path and cfg.joint_local_evaluation:
                 joint_global_after,_=evaluate(model,bank,observed,cfg.batch_size,device,
                     task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,
