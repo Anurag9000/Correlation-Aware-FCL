@@ -145,7 +145,7 @@ def run_job(manifest,job_id,output,data_root,download,concurrency=1,local_evalua
         joint_epoch_segments=plan['allocation_audit'].get('epoch_slicing',{}).get('segments',1),
         stream_terminal_flush=plan['intervals'][-1]['terminal_flush'],
         checkpoint_every=1,job_id=job_id)
-    from .joint.checkpoint_io import job_lease
+    from .checkpoint_io import job_lease
     with job_lease(Path(output)/job_id):
         return execute_locked(cfg,job,output,data_root,download,run_experiment)
 

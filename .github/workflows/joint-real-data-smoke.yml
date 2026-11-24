@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/joint-real-data-smoke.yml'
+      - 'src/cafcl/joint/runner.py'
+      - 'src/cafcl/joint/checkpoint_io.py'
 jobs:
   smoke:
     runs-on: ubuntu-latest
