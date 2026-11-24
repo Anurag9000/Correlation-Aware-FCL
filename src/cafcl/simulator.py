@@ -657,12 +657,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 boundary_after=server_boundary_digest(global_state,version,server_cl_state)
                 if boundary_before!=boundary_after:
                     raise RuntimeError('Server changed during private local continual learning')
-                if [b['atomic_step'] for b in task_barriers]!=scenario.joint_plan['intervals'][round_id]['atomic_steps']:
+                if [t for b in task_barriers for t in b.get('atomic_steps',[b['atomic_step']])]!=scenario.joint_plan['intervals'][round_id]['atomic_steps']:
                     raise RuntimeError('Executed atomic barriers differ from the plan')
                 atomic_json(run_dir/f'joint_interval_{round_id:05d}.json',{
                     'interval':round_id,'server_version_during_local_learning':version,
                     'server_state_digest_before':boundary_before,'server_state_digest_after':boundary_after,
-                    'atomic_barriers':task_barriers,'local_occurrences':local_details})
+                    'atomic_barriers':task_barriers,'local_occurrences':local_details,
+                    'access_mode':cfg.joint_control_kind})
             joint_pre_upload={}
             if cfg.joint_plan_path and cfg.joint_local_evaluation:
                 from .joint.private_evaluation import private_metrics

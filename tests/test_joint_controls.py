@@ -10,7 +10,7 @@ class ControlTests(unittest.TestCase):
     def test_control_plan_semantics(self):
         targets=[c for c in range(100) for _ in range(450)]
         designs=list(control_designs())
-        self.assertEqual(len(designs),24)
+        self.assertEqual(len(designs),36)
         for d in designs:
             p=compile_plan(d.events,targets,num_clients=d.num_clients,num_classes=100,
                 local_depth=d.local_depth,upload_cohorts=d.cohorts,terminal_flush=d.terminal_flush,

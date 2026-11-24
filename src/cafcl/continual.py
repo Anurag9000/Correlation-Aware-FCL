@@ -407,7 +407,7 @@ def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,acti
     return result
 
 
-def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_id=None,experience_end=False,active_pair_classes=None,padding_indices=None,known_task_ids=None,task_ids_by_index=None):
+def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_id=None,experience_end=False,active_pair_classes=None,padding_indices=None,known_task_ids=None,task_ids_by_index=None,current_head_by_index=None):
     """Continue training on the client's own local model, without server access.
 
     The simulator calls this for every client with local data every round,
@@ -441,6 +441,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
             raise ValueError('Task-IL local training requires the active task ID')
         model.set_active_task_id(task_id)
     model.train()
+    if current_head_by_index is not None and (cfg.joint_control_kind!='simultaneous_access' or cfg.learning_setting!='task_il'):
+        raise ValueError('Mixed current task routing is exclusive to the pooled Task-IL control')
     if active_pair_classes is not None:
         active_pair_classes=tuple(sorted(set(int(c) for c in active_pair_classes)))
         if len(active_pair_classes)<2:
@@ -466,6 +468,8 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
     indices=list(dict.fromkeys(client.current_indices))
     if not indices:
         return None
+    if current_head_by_index is not None and set(current_head_by_index)!=set(indices):
+        raise ValueError('Pooled current head mapping must cover the exact fresh sample set')
     # LocalState starts at -1; arrival increments to zero for experience 1.
     rng_round=(client.local_experience if cfg.joint_plan_path else round_id)
     if rng_round<0:raise RuntimeError('Local training requires a delivered experience')
@@ -780,14 +784,16 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
             return
         for offset in range(0,len(y),fresh):
             nx,ny=x[offset:offset+fresh],y[offset:offset+fresh]
+            current_ids=original_ids[offset:offset+fresh] if current_head_by_index is not None else None
             if len(ny)<fresh:
                 fill=torch.as_tensor(rng.integers(0,len(y),size=fresh-len(ny)),
                                      dtype=torch.long)
                 nx=torch.cat((nx,x[fill]),dim=0)
                 ny=torch.cat((ny,y[fill]),dim=0)
+                if current_ids is not None:current_ids=torch.cat((current_ids,original_ids[fill]))
             hx,hy,_,history_ids=draw_history(cfg.batch_size-fresh)
             yield emit(torch.cat((nx,hx),dim=0),
-                       torch.cat((ny,hy),dim=0),None,
+                       torch.cat((ny,hy),dim=0),current_ids,
                        current_count=len(ny) if cfg.learning_setting=='task_il' else None,
                        replay_count=len(hy) if cfg.learning_setting=='task_il' else None,
                        replay_ids=history_ids if cfg.learning_setting=='task_il' else None)
@@ -798,7 +804,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
             cfg.stream_partial_batch_policy=='mask_padding_loss')
         for loaded in _example_loader(training_data,indices,cfg.batch_size,
                                    cfg.seed+rng_round*100_003+client.client_id*127+epoch,
-                                   include_indices=(online_der or keep_padding_mask),
+                                   include_indices=(online_der or keep_padding_mask or current_head_by_index is not None),
                                    full_batch=True,padding_indices=padding_indices):
             for micro_index,packed in enumerate(full_training_batches(loaded)):
                 replay_example_count=0
@@ -852,13 +858,20 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                 else:
                     task_features=None
                     logits=model(x)
-                if original_ids is not None:
+                if original_ids is not None and current_head_by_index is None:
                     for idx,z in zip(original_ids.tolist(),logits.detach().cpu()):
                         captured_logits[int(idx)]=z.clone()
                 objective_logits=logits[:loss_example_count]
                 objective_y=y[:loss_example_count]
                 if cfg.method not in NATIVE_METHODS or cfg.learning_setting=='task_il':
-                    if cfg.learning_setting=='task_il':
+                    if cfg.learning_setting=='task_il' and current_head_by_index is not None:
+                        if original_ids is None or len(original_ids)!=loss_example_count:
+                            raise RuntimeError('Pooled Task-IL lost fresh sample routing')
+                        sources=[(current_head_by_index[int(i)],) for i in original_ids.tolist()]
+                        loss=model.loss_for_labels(x[:loss_example_count],objective_y,
+                            task_ids=known_task_ids,task_ids_by_example=sources,
+                            features=task_features[:loss_example_count])
+                    elif cfg.learning_setting=='task_il':
                         if task_classes is None or not set(objective_y.tolist()).issubset(set(task_classes)):
                             raise RuntimeError('Task-IL labels do not match the known local task')
                         loss=task_head_loss(objective_logits,objective_y,task_classes)
@@ -1285,7 +1298,10 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
     task_head_examples={}
     if cfg.learning_setting=='task_il' and hasattr(getattr(model,'classifier',None),'task_classes'):
         from .models import task_head_key
-        if task_classes:
+        if current_head_by_index is not None:
+            for key,count in Counter(current_head_by_index.values()).items():
+                task_head_examples[key]=float(count*cfg.epochs)
+        elif task_classes:
             active_key=task_head_key(task_id)
             task_head_examples[active_key]=float(len(indices)*cfg.epochs)
         for key,value in replay_task_head_exposure.items():

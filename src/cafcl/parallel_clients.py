@@ -105,7 +105,8 @@ def _train_one(runtime, client, bank, cfg, device, round_id, event,
                 active_pair_classes=event['active_pair'],
                 padding_indices=event.get('padding_indices'),
                 known_task_ids=known_task_sets,
-                task_ids_by_index=task_ids_by_index)
+                task_ids_by_index=task_ids_by_index,
+                current_head_by_index=event.get('current_head_by_index'))
             if cfg.joint_local_evaluation and result is not None:
                 result['local_validation_pre_task']=before
                 result['local_validation_post_task']=local_measure()
@@ -120,7 +121,8 @@ def _train_one(runtime, client, bank, cfg, device, round_id, event,
             active_pair_classes=event['active_pair'],
             padding_indices=event.get('padding_indices'),
             known_task_ids=known_task_sets,
-            task_ids_by_index=task_ids_by_index)
+            task_ids_by_index=task_ids_by_index,
+            current_head_by_index=event.get('current_head_by_index'))
         if cfg.joint_local_evaluation and result is not None:
             result['local_validation_pre_task']=before
             result['local_validation_post_task']=local_measure()
@@ -193,7 +195,12 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
     local_details = []
     locally_trained = []
     barriers = []
-    if cfg.joint_plan_path:
+    pooled=bool(cfg.joint_plan_path and cfg.joint_control_kind=='simultaneous_access')
+    if pooled:
+        from .joint.pooled import pool_events
+        slot={cid:pool_events(events) for cid,events in prepared.items()}
+        schedule=[(min(e['atomic_step'] for e in slot.values()),slot)] if slot else []
+    elif cfg.joint_plan_path:
         slots={int(e['atomic_step']):{} for events in prepared.values() for e in events}
         for cid,events in prepared.items():
             for e in events:
@@ -223,7 +230,10 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                 client = clients[cid]
                 raw = slot[cid]
                 has_new = has_new_events[cid]
-                if has_new:
+                if has_new and pooled:
+                    from .joint.pooled import deliver_pool
+                    deliver_pool(client,raw,round_id)
+                elif has_new:
                     classes = tuple(int(c) for c in raw['class_ids'])
                     client.arrival(raw['indices'], classes, raw['global_stage'])
                     for cls in classes:
@@ -271,6 +281,7 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                                     if has_new and len(raw['class_ids']) >= 2
                                     and not cfg.label_noise_rate else None),
                     'padding_indices': list(map(int,raw.get('padding_indices',()))),
+                    'current_head_by_index':raw.get('current_head_by_index') if cfg.learning_setting=='task_il' else None,
                 }
                 visible_task_sets=known_task_sets
                 visible_provenance=task_ids_by_index
@@ -279,7 +290,9 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                     # samples can authorize a source task head. The plan is
                     # globally known to the simulator, not to the learner.
                     from .joint.provenance import expose,visible_source_heads
-                    expose(client,raw['indices'],task_id)
+                    if pooled:
+                        for source in raw['source_events']:expose(client,source['indices'],source['task_id'])
+                    else:expose(client,raw['indices'],task_id)
                     visible_provenance=visible_source_heads(client)
                     visible_task_sets=tuple(sorted({h for heads in visible_provenance.values() for h in heads}))
                 pending.append((cid, executor.submit(
@@ -314,11 +327,15 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                     client.pending_upload_class_counts.get(cls, 0) + count)
             if cfg.joint_plan_path:
                 if result['steps']<=0:raise RuntimeError('Joint task completed without optimizer updates')
-                client.joint_pending_occurrences.append(slot[cid]['occurrence_id'])
+                client.joint_pending_occurrences.extend(e['occurrence_id'] for e in slot[cid].get('source_events',[slot[cid]]))
                 # Keep the historical event ledger, but do not retain unrestricted
                 # access to the previous task's current dataset.
                 client.current_indices=[]
             locally_trained.append(cid)
+            if pooled:
+                from .joint.pooled import occurrence_details
+                local_details.extend(occurrence_details(slot[cid],result,cid,client.local_experience))
+                continue
             local_details.append({
                 **({'atomic_step':atomic_step,'occurrence_id':slot[cid]['occurrence_id'],
                     'semantic_task_id':slot[cid]['semantic_task_id']} if cfg.joint_plan_path else {}),
@@ -327,7 +344,8 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                 'is_selected': False,
                 **{k: v for k, v in result.items() if k != 'weights'}})
         barriers.append({
-            **({'atomic_step':atomic_step} if cfg.joint_plan_path else {}),
+            **({'atomic_step':atomic_step,'atomic_steps':sorted({e['atomic_step'] for raw in slot.values() for e in raw['source_events']}),'pooled_access':True} if pooled else
+               {'atomic_step':atomic_step} if cfg.joint_plan_path else {}),
             'task_ordinal': task_index + 1,
             'client_ids': active,
             'completed_count': len(outcomes),

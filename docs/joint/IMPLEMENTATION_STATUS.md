@@ -132,3 +132,16 @@ resume test compares continuous and resumed global tensors and receipt
 ledgers for a short synthetic cross-semantic/stale-client curriculum.
 
     PYTHONPATH=src python -m cafcl.joint.runner report --run-dir runs/joint_results/J-H-S1-O0-L2-task_il
+
+## Simultaneous-access oracle
+
+Pooled controls expose all local tasks within an interval at its start,
+shuffle their fresh examples jointly, keep the original Task-IL heads and
+route current examples by original sample ID. Replay uses only previous
+interval memory; private memory updates after the pooled experience, not
+between source tasks. It uses the same fresh sample assignments and epochs
+as the sequential counterpart; padding and optimizer steps can differ and
+are reported, not claimed compute-matched. Occurrence rows share the pooled
+before/after measurement, and group-level optimization work is recorded
+once. Raw sample reuse is disallowed in this oracle to preserve unambiguous
+fresh-task routing. Both IL settings are included in the controls suite.

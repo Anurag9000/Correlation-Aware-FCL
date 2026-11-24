@@ -158,8 +158,10 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
     No automatic tail events, padding or class insertion.
     Explicit interval boundaries are exclusive atomic-step endpoints.
     """
-    if control_kind not in ('federated','local_only','centralized_sequential'):
+    if control_kind not in ('federated','local_only','centralized_sequential','simultaneous_access'):
         raise ValueError('Unknown control kind')
+    if control_kind=='simultaneous_access' and raw_sample_overlap:
+        raise ValueError('Pooled access control requires unique fresh sample identities')
     if control_kind=='centralized_sequential' and num_clients!=1:
         raise ValueError('Centralized sequential control uses exactly one learner')
     if num_clients < (1 if control_kind=='centralized_sequential' else 2) or num_classes < 2 or local_depth < 1:
@@ -295,7 +297,7 @@ def compile_plan(events, train_targets, *, num_clients, num_classes,
     for r, end in enumerate(ends):
         if upload_cohorts is not None:
             cohort = tuple(sorted(map(int, upload_cohorts[r])))
-            if len(cohort) != len(set(cohort)) or (not cohort and control_kind=='federated') or not set(cohort) <= set(range(num_clients)):
+            if len(cohort) != len(set(cohort)) or (not cohort and control_kind in ('federated','simultaneous_access')) or not set(cohort) <= set(range(num_clients)):
                 raise ValueError("Invalid upload cohort")
         else:
             if r % outage_duration == 0:

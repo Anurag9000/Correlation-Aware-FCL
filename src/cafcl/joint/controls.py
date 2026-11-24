@@ -17,6 +17,10 @@ def control_designs():
                 yield Design(f'CTRL-NOREPLAY-{key}-L{depth}','controls',events,
                              local_depth=depth,method='sgd',
                              metadata={'control':'no_replay','matched_atomic_stream':key})
+                yield Design(f'CTRL-POOLED-{key}-L{depth}','controls',events,
+                             local_depth=depth,control_kind='simultaneous_access',
+                             metadata={'control':'simultaneous_access','matched_atomic_stream':key,
+                                       'budget':'same unique current examples and epochs; actual steps may differ'})
             # Local-only evaluation boundaries, not communication opportunities.
             yield Design(f'CTRL-LOCAL-{key}','controls',events,local_depth=5,
                          cohorts=[()]*20,terminal_flush=False,control_kind='local_only',

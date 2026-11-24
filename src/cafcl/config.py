@@ -138,8 +138,10 @@ class RunConfig:
             assert self.dataset == 'cifar100' and self.stream_protocol and (self.scenario == 'disjoint' or (self.joint_plan_path and self.scenario=='overlap'))
         assert self.classes_per_local_task >= 2 and self.local_tasks_per_round >= 1
         if self.joint_plan_path:
-            assert self.joint_control_kind in {'federated','local_only','centralized_sequential'}
+            assert self.joint_control_kind in {'federated','local_only','centralized_sequential','simultaneous_access'}
             if self.joint_control_kind=='centralized_sequential':assert self.num_clients==1
+            if self.joint_control_kind=='simultaneous_access':
+                assert self.sample_overlap_fraction==0 and self.replay_update_policy=='sampled_mixed'
             assert self.joint_plan_hash and len(self.joint_plan_hash)==64
             assert self.stream_protocol and not self.stream_client_chain
             assert not self.stream_sync_every_batch and self.stream_overlap_kind=='none'

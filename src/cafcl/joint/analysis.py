@@ -76,6 +76,9 @@ def analyze_run(directory,output=None,figures=True):
                 'current_accuracy_after':a,'acquisition':change,
                 'signed_retention_drop_to_upload':None if retention is None else -retention,
                 'same_head_prior_peak_drop':peak_drop,'optimizer_steps':d['steps'],
+                'simultaneous_access':d.get('simultaneous_access',False),
+                'pooled_group_id':d.get('pooled_group_id'),
+                'pooled_group_optimizer_steps':(d.get('pooled_group_training') or {}).get('steps'),
                 'fresh_unique_examples':d['examples'],'replay_draws':d.get('replay_sampled_examples')})
         for oid,receipt in knowledge['acknowledged_occurrences'].items():
             latency.append({'occurrence_id':oid,'client':receipt['client'],

@@ -48,7 +48,7 @@ def audit_campaign(manifest,output):
                     record=json.loads((directory/f"joint_interval_{r['interval_id']:05d}.json").read_text())
                     if record['server_state_digest_before']!=record['server_state_digest_after']:
                         raise ValueError('Server mutated inside interval')
-                    if [x['atomic_step'] for x in record['atomic_barriers']]!=r['atomic_steps']:
+                    if [t for x in record['atomic_barriers'] for t in x.get('atomic_steps',[x['atomic_step']])]!=r['atomic_steps']:
                         raise ValueError('Executed atomic schedule mismatch')
                     if {x['occurrence_id'] for x in record['local_occurrences']}!=set(r['occurrences']):
                         raise ValueError('Executed occurrence mismatch')
