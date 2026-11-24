@@ -905,10 +905,12 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 joint_global_after,_=evaluate(model,bank,observed,cfg.batch_size,device,
                     task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,
                     split='validation',loader_seed=0)
+                joint_task_test=None
                 if cfg.learning_setting=='task_il':
                     from .joint.task_evaluation import evaluate_task_conditioned
                     joint_global_after['task_conditioned']=evaluate_task_conditioned(
                         model,bank,active_task_sets,cfg.batch_size,device)
+                    joint_task_test=evaluate_task_conditioned(model,bank,active_task_sets,cfg.batch_size,device,'test')
                 # Selected clients received the committed state; evaluate it
                 # with their unchanged pre-upload competitor set.
                 broadcast_metrics={}
@@ -926,7 +928,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'accepted_clients':[u['client_id'] for u in accepted],
                     'global_validation_before':joint_global_before,'global_validation_after':joint_global_after,
                     'private_pre_upload_validation':joint_pre_upload,'broadcast_validation':broadcast_metrics,
-                    'applied_candidate_update_geometry':joint_update_geometry})
+                    'applied_candidate_update_geometry':joint_update_geometry,
+                    'global_task_conditioned_test':joint_task_test,'test_only_no_feedback':True})
             causal=None
             if cfg.causal_diagnostics and len(accepted)>=2 and cfg.aggregator in {'fedavg','uniform'}:
                 # Use the pre-aggregation base model and the exact accepted
@@ -1084,6 +1087,19 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     for c,loss in result['per_class_loss'].items()}
             transmitted_bytes=sum(sum(t.numel()*t.element_size()
                     for t in u['weights'].values()) for u in accepted)
+            if cfg.joint_plan_path:
+                # Pooled rows repeat occurrence metrics but group-level work
+                # appears exactly once. Do not multiply group compute by depth.
+                work=[(d.get('pooled_group_training') or {}).get('joint_work') if d.get('simultaneous_access') else d.get('joint_work') for d in local_details]
+                work=[w for w in work if w is not None]
+                archive_bytes=server_cl_state.statistics()['shared_image_bytes']
+                atomic_json(run_dir/f'joint_resources_{round_id:05d}.json',{
+                    'interval':round_id,'server_version':version,'training_groups_with_work_accounting':len(work),
+                    'work_totals':{k:sum(w[k] for w in work) for k in ('current_draws_including_padding','current_draws_without_padding','current_padding_draws','replay_draws','optimization_microbatches','optimizer_steps')},
+                    'model_upload_tensor_bytes':transmitted_bytes,
+                    'model_download_tensor_bytes':len(selected)*sum(t.numel()*t.element_size() for t in global_state.values()),
+                    'archive_image_download_bytes':len(selected)*archive_bytes if cfg.share_continual_state else 0,
+                    'accounting_scope':'tensor and image payload sizes; excludes serialization, headers, metadata and private archive upload bytes'})
             result.update({'round':round_id,'model_version':version,
                            'terminal_communication_only_flush':bool(cfg.stream_protocol and cfg.stream_terminal_flush and round_id==total_rounds-1),
                            'stage':current_stage,'selected_clients':selected,

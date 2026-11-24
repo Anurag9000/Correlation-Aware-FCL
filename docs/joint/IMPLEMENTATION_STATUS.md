@@ -100,3 +100,15 @@ in detailed local evaluation mode.
   actually run before empirical claims can be made.
 
 For chronological implementation notes see STATUS.md and commit history.
+
+## Current-task versus historical-task reporting
+
+Detailed runs now save standard Task-IL task-conditioned test scores after
+communication, as diagnostic-only held-out inference. Analysis separates
+current task occurrence average, current/new class recall, historical
+noncurrent class recall, and peak drops after class/head integration. It
+writes the full local historical accuracy matrix, grouping Class-IL
+forgetting by identical competitor sets. Resource receipts account for
+actual sampled-mixed/SGD current draws, padding, replay draws, optimization
+microbatches, optimizer steps, model tensor and archive image downloads;
+network overhead and archive upload bytes are explicitly excluded.

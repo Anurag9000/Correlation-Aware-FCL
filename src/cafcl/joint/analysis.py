@@ -46,8 +46,8 @@ def analyze_run(directory,output=None,figures=True):
     plan=json.loads((root/'joint_plan.json').read_text())
     setting=cfg['learning_setting']
     tasks={x['occurrence_id']:x for x in plan['tasks']}
-    local_rows=[];global_rows=[];latency=[];class_rows=[]
-    peaks={};first_integrated={};local_peak={}
+    local_rows=[];global_rows=[];latency=[];class_rows=[];task_rows=[];local_history=[]
+    peaks={};first_integrated={};local_peak={};history_peaks={};global_head_peaks={};integrated_heads=set();seen_classes=set()
     from .knowledge_audit import audit_knowledge
     ledger=audit_knowledge(root,plan)
     for interval in plan['intervals']:
@@ -71,6 +71,22 @@ def analyze_run(directory,output=None,figures=True):
                 key=(cid,task['head_id'])
                 if key in local_peak:peak_drop=max(0.,local_peak[key]-a)
                 local_peak[key]=max(a,local_peak.get(key,0.))
+            # Every locally visible historical head is scored after each local
+            # experience, not merely when its own task recurs. Class-IL keys
+            # include the competitor universe to prevent invalid comparisons.
+            if post and (not d.get('simultaneous_access') or d.get('pooled_group_training')):
+                if setting=='task_il':
+                    values={h:v['accuracy'] for h,v in post.get('task_conditioned',{}).get('per_head',{}).items()}
+                    context='task_conditioned'
+                else:
+                    values=post.get('per_class',{});context=','.join(map(str,sorted(post['observed_classes'])))
+                for target,value in values.items():
+                    if value is None:continue
+                    key=(cid,target,context);prior=history_peaks.get(key)
+                    local_history.append({'interval':r,'atomic_step':task['atomic_step'],'client':cid,
+                        'target':target,'evaluation_context':context,'accuracy':value,
+                        'prior_peak_drop':None if prior is None else max(0.,prior-value)})
+                    history_peaks[key]=max(value,prior if prior is not None else 0.)
             local_rows.append({'interval':r,'atomic_step':task['atomic_step'],'client':cid,
                 'occurrence_id':task['occurrence_id'],'semantic_task':task['semantic_task_id'],
                 'current_accuracy_after':a,'acquisition':change,
@@ -81,6 +97,7 @@ def analyze_run(directory,output=None,figures=True):
                 'pooled_group_optimizer_steps':(d.get('pooled_group_training') or {}).get('steps'),
                 'fresh_unique_examples':d['examples'],'replay_draws':d.get('replay_sampled_examples')})
         for oid,receipt in knowledge['acknowledged_occurrences'].items():
+            if receipt.get('head_id'):integrated_heads.add(receipt['head_id'])
             latency.append({'occurrence_id':oid,'client':receipt['client'],
                 'atomic_step':receipt['atomic_step'],'trained_interval':receipt['trained_interval'],
                 'accepted_interval':r,'server_version':receipt['accepted_server_version'],
@@ -101,12 +118,43 @@ def analyze_run(directory,output=None,figures=True):
             class_rows.append({'interval':r,'class_id':c,'accuracy':per[c],
                 'peak_drop_after_integration':drop,'first_integrated_interval':first_integrated[c],
                 'distinct_client_owners':len(plan['overlap_audit']['class_owners'][str(c)])})
+        current_tasks=[tasks[oid] for oid in interval['occurrences']]
+        current_classes={c for t in current_tasks for c in t['classes']}
+        new_classes=current_classes-seen_classes;historical_only=seen_classes-current_classes
+        seen_classes.update(current_classes)
+        task_test=comm.get('global_task_conditioned_test') or {}
+        head_scores=task_test.get('per_head',{})
+        current_task_scores=[]
+        for t in current_tasks:
+            score=(head_scores.get(t['head_id'],{}).get('accuracy') if setting=='task_il' else
+                   average([per.get(c) for c in t['classes']]))
+            current_task_scores.append(score)
+            task_rows.append({'interval':r,'occurrence_id':t['occurrence_id'],'client':t['client_id'],
+                'semantic_task_id':t['semantic_task_id'],'head_id':t['head_id'],'current_task_test_accuracy':score,
+                'evaluation_protocol':'task_conditioned' if setting=='task_il' else 'class_il_seen_class_recall'})
+        head_drops=[]
+        for h in integrated_heads:
+            value=head_scores.get(h,{}).get('accuracy')
+            if value is None:continue
+            prior=global_head_peaks.get(h)
+            if prior is not None:head_drops.append(max(0.,prior-value))
+            global_head_peaks[h]=max(value,prior if prior is not None else 0.)
+        resource_path=root/f'joint_resources_{r:05d}.json'
+        resource=json.loads(resource_path.read_text()) if resource_path.exists() else {}
         before=comm.get('global_validation_before');after=comm.get('global_validation_after')
         global_rows.append({'interval':r,'server_version':report['version'],
             'atomic_steps_completed':sum(len(x['atomic_steps']) for x in plan['intervals'][:r+1]),
             'test_accuracy':report['test_accuracy'],'validation_accuracy':report['validation_accuracy'],
             'integrated_only_test_accuracy':report['integrated_only_test_accuracy'],
             'integrated_class_peak_drop':average(drops),
+            'integrated_task_head_peak_drop':average(head_drops),
+            'current_task_average_test_accuracy':average(current_task_scores),
+            'current_class_macro_test_accuracy':average([per.get(c) for c in current_classes]),
+            'new_class_macro_test_accuracy':average([per.get(c) for c in new_classes]),
+            'historical_noncurrent_class_macro_test_accuracy':average([per.get(c) for c in historical_only]),
+            'optimizer_steps':resource.get('work_totals',{}).get('optimizer_steps'),
+            'model_upload_tensor_bytes':resource.get('model_upload_tensor_bytes'),
+            'model_download_tensor_bytes':resource.get('model_download_tensor_bytes'),
             'global_validation_gain':None if not before or not after else after['accuracy']-before['accuracy'],
             'mean_broadcast_gain':average([b['accuracy_change'] for b in comm.get('broadcast_validation',{}).values()]),
             **prediction_stats(counts,observed)})
@@ -118,6 +166,8 @@ def analyze_run(directory,output=None,figures=True):
     write_csv('global_trajectory.csv',global_rows)
     write_csv('integration_latency.csv',latency)
     write_csv('class_retention.csv',class_rows)
+    write_csv('current_task_test.csv',task_rows)
+    write_csv('local_historical_accuracy_matrix.csv',local_history)
     summary={'learning_setting':setting,'control_kind':cfg.get('joint_control_kind','federated'),
              'knowledge_ledger':ledger,'mean_local_acquisition':average([x['acquisition'] for x in local_rows]),
              'mean_signed_local_retention_drop':average([x['signed_retention_drop_to_upload'] for x in local_rows]),
@@ -133,7 +183,7 @@ def render_figures(plan,global_rows,local_rows,out):
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     import numpy as np
     fig=Figure(figsize=(10,4));FigureCanvasAgg(fig);ax=fig.add_subplot()
-    for key in ('test_accuracy','integrated_only_test_accuracy','integrated_class_peak_drop','coverage'):
+    for key in ('test_accuracy','current_task_average_test_accuracy','historical_noncurrent_class_macro_test_accuracy','integrated_class_peak_drop','coverage'):
         points=[(x['atomic_steps_completed'],x[key]) for x in global_rows if x[key] is not None]
         if points:ax.plot(*zip(*points),label=key)
     ax.set(xlabel='Atomic steps completed',ylabel='Fraction',ylim=(0,1));ax.legend(fontsize=8)

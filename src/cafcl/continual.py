@@ -591,6 +591,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
     replay_by_class={int(cls):list(dict.fromkeys(map(int,group)))
                      for cls,group in eligible_history.items() if group}
     replay_sampled_class_counts=Counter()
+    joint_replay_drawn_ids=set()
     replay_task_head_exposure=Counter()
     def record_task_replay(sample_ids,scale=1.):
         if cfg.learning_setting!='task_il':return
@@ -622,6 +623,7 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
                 group=replay_by_class[cls]
                 ids.append(group[int(rng.integers(0,len(group)))])
                 replay_sampled_class_counts[cls]+=1
+        if cfg.joint_plan_path:joint_replay_drawn_ids.update(ids)
         examples=[training_data[i] for i in ids]
         x=torch.stack([item[0] for item in examples])
         y=torch.as_tensor([int(item[1]) for item in examples],dtype=torch.long)
@@ -1311,7 +1313,18 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
             task_head_examples[active_key]=float(len(indices)*cfg.epochs)
         for key,value in replay_task_head_exposure.items():
             task_head_examples[key]=task_head_examples.get(key,0.)+float(value)
-    return {'weights':{k:v.detach().cpu().clone() for k,v in model.state_dict().items()},
+    joint_work=None
+    if cfg.joint_plan_path and (cfg.method=='sgd' or (cfg.method=='replay' and cfg.replay_update_policy in {'sampled_mixed','sampled_mixed_accumulated'})):
+        replay_draws=int(sum(replay_sampled_class_counts.values()))
+        current_draws=microbatch_count*cfg.batch_size-replay_draws
+        planned_current_draws=len(indices)*cfg.epochs
+        if current_draws<planned_current_draws:raise RuntimeError('Joint training omitted declared current sample draws')
+        joint_work={'current_draws_including_padding':current_draws,
+                    'current_draws_without_padding':planned_current_draws,
+                    'current_padding_draws':current_draws-planned_current_draws,
+                    'replay_draws':replay_draws,'replay_distinct_samples':len(joint_replay_drawn_ids),
+                    'optimization_microbatches':microbatch_count,'optimizer_steps':step_count}
+    return {**({'joint_work':joint_work} if cfg.joint_plan_path else {}),'weights':{k:v.detach().cpu().clone() for k,v in model.state_dict().items()},
             'examples':len(indices),'class_counts':class_counts,'class_update_steps':class_update_steps,
             'task_head_examples':task_head_examples,
             'active_pair_classes':list(active_pair_classes) if active_pair_classes else None,'steps':step_count,'loss':loss_total/max(1,microbatch_count),
