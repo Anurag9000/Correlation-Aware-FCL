@@ -121,6 +121,8 @@ def read_condition(job,root,plan):
             terminal_prediction_coverage=term['coverage'],
             terminal_private_macro_client_accuracy=summary['terminal_private_macro_client_accuracy'],
             optimizer_steps=resource['optimizer_steps'],
+            current_draws=resource.get('current_draws'),unique_current_visits=resource.get('unique_current_visits'),
+            replay_draws=resource.get('replay_draws'),
             model_tensor_bytes=(resource['model_upload_tensor_bytes']+resource['model_download_tensor_bytes']
                 if resource['model_upload_tensor_bytes'] is not None and resource['model_download_tensor_bytes'] is not None else None))
         for key in ('mean_current_task_test_accuracy','mean_historical_noncurrent_class_test_accuracy',
@@ -186,6 +188,12 @@ def compare_campaigns(campaigns,output,contrasts_path=None):
                       'communication_opportunities_equal':ab['communication_opportunities']==bb['communication_opportunities'],
                       'client_download_count_equal':ab['planned_client_downloads']==bb['planned_client_downloads'],
                       'optimizer_steps_equal':None if a['optimizer_steps'] is None or b['optimizer_steps'] is None else a['optimizer_steps']==b['optimizer_steps']}
+                for key in ('current_draws','unique_current_visits','replay_draws'):
+                    x,y=a.get(key),b.get(key)
+                    pair[key+'_equal']=None if x is None or y is None else x==y
+                if c.get('require_matched_compute',False):
+                    matched=matched and all(pair.get(k) is True for k in ('optimizer_steps_equal','current_draws_equal','unique_current_visits_equal'))
+                    pair['declared_match_verified']=matched
                 for metric in METRICS:
                     x=a.get(metric);y=b.get(metric)
                     delta=None if x is None or y is None else y-x

@@ -90,6 +90,7 @@ def validate_artifacts(job,path):
         value=summary["final"]["test_accuracy"]
         if summary["rounds"]!=n:raise ValueError("Stationary round count mismatch")
         if not (path/"checkpoints"/f"round_{n:03d}.pt").is_file():raise ValueError("Missing final checkpoint")
+        required.append(f"checkpoints/round_{n:03d}.pt")
     else:
         value=summary["final_accuracy"]
         if summary["learning_syncs"]!=n or bool(summary["terminal_flush"])!=bool(flush):
@@ -97,10 +98,13 @@ def validate_artifacts(job,path):
         if job["binding"]=="historical_reconstruction_v1" and summary.get("historical_reproduction_verified") is not False:
             raise ValueError("Historical reconstruction must not be labelled exact")
         for s in range(1,n+flush+1):
-            if not (path/"per_round_metrics"/f"sync_{s:04d}.json").is_file():
-                raise ValueError(f"Missing per-round diagnostic {s}")
+            name=f"per_round_metrics/sync_{s:04d}.json"
+            if not (path/name).is_file():raise ValueError(f"Missing per-round diagnostic {s}")
+            detail=json.loads((path/name).read_text())
+            if detail["sync"]!=s:raise ValueError("Per-round diagnostic identity mismatch")
+            required.append(name)
         if not (path/"checkpoints"/"latest.pt").is_file():raise ValueError("Missing final checkpoint")
-        required.append("schedule.json")
+        required.extend(["schedule.json","checkpoints/latest.pt"])
     if not isinstance(value,(float,int)) or not math.isfinite(value) or not 0<=value<=1:
         raise ValueError("Invalid final accuracy")
     receipt={"job_id":job["job_id"],"rows":len(rows),"final_accuracy":value,
@@ -151,10 +155,10 @@ def run_one(job,args,root,device,expected_head):
         cmd=[sys.executable,"-m",MODULES[job["binding"]],"--job",str(path/"job.json"),
              "--output",str(path),"--data-root",str(Path(args.data_root).resolve()),"--device",device]
         if job.get("subset_probes"):cmd.append("--subset-probes")
-        if job["binding"]=="stationary_reference" and getattr(args,"command",None)=="resume":
+        if getattr(args,"command",None)=="resume":
             for previous in sorted(base.glob("attempt_*"),reverse=True):
                 if previous==path:continue
-                candidate=previous/"checkpoints"/"latest.pt"
+                candidate=previous/"checkpoints"/("latest.pt" if job["binding"]=="stationary_reference" else "resume.pt")
                 if not candidate.is_file():continue
                 try:
                     old_job=json.loads((previous/"job.json").read_text())

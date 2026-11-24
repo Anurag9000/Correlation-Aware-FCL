@@ -275,7 +275,7 @@ def weighted_parameter_branch(base,weighted_candidates,param_names):
                if k in param_names else v) for k,v in base.items()}
 
 
-def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",subset_probes=False):
+def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",subset_probes=False,resume_from=None):
     if job.get("binding") not in ("matched_reference_v1","historical_reconstruction_v1"):
         raise ValueError("No supported reference binding")
     reconstructed=job["binding"]=="historical_reconstruction_v1"
@@ -309,6 +309,54 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
             return c["known"]|own_classes(us)
         return observed
     ctr=0
+    first_stage=0
+    test=None
+    from .identity import runtime_identity,dataset_identity
+    from .joint.checkpoint_io import durable_torch_save
+    from .diagnostic_campaign import signature,sha_file
+    import shutil
+    identity={'job_signature':signature(job),'runtime':runtime_identity(),
+              'dataset':dataset_identity(bank),'allocation_sha256':audit['allocation_sha256'],
+              'model':model_name,'subset_probes':bool(subset_probes),
+              'device_type':torch.device(device).type}
+    def save_resume(next_stage):
+        artifacts={str(p.relative_to(output)):sha_file(p)
+                   for p in sorted(diagnostics.glob('sync_*.json'))}
+        artifacts.update({str(p.relative_to(output)):sha_file(p)
+                          for p in sorted(output.glob('stage_*_evaluation.json'))})
+        fork=checkpoints/'fork_reference.pt'
+        if fork.is_file():artifacts[str(fork.relative_to(output))]=sha_file(fork)
+        durable_torch_save({'identity':identity,'next_stage':next_stage,
+            'server':server,'version':version,'clients':clients,'archive':archive,
+            'prior':prior,'observed':observed,'integrated':integrated,'peak':peak,
+            'rows':rows,'all_counts':dict(all_counts),'ctr':ctr,'last_test':test,
+            'artifacts':artifacts,'python_rng':random.getstate(),
+            'numpy_rng':np.random.get_state(),'torch_rng':torch.get_rng_state(),
+            'cuda_rng':torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []},
+            checkpoints/'resume.pt')
+    if resume_from is not None:
+        source=Path(resume_from)
+        saved=torch.load(source,map_location='cpu',weights_only=False)
+        if saved['identity']!=identity:raise RuntimeError('Matched checkpoint identity mismatch')
+        first_stage=int(saved['next_stage'])
+        if not 1<=first_stage<=len(stages):raise ValueError('Invalid matched checkpoint stage')
+        server=saved['server'];version=saved['version'];clients=saved['clients']
+        archive=saved['archive'];prior=saved['prior'];observed=saved['observed']
+        integrated=saved['integrated'];peak=saved['peak'];rows=saved['rows']
+        all_counts=defaultdict(int,saved['all_counts']);ctr=int(saved['ctr']);test=saved['last_test']
+        if ctr!=len(rows) or [x['sync'] for x in rows]!=list(range(1,ctr+1)):
+            raise ValueError('Matched checkpoint history mismatch')
+        for name,expected in saved['artifacts'].items():
+            src=source.parent.parent/name;dest=output/name
+            if not src.is_file() or sha_file(src)!=expected:
+                raise ValueError('Missing or corrupt checkpoint evidence: '+name)
+            dest.parent.mkdir(parents=True,exist_ok=True)
+            if src.resolve()!=dest.resolve():shutil.copy2(src,dest)
+        random.setstate(saved['python_rng']);np.random.set_state(saved['numpy_rng'])
+        torch.set_rng_state(saved['torch_rng'])
+        if torch.cuda.is_available() and saved['cuda_rng']:torch.cuda.set_rng_state_all(saved['cuda_rng'])
+        durable_torch_save(saved,checkpoints/'resume.pt')
+        durable_torch_save({'server':server,'version':version,'stage':first_stage-1},checkpoints/'latest.pt')
     def eval_panel(state,heads,limit=4):
         return evaluate(model,state,bank.validation,heads,setting,observed,device,limit)
     def commit(cohort,stage,current,flush=False,train_counts=None,local=None,gradient=None):
@@ -381,7 +429,7 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
              "diagnostic_split":"validation","panel_examples_per_class":4}
         atomic_json(diagnostics/f"sync_{ctr:04d}.json",row)
         return row
-    for s in stages:
+    for s in stages[first_stage:]:
         t=s["stage"];current={tuple(u["head"]) for us in s["units"] for u in us}
         observed.update(s["classes"])
         # Freeze replay at parent-stage start: compute matched arms process
@@ -458,6 +506,7 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
                         "archive":archive,"job_id":job["job_id"],"allocation_sha256":audit["allocation_sha256"]},
                        checkpoints/"fork_reference.pt")
         prior.update(current)
+        save_resume(t+1)
     if job["participation"]<1 or reconstructed:
         row=commit(list(range(len(clients))),len(stages),set(),flush=True)
         final=evaluate(model,server,bank.test,prior,setting,observed,device)
@@ -557,11 +606,12 @@ def main():
     p.add_argument("--job",required=True);p.add_argument("--output",required=True)
     p.add_argument("--data-root",required=True);p.add_argument("--device",default="cuda:0")
     p.add_argument("--download",action="store_true");p.add_argument("--subset-probes",action="store_true")
+    p.add_argument("--resume-from")
     a=p.parse_args()
     if a.device.startswith("cuda") and not torch.cuda.is_available():
         raise RuntimeError("CUDA unavailable")
     bank=get_data_bank("cifar100",a.data_root,download=a.download,seed=0)
-    run_reference(json.loads(Path(a.job).read_text()),a.output,bank,a.device,subset_probes=a.subset_probes)
+    run_reference(json.loads(Path(a.job).read_text()),a.output,bank,a.device,subset_probes=a.subset_probes,resume_from=a.resume_from)
 
 
 if __name__=="__main__":
