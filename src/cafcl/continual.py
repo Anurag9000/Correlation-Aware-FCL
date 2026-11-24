@@ -462,7 +462,9 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
     indices=list(dict.fromkeys(client.current_indices))
     if not indices:
         return None
-    rng_round=(client.local_experience-1 if cfg.joint_plan_path else round_id)
+    # LocalState starts at -1; arrival increments to zero for experience 1.
+    rng_round=(client.local_experience if cfg.joint_plan_path else round_id)
+    if rng_round<0:raise RuntimeError('Local training requires a delivered experience')
     rng=np.random.default_rng(cfg.seed+rng_round*137+client.client_id*100003)
     replay_order_rng=np.random.default_rng(
         cfg.seed+7_314_159+rng_round*1_000_003+client.client_id*10_007+
