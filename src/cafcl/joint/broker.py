@@ -71,7 +71,7 @@ def select_jobs(catalog,family=None,limit=0):
     return jobs[:limit] if limit else jobs
 
 
-def run_broker(args):
+def run_broker(args, progress_callback=None):
     if len(set(args.gpus))!=len(args.gpus) or min(args.gpus)<0 or args.min_free_mib<=0:
         raise ValueError('Distinct nonnegative GPU IDs and positive memory threshold required')
     if args.retries<0 or args.limit<0 or args.concurrency<1 or args.min_disk_gib<0:
@@ -87,6 +87,8 @@ def run_broker(args):
         validation=validate_manifest(manifest,args.data_root,not args.no_download)
         if validation['invalid']:raise RuntimeError('Manifest validation failed: '+repr(validation['invalid'][:3]))
         jobs=select_jobs(catalog,args.family,args.limit)
+        excluded=getattr(args,'exclude_family',None)
+        if excluded:jobs=[j for j in jobs if excluded not in j.get('families',[j.get('family')])]
         if not jobs:raise ValueError('No matching jobs')
         campaign_id=str(time_ns())
         receipt_root=root/'broker_receipts'/campaign_id;receipt_root.mkdir(parents=True)
@@ -99,6 +101,7 @@ def run_broker(args):
             with lock:
                 results.append(row)
                 write_json(receipt_root/'progress.json',{'results':results,'blocked_gpus':blocked_gpus})
+                if progress_callback:progress_callback(row)
         def worker(gpu):
             try:
                 snapshot=gpu_snapshot(gpu)
@@ -147,6 +150,8 @@ def run_broker(args):
                             env=dict(os.environ,CUDA_VISIBLE_DEVICES=snapshot['uuid'],
                                      CAFCL_REQUIRE_CUDA='1',CAFCL_EXPECT_GIT_HEAD=head,PYTHONUNBUFFERED='1')
                             started=utc()
+                            if progress_callback:
+                                with lock:progress_callback({'job_id':jid,'gpu':gpu,'status':'running','attempt':attempt+1,'started_at':started,'log':str(log)})
                             with log.open('w') as handle:
                                 process=subprocess.run(cmd,env=env,stdout=handle,stderr=subprocess.STDOUT)
                             verified=audit_job(job,root)
@@ -171,4 +176,6 @@ def run_broker(args):
                 'blocked_gpus':blocked_gpus,'results':results,'finished_at':utc(),
                 'receipt_directory':str(receipt_root)}
         write_json(receipt_root/'final.json',report)
+        if progress_callback:
+            for jid in blocked:progress_callback({'job_id':jid,'status':'blocked','reason':'broker_resource_or_worker_blocker'})
         return report

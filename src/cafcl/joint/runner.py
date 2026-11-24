@@ -27,6 +27,10 @@ def write_json(path, value):
 def iter_designs(suite,depths,coarse_by_fine):
     from .family_catalog import screening_designs,Design
     from .interactions import interaction_designs,short_designs
+    if suite=='essential':
+        from .essential import essential_designs
+        yield from essential_designs()
+        return
     if suite in ('screening','all'):yield from screening_designs()
     if suite in ('interactions','all'):yield from interaction_designs()
     if suite in ('short','all'):yield from short_designs()
@@ -68,6 +72,8 @@ def settings_for(design):
 
 
 def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundational'):
+    if suite=='essential' and seed!=0:
+        raise ValueError('The essential campaign uses seed 0 only')
     from ..data import get_data_bank
     bank=get_data_bank('cifar100',data_root,download=download,seed=seed)
     root=Path(output).resolve()
@@ -100,6 +106,8 @@ def plan_campaign(output,data_root,seed,download,depths=(1,2,3,5),suite='foundat
                  'task_occurrences':len(plan['tasks']),'communication_intervals':len(plan['intervals']),
                  'low_support_warning':plan['allocation_audit']['minimum_samples_per_class_occurrence']<8}
             unique[key]=job;jobs.append(job)
+    if suite=='essential' and (len(jobs)!=60 or aliases or blocked):
+        raise RuntimeError(f'Essential campaign must compile exactly 60 unique jobs: {len(jobs)} jobs, {len(aliases)} aliases, {blocked!r}')
     write_json(root/'manifest.json',{'dataset':'cifar100','suite':suite,'jobs':jobs,'aliases':aliases,
                'infeasible':blocked,'nominal_by_family':dict(nominal),
                'nominal_conditions':sum(nominal.values()),'unique_executable_conditions':len(jobs),
@@ -176,7 +184,7 @@ def main(argv=None):
     sub=p.add_subparsers(dest='command',required=True)
     a=sub.add_parser('plan');a.add_argument('--output',required=True)
     a.add_argument('--seed',type=int,default=0)
-    a.add_argument('--suite',choices=['foundational','screening','interactions','short','extensions','controls','intratask','smoke','all'],default='foundational')
+    a.add_argument('--suite',choices=['foundational','screening','interactions','short','extensions','controls','intratask','smoke','essential','all'],default='essential')
     a.add_argument('--depths',type=int,nargs='+',default=[1,2,3,5])
     a=sub.add_parser('run');a.add_argument('--manifest',required=True)
     a.add_argument('--job-id',required=True);a.add_argument('--output',required=True)
@@ -193,6 +201,9 @@ def main(argv=None):
     a.add_argument('--family');a.add_argument('--limit',type=int,default=0)
     a.add_argument('--concurrency',type=int,default=1);a.add_argument('--local-evaluation',action='store_true');a.add_argument('--mechanistic-probes',action='store_true');a.add_argument('--checkpoint-policy',choices=['all','latest'],default='all')
     a.add_argument('--allow-shared-gpu',action='store_true')
+    a=sub.add_parser('campaign',help='Run the complete reduced 60-job campaign')
+    from .campaign import add_arguments
+    add_arguments(a)
     a=sub.add_parser('validate');a.add_argument('--manifest',required=True)
     a=sub.add_parser('audit');a.add_argument('--manifest',required=True);a.add_argument('--output',required=True)
     a=sub.add_parser('compare');a.add_argument('--campaign',nargs=2,action='append',metavar=('MANIFEST','RESULTS'),required=True)
@@ -206,6 +217,11 @@ def main(argv=None):
     if a.command=='plan':
         jobs=plan_campaign(a.output,a.data_root,a.seed,not a.no_download,a.depths,a.suite)
         print(f'Planned {len(jobs)} conditions; no training launched')
+    elif a.command=='campaign':
+        from .campaign import run_campaign
+        result=run_campaign(a)
+        print(json.dumps(result,indent=2))
+        if not result['complete']:raise SystemExit(1)
     elif a.command=='broker':
         from .broker import run_broker
         result=run_broker(a)

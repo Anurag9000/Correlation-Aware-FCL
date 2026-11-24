@@ -48,3 +48,13 @@ PYTHONPATH=src python -m cafcl.joint.runner plan --suite foundational --output r
 ```
 
 The historical primary protocol is unchanged. Do not launch the generalized production campaign until the joint-specific CPU validation and short real-data diagnostics have been checked.
+
+### Recommended reduced joint campaign (60 jobs)
+
+Use the [essential campaign](docs/joint/ESSENTIAL_CAMPAIGN.md) to run the fixed seed-zero selection, including eight smoke gates, with one command:
+
+```bash
+PYTHONPATH=src python -m cafcl.joint.runner campaign --output runs/joint_essential --gpus 0 1 --min-free-mib 16000
+```
+
+Adjust the example GPU IDs and measured memory threshold for your machine. The full catalog is opt-in, not scheduled by this command.

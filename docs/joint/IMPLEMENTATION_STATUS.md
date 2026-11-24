@@ -168,3 +168,7 @@ previous checkpoint. Runner jobs use exclusive advisory leases. The
 real-data CPU smoke workflow exercises one overlapping depth-two condition
 in each learning setting and independently audits the artifacts. It is
 not a substitute for the full eight-cell smoke suite or GPU runs.
+
+## Reduced production campaign
+
+The default plan is now the fixed 60-job seed-zero `essential` suite. See [Essential campaign](ESSENTIAL_CAMPAIGN.md) for the one-command smoke-gated runner and central JSON/CSV job ledger. The historical expanded catalog remains opt-in via `--suite all`; it is not part of this execution campaign.
