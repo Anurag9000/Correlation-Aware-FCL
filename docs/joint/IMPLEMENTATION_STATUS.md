@@ -128,3 +128,18 @@ Existing completed or interrupted run configurations are never silently replaced
 
 The 16000 MiB figure is an illustrative operator threshold, not a verified
 measurement. No broker jobs were launched on actual GPUs by this change.
+
+## Cross-campaign synthesis
+
+The compare command independently audits runs before extracting metrics.
+Predeclared contrasts cover delayed synchronization, no-replay, pooled,
+centralized, intra-task, domain and semantic controls. It checks exact
+parent atomic identity or a declared weaker matching contract, records
+realized optimizer and communication matching separately, and exports
+unavailable pairs explicitly. Aliases are not replications. Local-only
+server accuracy is excluded from trained-server comparisons. Multiple
+seed-specific manifests can be supplied; single-seed differences have no
+confidence interval. Student-t intervals for multiple independent pairs
+are descriptive/unadjusted, not a claim of significance.
+
+    PYTHONPATH=src python -m cafcl.joint.runner compare --campaign runs/joint_all/manifest.json runs/joint_results --output runs/joint_comparison

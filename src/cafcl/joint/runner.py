@@ -188,6 +188,8 @@ def main(argv=None):
     a.add_argument('--allow-shared-gpu',action='store_true')
     a=sub.add_parser('validate');a.add_argument('--manifest',required=True)
     a=sub.add_parser('audit');a.add_argument('--manifest',required=True);a.add_argument('--output',required=True)
+    a=sub.add_parser('compare');a.add_argument('--campaign',nargs=2,action='append',metavar=('MANIFEST','RESULTS'),required=True)
+    a.add_argument('--output',required=True);a.add_argument('--contrasts')
     a=sub.add_parser('report');a.add_argument('--run-dir',required=True);a.add_argument('--output')
     a.add_argument('--no-figures',action='store_true')
     for a in sub.choices.values():
@@ -207,6 +209,9 @@ def main(argv=None):
         report=validate_manifest(a.manifest,a.data_root,not a.no_download)
         print(json.dumps(report,indent=2))
         if report['invalid']:raise SystemExit(1)
+    elif a.command=='compare':
+        from .comparison import compare_campaigns
+        print(json.dumps(compare_campaigns(a.campaign,a.output,a.contrasts),indent=2))
     elif a.command=='report':
         from .analysis import analyze_run
         print(json.dumps(analyze_run(a.run_dir,a.output,not a.no_figures),indent=2))

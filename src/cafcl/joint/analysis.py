@@ -168,7 +168,23 @@ def analyze_run(directory,output=None,figures=True):
     write_csv('class_retention.csv',class_rows)
     write_csv('current_task_test.csv',task_rows)
     write_csv('local_historical_accuracy_matrix.csv',local_history)
+    learning_rows=[row for row,interval in zip(global_rows,plan['intervals']) if interval['occurrences']]
+    last_learning=learning_rows[-1] if learning_rows else {}
+    final_private_path=root/'joint_final_private_test.json'
+    final_private=json.loads(final_private_path.read_text()) if final_private_path.exists() else {}
+    private_scores=[]
+    for value in final_private.get('client_metrics',{}).values():
+        if value is not None:
+            private_scores.append(value.get('task_conditioned',{}).get('macro_head_accuracy') if setting=='task_il' else value.get('accuracy'))
+    totals={}
+    for key in ('optimizer_steps','model_upload_tensor_bytes','model_download_tensor_bytes'):
+        values=[r[key] for r in global_rows]
+        totals[key]=sum(values) if all(v is not None for v in values) else None
     summary={'learning_setting':setting,'control_kind':cfg.get('joint_control_kind','federated'),
+             'last_learning_interval':last_learning,'resource_totals':totals,
+             'mean_current_task_test_accuracy':average([r['current_task_average_test_accuracy'] for r in learning_rows]),
+             'mean_historical_noncurrent_class_test_accuracy':average([r['historical_noncurrent_class_macro_test_accuracy'] for r in learning_rows]),
+             'terminal_private_macro_client_accuracy':average(private_scores),
              'knowledge_ledger':ledger,'mean_local_acquisition':average([x['acquisition'] for x in local_rows]),
              'mean_signed_local_retention_drop':average([x['signed_retention_drop_to_upload'] for x in local_rows]),
              'mean_integration_latency_intervals':average([x['interval_latency'] for x in latency]),
