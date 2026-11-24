@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader,Subset,Dataset
 from .cl_estimators import estimate_diagonal_importance
-from .class_indexed import canonical_active_loss,freeze_other_class_rows
+from .class_indexed import canonical_active_loss,freeze_other_class_rows,task_head_loss
 from scipy.optimize import minimize
 from .native_methods import NATIVE_METHODS,native_loss,historical_teacher
 
@@ -59,6 +59,7 @@ class LocalState:
     pending_upload_classes:set[int]=field(default_factory=set)
     pending_upload_steps:int=0
     pending_class_update_steps:dict[int,int]=field(default_factory=dict)
+    pending_task_head_examples:dict[str,float]=field(default_factory=dict)
     activated_labels:set[int]=field(default_factory=set)
     local_experience:int=-1
     first_seen_local_experience:dict[int,int]=field(default_factory=dict)
@@ -109,6 +110,7 @@ class LocalState:
         self.pending_upload_classes=set()
         self.pending_upload_steps=0
         self.pending_class_update_steps={}
+        self.pending_task_head_examples={}
         self.pending_importance={}
         self.pending_feat_ecc=[]
         self.pending_native_prototypes=[]
@@ -289,9 +291,10 @@ class _CIFARCropFlipDataset(Dataset):
 
 class _FixedBatchSampler:
     """No short optimizer batches: replay final samples from the same TRAIN pool."""
-    def __init__(self,size,batch_size,seed,shuffle):
+    def __init__(self,size,batch_size,seed,shuffle,pad_pool_size=0):
         if size<1 or batch_size<1:raise ValueError('Empty training batch source')
         self.size,self.batch_size,self.seed,self.shuffle=size,batch_size,seed,shuffle
+        self.pad_pool_size=int(pad_pool_size)
     def __len__(self):
         from math import ceil
         return ceil(self.size/self.batch_size)
@@ -301,17 +304,25 @@ class _FixedBatchSampler:
         for start in range(0,self.size,self.batch_size):
             selection=order[start:start+self.batch_size].tolist()
             if len(selection)<self.batch_size:
-                extra=torch.randint(self.size,(self.batch_size-len(selection),),generator=gen)
-                selection.extend(order[extra].tolist())
+                missing=self.batch_size-len(selection)
+                if self.pad_pool_size:
+                    extra=torch.randint(self.pad_pool_size,(missing,),generator=gen)+self.size
+                    selection.extend(extra.tolist())
+                else:
+                    extra=torch.randint(self.size,(missing,),generator=gen)
+                    selection.extend(order[extra].tolist())
             assert len(selection)==self.batch_size
             yield selection
 
 
-def _example_loader(dataset,indices,batch_size,seed,shuffle=True,*,include_indices=False,full_batch=False):
+def _example_loader(dataset,indices,batch_size,seed,shuffle=True,*,include_indices=False,full_batch=False,padding_indices=None):
     source=_IndexedDataset(dataset) if include_indices else dataset
-    subset=Subset(source,list(indices))
+    primary=list(indices)
+    padding=list(padding_indices or ())
+    subset=Subset(source,primary+padding)
     if full_batch:
-        sampler=_FixedBatchSampler(len(subset),batch_size,seed,shuffle)
+        sampler=_FixedBatchSampler(len(primary),batch_size,seed,shuffle,
+                                   pad_pool_size=len(padding))
         return DataLoader(subset,batch_sampler=sampler,num_workers=0,
                           pin_memory=torch.cuda.is_available())
     generator=torch.Generator().manual_seed(seed)
@@ -319,7 +330,19 @@ def _example_loader(dataset,indices,batch_size,seed,shuffle=True,*,include_indic
                       num_workers=0,generator=generator,pin_memory=torch.cuda.is_available())
 
 
-def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,active_pair_classes=None,reference_classes=None):
+def _task_ids_for_indices(indices,task_ids_by_index,fallback=()):
+    if task_ids_by_index is None:
+        return [tuple(fallback) for _ in indices]
+    result=[]
+    for index in indices:
+        task_ids=task_ids_by_index.get(int(index),())
+        if not task_ids:
+            raise ValueError(f'No task provenance for replay sample {int(index)}')
+        result.append(tuple(task_ids))
+    return result
+
+
+def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,active_pair_classes=None,reference_classes=None,task_ids=None,task_ids_by_index=None):
     model.zero_grad(set_to_none=True)
     # Reference gradients are read-only with respect to BatchNorm running
     # statistics. Otherwise A-GEM/GEM accidentally trains CNN buffers on
@@ -338,28 +361,34 @@ def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,acti
         count=len(selected)
         if not count:raise ValueError('No historical constraint samples')
         total=len(selected)
-        for x,y in _example_loader(dataset,selected,batch_size,seed,shuffle=False):
+        for x,y,ids in _example_loader(dataset,selected,batch_size,seed,shuffle=False,include_indices=True):
             valid=len(y)
             if valid<batch_size:
                 pad=torch.arange(batch_size-valid)%valid
                 x=torch.cat((x,x[pad]),dim=0)
                 y=torch.cat((y,y[pad]),dim=0)
             x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
-            reference_logits=model(x)[:valid]
             y=y[:valid]
-            if reference_classes is not None:
-                # GEM explicit original-experience constraints retain their
-                # own historical label universe (stage grouping).
-                from .class_indexed import canonical_active_loss
-                ref_loss=canonical_active_loss(reference_logits,y,reference_classes)
-            elif active_pair_classes is not None and len(set(active_pair_classes))>=2:
-                # All/class grouping and A-GEM must use the SAME known-class
-                # competitor set as the current class-IL objective, rather
-                # than penalizing outputs for unknown future classes.
-                from .class_indexed import canonical_active_loss
-                ref_loss=canonical_active_loss(reference_logits,y,active_pair_classes)
+            if hasattr(getattr(model,'classifier',None),'task_classes'):
+                ref_loss=model.loss_for_labels(
+                    x[:valid],y,task_ids=task_ids,
+                    task_ids_by_example=_task_ids_for_indices(
+                        ids[:valid].tolist(),task_ids_by_index,task_ids))
             else:
-                ref_loss=F.cross_entropy(reference_logits,y)
+                reference_logits=model(x)[:valid]
+                if reference_classes is not None:
+                    # GEM explicit original-experience constraints retain
+                    # their historical label universe (stage grouping).
+                    from .class_indexed import canonical_active_loss
+                    ref_loss=canonical_active_loss(reference_logits,y,reference_classes)
+                elif active_pair_classes is not None and len(set(active_pair_classes))>=2:
+                    # All/class grouping and A-GEM must use the SAME known-class
+                    # competitor set as the current class-IL objective, rather
+                    # than penalizing outputs for unknown future classes.
+                    from .class_indexed import canonical_active_loss
+                    ref_loss=canonical_active_loss(reference_logits,y,active_pair_classes)
+                else:
+                    ref_loss=F.cross_entropy(reference_logits,y)
             (ref_loss*(len(y)/total)).backward()
         if active_pair_classes is not None:
             from .class_indexed import freeze_other_class_rows
@@ -374,26 +403,26 @@ def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,acti
     return result
 
 
-def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experience_end=False,active_pair_classes=None):
+def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_id=None,experience_end=False,active_pair_classes=None,padding_indices=None,known_task_ids=None,task_ids_by_index=None):
     """Continue training on the client's own local model, without server access.
 
     The simulator calls this for every client with local data every round,
     whether selected for federation or not. Shared weights are the private
     local model between rounds; server synchronization is handled separately.
     """
-    if cfg.method=='native_feat':
+    if cfg.method=='native_feat' and cfg.learning_setting!='task_il':
         from .upstream_feat_train import train_original_feat
         return train_original_feat(
             model,client,bank,cfg,device,round_id,task_classes,
             experience_end=experience_end,
             active_pair_classes=active_pair_classes)
-    if cfg.method in {'native_glfc','native_lga'}:
+    if cfg.method in {'native_glfc','native_lga'} and cfg.learning_setting!='task_il':
         from .upstream_glfc_lga_train import train_original_glfc_lga
         return train_original_glfc_lga(
             model,client,bank,cfg,device,round_id,task_classes,
             experience_end=experience_end,
             active_pair_classes=active_pair_classes)
-    if cfg.model=='fedclass_resnet8' and cfg.method in {'replay','sgd'}:
+    if cfg.model=='fedclass_resnet8' and cfg.method in {'replay','sgd'} and cfg.learning_setting!='task_il':
         from .upstream_fedclass_ce import train_original_ce
         return train_original_ce(model,client,bank,cfg,device,round_id,
                                  task_classes,experience_end=experience_end,
@@ -403,22 +432,40 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     client.last_learning_method=cfg.method
     model.load_state_dict(client.shared_weights)
     model.to(device)
+    if cfg.learning_setting=='task_il':
+        if not task_classes or not task_id:
+            raise ValueError('Task-IL local training requires the active task ID')
+        model.set_active_task_id(task_id)
     model.train()
     if active_pair_classes is not None:
         active_pair_classes=tuple(sorted(set(int(c) for c in active_pair_classes)))
         if len(active_pair_classes)<2:
             raise ValueError('Local task requires at least two distinct labels')
-    # Class-incremental local objective: new images must compete with every
-    # class already known to this client, including freshly synchronized
-    # server classes. Future classes alone remain inactive/frozen.
+    # Task-IL current examples use the active task head; replay routing uses
+    # only task IDs that have arrived by this synchronization.
     seen_classes=tuple(sorted(set(client.observed_classes) |
                               set(active_pair_classes or ())))
+    from .models import task_head_key
+    known_task_ids={task_head_key(value) for value in (known_task_ids or ())}
+    for event in client.local_training_events:
+        if event.get('task_id'):
+            known_task_ids.add(task_head_key(event['task_id']))
+        elif event.get('classes'):
+            known_task_ids.add(task_head_key(event['classes']))
+    if task_id:known_task_ids.add(task_head_key(task_id))
+    if cfg.learning_setting=='task_il':
+        known_task_keys={task_head_key(task_id) for task_id in known_task_ids}
+    else:
+        known_task_keys=set()
     if active_pair_classes is not None and not set(active_pair_classes).issubset(seen_classes):
         raise RuntimeError('Active class pair was lost from client CL history')
     indices=list(dict.fromkeys(client.current_indices))
     if not indices:
         return None
     rng=np.random.default_rng(cfg.seed+round_id*137+client.client_id*100003)
+    replay_order_rng=np.random.default_rng(
+        cfg.seed+7_314_159+round_id*1_000_003+client.client_id*10_007+
+        max(0,int(client.local_experience)))
     training_data=bank.train
     if cfg.scenario in {'domain','gradual_drift','shifted_recurrence'} or cfg.label_noise_rate or cfg.spurious_strength:
         from .domains import ClientAugmentedDataset
@@ -511,8 +558,9 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                       if (cls in client.trained_classes if cfg.boundary_mode=='hidden'
                           else client.first_seen_local_experience.get(cls,client.local_experience)<client.local_experience)}
     if cfg.method in ({'replay','er_ace','der','derpp','gem','agem'}|NATIVE_METHODS):
-        # The client's synchronized aggregate archive is its available
-        # rehearsal buffer, including classes first received this experience.
+        # Replay draws from every example in the client's currently available
+        # private and synchronized archive. A disconnected client naturally
+        # sees only the archive snapshot it last received.
         eligible_history=dict(client.memory)
     oldmemory=[]
     for cls,group in eligible_history.items():
@@ -524,6 +572,45 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
     # Replay each retained image once even if a source selector recorded the
     # same image through repeated tickets or duplicate class-table entries.
     oldmemory=list(dict.fromkeys(map(int,oldmemory)))
+    replay_by_class={int(cls):list(dict.fromkeys(map(int,group)))
+                     for cls,group in eligible_history.items() if group}
+    replay_sampled_class_counts=Counter()
+    replay_task_head_exposure=Counter()
+    def record_task_replay(sample_ids,scale=1.):
+        if cfg.learning_setting!='task_il':return
+        from .models import task_head_key
+        for index in sample_ids:
+            ids=_task_ids_for_indices([index],task_ids_by_index,known_task_ids)[0]
+            keys=tuple(sorted({task_head_key(task_id) for task_id in ids}&known_task_keys))
+            if not keys:
+                raise ValueError(f'Replay sample {int(index)} has no task head')
+            for key in keys:replay_task_head_exposure[key]+=float(scale)/len(keys)
+    def draw_history(count):
+        """Sample classes and images uniformly without avoidable repeats."""
+        if count<=0 or not replay_by_class:
+            raise ValueError('Cannot draw a replay minibatch from an empty archive')
+        ids=[]
+        if len(oldmemory)>=count:
+            remaining={cls:list(group) for cls,group in replay_by_class.items()}
+            for _ in range(count):
+                classes=tuple(cls for cls,group in remaining.items() if group)
+                cls=classes[int(rng.integers(0,len(classes)))]
+                group=remaining[cls]
+                pos=int(rng.integers(0,len(group)))
+                ids.append(group.pop(pos))
+                replay_sampled_class_counts[cls]+=1
+        else:
+            classes=tuple(replay_by_class)
+            for _ in range(count):
+                cls=classes[int(rng.integers(0,len(classes)))]
+                group=replay_by_class[cls]
+                ids.append(group[int(rng.integers(0,len(group)))])
+                replay_sampled_class_counts[cls]+=1
+        examples=[training_data[i] for i in ids]
+        x=torch.stack([item[0] for item in examples])
+        y=torch.as_tensor([int(item[1]) for item in examples],dtype=torch.long)
+        record_task_replay(ids)
+        return x,y,count,ids
     def local_old_loss():
         if not oldmemory:return None
         was_train=model.training
@@ -538,39 +625,201 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
             labels=torch.tensor([bank.train.targets[i] for i in subset],device=device)
             # Do not let added computational padding bias loss diagnostics.
             logits=model(batch)[:valid]
-            value=float(F.cross_entropy(logits,labels).item())
+            value=float((model.loss_for_labels(
+                batch[:valid],labels,task_ids=known_task_ids,
+                task_ids_by_example=_task_ids_for_indices(
+                    subset,task_ids_by_index,known_task_ids))
+                if hasattr(getattr(model,'classifier',None),'task_classes')
+                else F.cross_entropy(logits,labels)).item())
         model.train(was_train)
         return value
     old_loss_before=local_old_loss() if cfg.prepost_diagnostics else None
-    step_count=0; loss_total=0.; last_projection=0.; num_violations=0;qp_calls=0
-    def load_memory_microbatch(ids,tag):
+    step_count=0; microbatch_count=0; loss_total=0.; last_projection=0.; num_violations=0;qp_calls=0
+    def load_memory_microbatch(ids,tag,padding_pool=None):
         x,y=next(iter(_example_loader(training_data,ids,cfg.batch_size,
             cfg.seed+round_id+client.client_id+tag,shuffle=False)))
         valid=len(y)
         if valid<cfg.batch_size:
-            pad=torch.arange(cfg.batch_size-valid)%valid
-            x=torch.cat((x,x[pad]),dim=0)
-            y=torch.cat((y,y[pad]),dim=0)
+            missing=cfg.batch_size-valid
+            if cfg.replay_padding_policy=='archive_sample' and padding_pool:
+                # Excluded padding copies still affect train-mode BatchNorm. Fill
+                # a short final archive chunk from the complete visible replay
+                # archive instead of multiplying only its tail examples.
+                pad_rng=np.random.default_rng(
+                    cfg.seed+9_191_377+round_id*1_000_003+
+                    client.client_id*10_007+int(tag))
+                pad_ids=pad_rng.choice(np.asarray(padding_pool,dtype=np.int64),
+                    size=missing,replace=len(padding_pool)<missing).tolist()
+                # Keep the padding-only crops out of the current/replay
+                # augmentation RNG stream so this control changes only which
+                # examples BatchNorm sees in otherwise excluded slots.
+                augmentation_rng=(training_data.rng
+                    if isinstance(training_data,_CIFARCropFlipDataset) else None)
+                if augmentation_rng is not None:training_data.rng=pad_rng
+                try:
+                    padded=[training_data[int(i)] for i in pad_ids]
+                finally:
+                    if augmentation_rng is not None:training_data.rng=augmentation_rng
+                px=torch.stack([item[0] for item in padded])
+                py=torch.as_tensor([int(item[1]) for item in padded],dtype=torch.long)
+                x=torch.cat((x,px),dim=0)
+                y=torch.cat((y,py),dim=0)
+            else:
+                pad=torch.arange(missing)%valid
+                x=torch.cat((x,x[pad]),dim=0)
+                y=torch.cat((y,y[pad]),dim=0)
         return x,y,valid
+
+    def replay_forward(x):
+        """Forward replay chunks while optionally preserving BatchNorm buffers.
+
+        The freeze policy keeps train-mode batch statistics for the gradient,
+        but prevents every replay microbatch from advancing running moments.
+        This isolates replay-buffer multiplicity from the optimizer objective.
+        """
+        if (cfg.method!='replay' or
+                cfg.replay_bn_policy!='freeze_replay_buffers'):
+            return model(x)
+        saved=[]
+        batchnorm_base=torch.nn.modules.batchnorm._BatchNorm
+        for layer in model.modules():
+            if isinstance(layer,batchnorm_base):
+                for name in ('running_mean','running_var','num_batches_tracked'):
+                    value=getattr(layer,name,None)
+                    if value is not None:
+                        saved.append((layer,name,value.detach().clone()))
+        try:
+            return model(x)
+        finally:
+            with torch.no_grad():
+                for layer,name,value in saved:
+                    getattr(layer,name).copy_(value)
+
+    def replay_task_features(x):
+        """Compute Task-IL replay features without an unused active-head pass."""
+        if (cfg.method!='replay' or
+                cfg.replay_bn_policy!='freeze_replay_buffers'):
+            return model.features(x)
+        saved=[]
+        for layer in model.modules():
+            if isinstance(layer,torch.nn.modules.batchnorm._BatchNorm):
+                for name in ('running_mean','running_var','num_batches_tracked'):
+                    value=getattr(layer,name,None)
+                    if value is not None:
+                        saved.append((layer,name,value.detach().clone()))
+        try:
+            return model.features(x)
+        finally:
+            with torch.no_grad():
+                for layer,name,value in saved:
+                    getattr(layer,name).copy_(value)
 
     def full_training_batches(loaded):
         x,y=loaded[:2]
         original_ids=loaded[2] if len(loaded)>2 else None
-        yield x,y,original_ids
+        mask_partial=(cfg.stream_sync_every_batch and
+                      cfg.stream_partial_batch_policy=='mask_padding_loss')
+        def emit(batch_x,batch_y,batch_ids,current_count=None,replay_count=None,replay_ids=None):
+            loss_count=len(batch_y)
+            if mask_partial and loss_count<cfg.batch_size:
+                if loss_count<1:raise RuntimeError('Partial batch has no valid loss examples')
+                pad=torch.arange(cfg.batch_size-loss_count)%loss_count
+                batch_x=torch.cat((batch_x,batch_x[pad]),dim=0)
+                batch_y=torch.cat((batch_y,batch_y[pad]),dim=0)
+            if replay_count is not None:
+                return batch_x,batch_y,batch_ids,int(current_count),int(replay_count),tuple(replay_ids)
+            if current_count is not None:
+                return batch_x,batch_y,batch_ids,int(current_count)
+            if mask_partial:return batch_x,batch_y,batch_ids,loss_count
+            return batch_x,batch_y,batch_ids
+        if mask_partial and original_ids is not None:
+            # Recover the valid current-stream subset by ID multiplicity. The
+            # same ID can also appear in padding, so count each current index
+            # only as many times as it was actually supplied in this arrival.
+            remaining=Counter(map(int,indices))
+            valid=[]
+            for idx in original_ids.tolist():
+                idx=int(idx);keep=remaining.get(idx,0)>0
+                valid.append(keep)
+                if keep:remaining[idx]-=1
+            mask=torch.as_tensor(valid,dtype=torch.bool)
+            x,y=x[mask],y[mask]
+            original_ids=original_ids[mask]
+        sampled_mixed=(cfg.method=='replay' and
+                       cfg.replay_update_policy in {'sampled_mixed',
+                                                    'sampled_mixed_accumulated'})
+        if not sampled_mixed or not oldmemory or cfg.replay_ratio<=0:
+            yield emit(x,y,original_ids)
+            return
+        # Split each incoming batch into two equal current pieces, then add
+        # the same number of class-uniform Replay images to each microbatch.
+        # The accumulated control combines both microbatch gradients into one
+        # optimizer step; sampled_mixed steps after each microbatch.
+        fresh=max(1,min(cfg.batch_size-1,
+                        int(round(cfg.batch_size/(1.+cfg.replay_ratio)))))
+        if (cfg.stream_sync_every_batch and
+                cfg.stream_partial_batch_policy=='mask_padding_loss'):
+            # Partial arrivals carry only their real current examples. Replay
+            # count follows that valid count exactly; no repeated current data
+            # is invented to reach a nominal microbatch size.
+            for offset in range(0,len(y),fresh):
+                nx,ny=x[offset:offset+fresh],y[offset:offset+fresh]
+                hx,hy,_,history_ids=draw_history(len(ny))
+                yield emit(torch.cat((nx,hx),dim=0),
+                           torch.cat((ny,hy),dim=0),None,
+                           current_count=len(ny) if cfg.learning_setting=='task_il' else None,
+                           replay_count=len(hy) if cfg.learning_setting=='task_il' else None,
+                           replay_ids=history_ids if cfg.learning_setting=='task_il' else None)
+            return
+        for offset in range(0,len(y),fresh):
+            nx,ny=x[offset:offset+fresh],y[offset:offset+fresh]
+            if len(ny)<fresh:
+                fill=torch.as_tensor(rng.integers(0,len(y),size=fresh-len(ny)),
+                                     dtype=torch.long)
+                nx=torch.cat((nx,x[fill]),dim=0)
+                ny=torch.cat((ny,y[fill]),dim=0)
+            hx,hy,_,history_ids=draw_history(cfg.batch_size-fresh)
+            yield emit(torch.cat((nx,hx),dim=0),
+                       torch.cat((ny,hy),dim=0),None,
+                       current_count=len(ny) if cfg.learning_setting=='task_il' else None,
+                       replay_count=len(hy) if cfg.learning_setting=='task_il' else None,
+                       replay_ids=history_ids if cfg.learning_setting=='task_il' else None)
 
     for epoch in range(cfg.epochs):
         online_der=cfg.method in {'der','derpp'}
+        keep_padding_mask=(cfg.stream_sync_every_batch and
+            cfg.stream_partial_batch_policy=='mask_padding_loss')
         for loaded in _example_loader(training_data,indices,cfg.batch_size,
                                    cfg.seed+round_id*100_003+client.client_id*127+epoch,
-                                   include_indices=online_der,full_batch=True):
-            for x,y,original_ids in full_training_batches(loaded):
-                optimizer.zero_grad(set_to_none=True)
+                                   include_indices=(online_der or keep_padding_mask),
+                                   full_batch=True,padding_indices=padding_indices):
+            for micro_index,packed in enumerate(full_training_batches(loaded)):
+                replay_example_count=0
+                replay_sample_ids=()
+                if len(packed)==6:
+                    x,y,original_ids,loss_example_count,replay_example_count,replay_sample_ids=packed
+                elif len(packed)==5:
+                    x,y,original_ids,loss_example_count,replay_example_count=packed
+                elif len(packed)==4:
+                    x,y,original_ids,loss_example_count=packed
+                else:
+                    x,y,original_ids=packed
+                    loss_example_count=len(y)
+                accumulate_optimizer_step=(
+                    cfg.method=='replay' and
+                    cfg.replay_update_policy=='sampled_mixed_accumulated' and
+                    bool(oldmemory) and cfg.replay_ratio>0)
+                if not accumulate_optimizer_step or micro_index==0:
+                    optimizer.zero_grad(set_to_none=True)
+                gradient_accumulation_scale=(0.5 if accumulate_optimizer_step else 1.0)
                 logical_size=len(y)
                 macro_loss=0.
                 si_task_grads=None
                 captured_logits={}
                 if logical_size!=cfg.batch_size:
                     raise RuntimeError('Training forward does not have exactly 64 images')
+                if loss_example_count<1 or loss_example_count>logical_size:
+                    raise RuntimeError('Training forward has an invalid loss-example count')
                 if cfg.method in {'native_glfc','native_lga'} and cfg.dataset=='cifar100':
                     from .upstream_native_augmentation import original_glfc_lga_augment_batch
                     x=original_glfc_lga_augment_batch(cfg.method,x.cpu(),seed=(
@@ -586,40 +835,65 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                         client.local_experience*1009+epoch*173+step_count))
                 x=x.to(device,non_blocking=True)
                 y=y.to(device,non_blocking=True)
-                if cfg.method in NATIVE_METHODS:
+                if cfg.method in NATIVE_METHODS and cfg.learning_setting!='task_il':
                     loss,logits=native_loss(cfg.method,model,x,y,seen_classes,
                                             teacher=native_teacher,old_classes=native_old_classes)
+                    task_features=None
+                elif cfg.learning_setting=='task_il':
+                    task_features=model.features(x)
+                    logits=model.classifier(task_features)
                 else:
+                    task_features=None
                     logits=model(x)
                 if original_ids is not None:
                     for idx,z in zip(original_ids.tolist(),logits.detach().cpu()):
                         captured_logits[int(idx)]=z.clone()
-                if cfg.method not in NATIVE_METHODS:
-                    if active_pair_classes is not None:
+                objective_logits=logits[:loss_example_count]
+                objective_y=y[:loss_example_count]
+                if cfg.method not in NATIVE_METHODS or cfg.learning_setting=='task_il':
+                    if cfg.learning_setting=='task_il':
+                        if task_classes is None or not set(objective_y.tolist()).issubset(set(task_classes)):
+                            raise RuntimeError('Task-IL labels do not match the known local task')
+                        loss=task_head_loss(objective_logits,objective_y,task_classes)
+                    elif active_pair_classes is not None:
                         # ER-ACE is intentionally asymmetric in its source paper:
                         # mask historical logits for *new* examples only, unlike
                         # standard ER, EWC, SI, MAS, GEM, LwF and DER.
                         current_competition=(active_pair_classes if cfg.method=='er_ace'
                                              else seen_classes)
-                        loss=canonical_active_loss(logits,y,current_competition)
+                        loss=canonical_active_loss(objective_logits,objective_y,current_competition)
                     elif cfg.learning_setting=='task_il':
-                        if task_classes is None or not set(y.tolist()).issubset(set(task_classes)):
+                        if task_classes is None or not set(objective_y.tolist()).issubset(set(task_classes)):
                             raise RuntimeError('Task-IL labels do not match the known local task')
                         task_mask=torch.ones(logits.shape[1],dtype=torch.bool,device=device)
                         task_mask[torch.as_tensor(task_classes,dtype=torch.long,device=device)]=False
                         logits=logits.masked_fill(task_mask.unsqueeze(0),-1e9)
-                    if active_pair_classes is None and cfg.method=='er_ace':
+                    if cfg.learning_setting!='task_il' and active_pair_classes is None and cfg.method=='er_ace':
                         # ER-ACE stream loss: mask historical classes absent from the
                         # *current* physical batch, but retain future/unseen output columns.
                         mask=torch.zeros(logits.shape[1],dtype=torch.bool,device=device)
-                        current_labels=set(int(v) for v in y.unique().tolist())
+                        current_labels=set(int(v) for v in objective_y.unique().tolist())
                         for past_cls in client.observed_classes:
                             if past_cls not in current_labels and past_cls < logits.shape[1]:
                                 mask[past_cls]=True
-                        stream_logits=logits.masked_fill(mask.unsqueeze(0),-1e9)
-                        loss=F.cross_entropy(stream_logits,y)
-                    elif active_pair_classes is None:
-                        loss=F.cross_entropy(logits,y)
+                        stream_logits=objective_logits.masked_fill(mask.unsqueeze(0),-1e9)
+                        loss=F.cross_entropy(stream_logits,objective_y)
+                    elif cfg.learning_setting!='task_il' and active_pair_classes is None:
+                        loss=F.cross_entropy(objective_logits,objective_y)
+                if (cfg.learning_setting=='task_il' and replay_example_count>0
+                        and cfg.method=='replay'
+                        and cfg.replay_update_policy in {'sampled_mixed','sampled_mixed_accumulated'}):
+                    replay_start=loss_example_count
+                    replay_end=replay_start+replay_example_count
+                    replay_loss=model.loss_for_labels(x[replay_start:replay_end],
+                        y[replay_start:replay_end],task_ids=known_task_ids,
+                        task_ids_by_example=_task_ids_for_indices(
+                            replay_sample_ids,task_ids_by_index,known_task_ids),
+                        features=task_features[replay_start:replay_end])
+                    valid_count=loss_example_count+replay_example_count
+                    current_weight=loss_example_count/valid_count
+                    replay_weight=replay_example_count/valid_count
+                    loss=loss*current_weight+replay_loss*replay_weight
                 if cfg.method=='si':
                     # SI path integral uses *unregularized current task loss*
                     # (not SI/EWC/FedProx penalties or projected gradients).
@@ -634,15 +908,29 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                 exhaustive_method_replay=(cfg.method in {'er_ace','der','derpp'}
                                           and bool(oldmemory))
                 if cfg.method=='lwf' and teacher is not None:
-                    with torch.no_grad():t_logits=teacher(x)
-                    old_labels=sorted(c for c,s in client.first_seen_local_experience.items()
-                                      if s < client.local_experience)
-                    if old_labels:
-                        ids=torch.tensor(old_labels,dtype=torch.long,device=device)
-                        temperature=2.0
-                        student=F.log_softmax(logits.index_select(1,ids)/temperature,dim=1)
-                        past=F.softmax(t_logits.index_select(1,ids)/temperature,dim=1)
-                        loss=loss+cfg.der_alpha*temperature**2*F.kl_div(student,past,reduction='batchmean')
+                    temperature=2.0
+                    if cfg.learning_setting=='task_il':
+                        old_task_ids=known_task_ids-{task_head_key(task_id)}
+                        if old_task_ids:
+                            with torch.no_grad():teacher_features=teacher.features(x)
+                            distillation=[]
+                            for task_id in sorted(old_task_ids):
+                                student=model.classifier(task_features,task_id)
+                                past=teacher.classifier(teacher_features,task_id)
+                                distillation.append(F.kl_div(
+                                    F.log_softmax(student/temperature,dim=1),
+                                    F.softmax(past/temperature,dim=1),
+                                    reduction='batchmean'))
+                            loss=loss+cfg.der_alpha*temperature**2*torch.stack(distillation).mean()
+                    else:
+                        with torch.no_grad():t_logits=teacher(x)
+                        old_labels=sorted(c for c,s in client.first_seen_local_experience.items()
+                                          if s < client.local_experience)
+                        if old_labels:
+                            ids=torch.tensor(old_labels,dtype=torch.long,device=device)
+                            student=F.log_softmax(logits.index_select(1,ids)/temperature,dim=1)
+                            past=F.softmax(t_logits.index_select(1,ids)/temperature,dim=1)
+                            loss=loss+cfg.der_alpha*temperature**2*F.kl_div(student,past,reduction='batchmean')
                 if cfg.method=='si' and client.si_anchor is not None:
                     penalty=torch.zeros((),device=device)
                     for name,p in model.named_parameters():
@@ -667,30 +955,75 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                             fisher=client.ewc_fisher[name].to(device)
                             pen=pen+(fisher*(p-ewc_reference).square()).sum()
                     loss=loss+.5*cfg.regularization_strength*pen
-                exhaustive_replay=(cfg.method in ({'replay'}|NATIVE_METHODS)
-                                   and bool(oldmemory) and cfg.replay_ratio>0)
-                if exhaustive_replay:
+                primary_replay_objective=(
+                    cfg.method=='replay' and bool(oldmemory) and cfg.replay_ratio>0
+                    and cfg.replay_update_policy in {'exhaustive','sampled_separate'})
+                exhaustive_replay=(
+                    cfg.method in ({'replay'}|NATIVE_METHODS)
+                    and bool(oldmemory) and cfg.replay_ratio>0
+                    and not (cfg.method=='replay' and
+                             cfg.replay_update_policy!='exhaustive'))
+                if exhaustive_replay or primary_replay_objective:
                     # Mix the mean incoming-batch objective and the mean over
                     # every stored exemplar. Chunk scaling makes this exactly
                     # the full-buffer mean while keeping accelerator memory
                     # bounded by cfg.batch_size.
                     loss=loss/(1.+cfg.replay_ratio)
                 macro_loss+=float(loss.detach().item())*(len(y)/logical_size)
-                (loss*(len(y)/logical_size)).backward()
+                (loss*(len(y)/logical_size)*gradient_accumulation_scale).backward()
                 if exhaustive_method_replay:
                     for start in range(0,len(oldmemory),cfg.batch_size):
                         ids=oldmemory[start:start+cfg.batch_size]
-                        hx,hy,valid=load_memory_microbatch(ids,step_count+start)
+                        hx,hy,valid=load_memory_microbatch(ids,step_count+start,padding_pool=oldmemory)
                         hx,hy=hx.to(device,non_blocking=True),hy.to(device,non_blocking=True)
                         scale=cfg.replay_ratio*valid/len(oldmemory)
-                        replay_logits=model(hx)[:valid]
                         hy=hy[:valid]
-                        if cfg.method=='er_ace':
+                        if cfg.learning_setting=='task_il':
+                            replay_features=replay_task_features(hx)[:valid]
+                            source_task_ids=_task_ids_for_indices(
+                                ids[:valid],task_ids_by_index,known_task_ids)
+                            supervised=model.loss_for_labels(
+                                hx[:valid],hy,task_ids=known_task_ids,
+                                task_ids_by_example=source_task_ids,
+                                features=replay_features)
+                            if cfg.method in {'der','derpp'}:
+                                if any(len(task_ids)!=1 for task_ids in source_task_ids):
+                                    raise ValueError('Task-IL DER requires one source task per replay sample')
+                                replay_logits=torch.cat([
+                                    model.classifier(replay_features[j:j+1],task_ids[0])
+                                    for j,task_ids in enumerate(source_task_ids)],dim=0)
+                                positions=[j for j,index in enumerate(ids[:valid])
+                                           if index in client.memory_logits]
+                                terms=[]
+                                if positions:
+                                    losses=[]
+                                    for j in positions:
+                                        target=client.memory_logits[ids[j]].to(device)
+                                        if target.shape!=replay_logits[j].shape:
+                                            raise RuntimeError('Task-IL DER source-head logits changed shape')
+                                        losses.append(F.mse_loss(replay_logits[j],target))
+                                    terms.append(cfg.der_alpha*torch.stack(losses).mean())
+                                if cfg.method=='derpp':
+                                    terms.append(cfg.der_beta*supervised)
+                                elif len(positions)<valid:
+                                    missing=[j for j in range(valid) if j not in set(positions)]
+                                    terms.append(model.loss_for_labels(
+                                        hx[missing],hy[missing],task_ids=known_task_ids,
+                                        task_ids_by_example=[source_task_ids[j] for j in missing],
+                                        features=replay_features[missing]))
+                                replay_loss=sum(terms,torch.zeros((),device=device))
+                            else:
+                                replay_loss=supervised
+                            record_task_replay(ids[:valid],scale)
+                            if cfg.method=='er_ace':
+                                replay_loss=cfg.der_beta*replay_loss
+                        elif cfg.method=='er_ace':
+                            replay_logits=replay_forward(hx)[:valid]
                             replay_loss=(canonical_active_loss(replay_logits,hy,seen_classes)
-                                if active_pair_classes is not None
-                                else F.cross_entropy(replay_logits,hy))
+                                if active_pair_classes is not None else F.cross_entropy(replay_logits,hy))
                             replay_loss=cfg.der_beta*replay_loss
                         else:
+                            replay_logits=replay_forward(hx)[:valid]
                             terms=[]
                             positions=[j for j,i in enumerate(ids) if i in client.memory_logits]
                             if positions:
@@ -710,21 +1043,59 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                                 terms.append(F.cross_entropy(replay_logits[missing],hy[missing]))
                             replay_loss=sum(terms,torch.zeros((),device=device))
                         (replay_loss*scale).backward()
+                if cfg.method=='replay' and bool(oldmemory) and cfg.replay_ratio>0 \
+                        and cfg.replay_update_policy=='sampled_separate':
+                    # One optimizer step per current physical batch, but draw
+                    # only one replay minibatch. This isolates replay coverage
+                    # from the V21 two-step batch partition.
+                    replay_ids=rng.choice(
+                        oldmemory,size=cfg.batch_size//2,
+                        replace=len(oldmemory)<cfg.batch_size//2).tolist()
+                    hx,hy,valid=load_memory_microbatch(replay_ids,3_000_000+step_count)
+                    hx,hy=hx.to(device,non_blocking=True),hy.to(device,non_blocking=True)
+                    history_scale=cfg.replay_ratio/(1.+cfg.replay_ratio)
+                    if cfg.learning_setting=='task_il':
+                        replay_features=replay_task_features(hx)[:valid]
+                        history_loss=model.loss_for_labels(
+                                      hx[:valid],hy[:valid],task_ids=known_task_ids,
+                                      task_ids_by_example=_task_ids_for_indices(
+                                          replay_ids[:valid],task_ids_by_index,known_task_ids),
+                                      features=replay_features)
+                    else:
+                        replay_logits=replay_forward(hx)[:valid]
+                        history_loss=(canonical_active_loss(replay_logits,hy[:valid],seen_classes)
+                                      if active_pair_classes is not None else
+                                      F.cross_entropy(replay_logits,hy[:valid]))
+                    record_task_replay(replay_ids[:valid],history_scale)
+                    (history_loss*history_scale).backward()
+                    macro_loss+=float(history_loss.detach().item())*history_scale
                 if exhaustive_replay:
                     memory_scale=cfg.replay_ratio/(1.+cfg.replay_ratio)
-                    for start in range(0,len(oldmemory),cfg.batch_size):
-                        ids=oldmemory[start:start+cfg.batch_size]
-                        hx,hy,valid=load_memory_microbatch(ids,step_count+start)
+                    replay_ids=(list(map(int,replay_order_rng.permutation(oldmemory)))
+                                if (cfg.method=='replay' and
+                                    cfg.replay_buffer_order_policy=='shuffled_each_pass')
+                                else oldmemory)
+                    for start in range(0,len(replay_ids),cfg.batch_size):
+                        ids=replay_ids[start:start+cfg.batch_size]
+                        hx,hy,valid=load_memory_microbatch(ids,step_count+start,padding_pool=oldmemory)
                         hx,hy=hx.to(device,non_blocking=True),hy.to(device,non_blocking=True)
-                        if cfg.method in NATIVE_METHODS:
+                        if cfg.method in NATIVE_METHODS and cfg.learning_setting!='task_il':
                             history_loss,_=native_loss(cfg.method,model,hx[:valid],hy[:valid],seen_classes,
                                 teacher=native_teacher,old_classes=native_old_classes)
+                        elif cfg.learning_setting=='task_il':
+                            replay_features=replay_task_features(hx)[:valid]
+                            history_loss=model.loss_for_labels(
+                                hx[:valid],hy[:valid],task_ids=known_task_ids,
+                                task_ids_by_example=_task_ids_for_indices(
+                                    ids[:valid],task_ids_by_index,known_task_ids),
+                                features=replay_features)
                         else:
-                            history_logits=model(hx)[:valid]
+                            history_logits=replay_forward(hx)[:valid]
                             history_loss=(canonical_active_loss(history_logits,hy[:valid],seen_classes)
-                                if active_pair_classes is not None
-                                else F.cross_entropy(history_logits,hy[:valid]))
+                                if active_pair_classes is not None else
+                                F.cross_entropy(history_logits,hy[:valid]))
                         chunk_weight=memory_scale*valid/len(oldmemory)
+                        record_task_replay(ids[:valid],chunk_weight)
                         (history_loss*chunk_weight).backward()
                         macro_loss+=float(history_loss.detach().item())*chunk_weight
                 if cfg.method in {'gem','agem'} and oldmemory:
@@ -737,8 +1108,11 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                         # batches rather than sampled from it.
                         refidx=oldmemory
                         ref=_reference_gradient(model,params,training_data,refidx,cfg.batch_size,device,
-                                                cfg.seed+round_id+client.client_id,seen_classes)
+                                                cfg.seed+round_id+client.client_id,seen_classes,
+                                                task_ids=known_task_ids,
+                                                task_ids_by_index=task_ids_by_index)
                         z,last_projection,v=agem_project(g,ref)
+                        if v:record_task_replay(refidx,1.)
                     else:
                         refs=[]
                         # Explicit constraint grouping; hidden experience labels
@@ -769,8 +1143,12 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                                     historical_classes=None  # sparse class-imbalanced memory
                                 refs.append(_reference_gradient(model,params,training_data,mem,
                                                                 cfg.batch_size,device,cfg.seed+(group if isinstance(group,int) else (group[0]*100003+group[1])),seen_classes,
-                                                                historical_classes))
+                                                                historical_classes,known_task_ids,
+                                                                task_ids_by_index))
                         z,last_projection,v=gem_project(g,refs)
+                        if v:
+                            for mem in groups.values():
+                                if mem:record_task_replay(mem,1.)
                         qp_calls+=int(v>0)
                     num_violations+=v
                     _set_grads(params,z)
@@ -785,9 +1163,12 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     # SI uses the unregularized data-loss path integral.
                     applied_grad={n:si_task_grads[j].clone()
                                   for j,(n,p) in enumerate(model.named_parameters())}
-                optimizer.step()
-                if frozen is not None:
-                    restore_frozen_rows(model,optimizer,frozen)
+                should_step_optimizer=(
+                    not accumulate_optimizer_step or micro_index==1)
+                if should_step_optimizer:
+                    optimizer.step()
+                    if frozen is not None:
+                        restore_frozen_rows(model,optimizer,frozen)
                 if cfg.method=='si':
                     for n,p in model.named_parameters():
                         displacement=p.detach().cpu()-before[n]
@@ -804,7 +1185,9 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
                     for idx in retained:
                         if idx in captured_logits and idx not in client.memory_logits:
                             client.memory_logits[idx]=captured_logits[idx]
-                step_count+=1
+                if should_step_optimizer:
+                    step_count+=1
+                microbatch_count+=1
                 loss_total+=macro_loss
     # Finalize the just-completed SI experience *before* communication. In v7,
     # consolidation happened only at the next arrival; the most recent task's
@@ -884,21 +1267,30 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,experi
         client.trained_classes.update(int(bank.train.targets[i]) for i in oldmemory)
     class_counts=dict(Counter(int(bank.train.targets[i]) for i in indices))
     if active_pair_classes is not None:
-        # All seen classifier rows are trainable under v14 class-IL CE.
-        # Custom row-wise server fusion must therefore account for every
-        # row the client may have updated, not only today's two class IDs.
-        # This ledger is UPDATE exposure, not fresh training-example count.
+        # Legacy row-wise fusion records every activated class. Task-IL server
+        # head exposure is tracked separately by task ID below.
         client.activated_labels.update(seen_classes)
         class_update_steps={int(c):step_count for c in seen_classes}
     else:
         client.activated_labels.update(class_counts)
         class_update_steps={int(c):step_count for c in class_counts}
 
+    task_head_examples={}
+    if cfg.learning_setting=='task_il' and hasattr(getattr(model,'classifier',None),'task_classes'):
+        from .models import task_head_key
+        if task_classes:
+            active_key=task_head_key(task_id)
+            task_head_examples[active_key]=float(len(indices)*cfg.epochs)
+        for key,value in replay_task_head_exposure.items():
+            task_head_examples[key]=task_head_examples.get(key,0.)+float(value)
     return {'weights':{k:v.detach().cpu().clone() for k,v in model.state_dict().items()},
             'examples':len(indices),'class_counts':class_counts,'class_update_steps':class_update_steps,
-            'active_pair_classes':list(active_pair_classes) if active_pair_classes else None,'steps':step_count,'loss':loss_total/max(1,step_count),
+            'task_head_examples':task_head_examples,
+            'active_pair_classes':list(active_pair_classes) if active_pair_classes else None,'steps':step_count,'loss':loss_total/max(1,microbatch_count),
             'constraint_violations':num_violations,'qp_calls':qp_calls,
             'projection_norm_last':last_projection,'memory_samples':sum(map(len,client.memory.values())),
+            'replay_sampled_class_counts':{int(k):int(v) for k,v in sorted(replay_sampled_class_counts.items())},
+            'replay_sampled_examples':int(sum(replay_sampled_class_counts.values())),
             'method_used':cfg.method,'fedprox_mu':cfg.fedprox_mu,
             'local_old_loss_before':old_loss_before,
             'local_old_loss_after':old_loss_after,

@@ -1,0 +1,26 @@
+{
+  "audit_note": "All 56 cells previously marked needs_audit were examined and reclassified. Eleven FedQCL cells have valid original/retry completions; full_epochs_2 retry3 failed at import due ENOSPC and is queued for attempt04. Thirteen V100 cells complete; one V100 cell interrupted (13/21 syncs) and needs a retry. Mtech and V100 retries are queued/running as recorded per cell.",
+  "last_ledger_refresh": "2026-11-22T19:56:00+05:30",
+  "scope": "121 unique cells; retries recorded as attempts, not cells; V25 reference runs and Trash artifacts excluded",
+  "snapshot_date": "2026-11-22",
+  "snapshot_mtech": "19:55 IST (V100 30,930 MiB used / 1,571 MiB free; five CAFCL compute workers; root 3.8 GiB free after transient ENOSPC)",
+  "snapshot_v100": "19:55 IST (V100 11,322 MiB used / 21,178 MiB free; no CAFCL worker; root filesystem 0 bytes available; /dev/shm 47 GiB volatile)",
+  "summary": {
+    "by_state": {
+      "completed": 53,
+      "interrupted": 1,
+      "queued": 62,
+      "running": 5
+    },
+    "by_suite": {
+      "fedqcl_local_epochs_visibility": 12,
+      "independent_ablation_A_G": 29,
+      "intra_task_sync_frequency": 6,
+      "task_size_4_vs_5": 12,
+      "v100_epoch_participation_il_curriculum": 48,
+      "v25_incremental_curriculum_participation": 6,
+      "v25_participation_levels": 8
+    },
+    "cells": 121
+  }
+}

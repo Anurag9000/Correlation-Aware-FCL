@@ -35,7 +35,8 @@ def render_sync_report(run_dir, *, round_number, model_version, num_clients,
                        arrivals, test_metrics, validation_metrics=None,
                        selected_clients=(), terminal_flush=False, backbone='',
                        optimizer=None,classifier_bias=None,
-                       integrated_classes=None,integrated_metrics=None):
+                       integrated_classes=None,integrated_metrics=None,
+                       integrated_task_heads=()):
     """Save a new PNG, Markdown, CSV and JSON after EVERY server synchronization."""
     root=Path(run_dir)/'per_sync_accuracy'
     root.mkdir(parents=True,exist_ok=True)
@@ -77,6 +78,12 @@ def render_sync_report(run_dir, *, round_number, model_version, num_clients,
         observed_classes=seen,observed_class_count=len(seen),
         server_integrated_classes=sorted(integrated),
         server_integrated_class_count=len(integrated),
+        server_integrated_task_heads=(
+            [{'task_id':str(task_id),'classes':list(map(int,classes))}
+             for task_id,classes in sorted(integrated_task_heads.items())]
+            if isinstance(integrated_task_heads,dict) else
+            [{'task_id':None,'classes':list(map(int,task))}
+             for task in integrated_task_heads]),
         pending_unintegrated_classes=sorted(set(seen)-integrated),
         integrated_only_test_accuracy=(integrated_metrics['accuracy'] if integrated_metrics else None),
         selected_clients=list(map(int,selected_clients)),zero_prediction_classes=zero_labels,
@@ -194,5 +201,14 @@ def assert_sync_reports_complete(run_dir, round_metrics):
             raise RuntimeError(f'Per-sync TEST feedback invariant violated: {stem}')
         if saved.get('test_accuracy')!=metrics.get('per_sync_test_accuracy'):
             raise RuntimeError(f'Per-sync accuracy mismatch: {stem}')
+        if ('per_sync_server_integrated_only_accuracy' in metrics and
+                saved.get('integrated_only_test_accuracy')!=metrics.get(
+                    'per_sync_server_integrated_only_accuracy')):
+            raise RuntimeError(f'Integrated-only per-sync accuracy mismatch: {stem}')
+        expected_heads=metrics.get('per_sync_server_integrated_task_heads')
+        if expected_heads is not None:
+            actual_heads=saved.get('server_integrated_task_heads',())
+            if actual_heads!=expected_heads:
+                raise RuntimeError(f'Integrated task-head mismatch: {stem}')
     return len(round_metrics)
 

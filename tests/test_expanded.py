@@ -150,26 +150,18 @@ def test_synaptic_intelligence_and_hidden_boundaries(tmp_path):
     ck=torch.load(tmp_path/'si_test'/'model_final.pt',weights_only=False)
     assert ck['clients'][0]['si_omega'] is not None
     assert all(torch.isfinite(t).all() for t in ck['clients'][0]['si_omega'].values())
-    hidden=replace(cfg,job_id='boundary_free',method='gem',boundary_mode='hidden',
-                   learning_setting='boundary_free',gem_grouping='class')
-    run_experiment(hidden,str(tmp_path),verbose=False)
     with pytest.raises(AssertionError):
-        replace(hidden,method='si').validate()
+        replace(cfg,job_id='class_il_removed',learning_setting='class_il').validate()
 
 
-def test_post_sync_domain_and_task_il(tmp_path):
-    for scenario,setting in [('domain','domain_il'),('disjoint','task_il')]:
-        cfg=conf(num_clients=2,participation=.5,rounds_per_stage=1,
-                 scenario=scenario,learning_setting=setting,
-                 job_id='check_'+setting)
-        run_experiment(cfg,str(tmp_path),verbose=False)
-        hist=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
-        assert hist[-1]['global_evaluation_includes_inactive']
-        assert hist[-1]['evaluation_split']=='validation'
-        if scenario=='domain':
-            assert hist[-1]['domain_evaluation_slices']>0
-            assert hist[-1]['evaluation_samples']>0
-        else:assert hist[-1]['task_id_at_inference']
+def test_task_il_prediction_uses_task_ids(tmp_path):
+    cfg=conf(num_clients=2,participation=.5,rounds_per_stage=1,
+             scenario='disjoint',learning_setting='task_il',job_id='check_task_il')
+    run_experiment(cfg,str(tmp_path),verbose=False)
+    hist=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
+    assert hist[-1]['global_evaluation_includes_inactive']
+    assert hist[-1]['evaluation_split']=='validation'
+    assert hist[-1]['task_id_at_inference']
 
 
 def test_sgd_does_not_allocate_raw_replay_memory(tmp_path):

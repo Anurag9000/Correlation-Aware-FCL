@@ -1,0 +1,282 @@
+{
+  "round": 2,
+  "version": 2,
+  "terminal_communication_only_flush": false,
+  "test_accuracy": 0.74125,
+  "validation_accuracy": 0.7175,
+  "observed_classes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "observed_class_count": 8,
+  "server_integrated_classes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "server_integrated_class_count": 8,
+  "server_integrated_task_heads": [
+    {
+      "task_id": "task_000_001__client_000__round_00000__ordinal_000",
+      "classes": [
+        0,
+        1
+      ]
+    },
+    {
+      "task_id": "task_000_001__client_001__round_00000__ordinal_000",
+      "classes": [
+        0,
+        1
+      ]
+    },
+    {
+      "task_id": "task_000_001__client_003__round_00000__ordinal_000",
+      "classes": [
+        0,
+        1
+      ]
+    },
+    {
+      "task_id": "task_000_001__client_004__round_00000__ordinal_000",
+      "classes": [
+        0,
+        1
+      ]
+    },
+    {
+      "task_id": "task_002_003__client_002__round_00000__ordinal_000",
+      "classes": [
+        2,
+        3
+      ]
+    },
+    {
+      "task_id": "task_004_005__client_000__round_00001__ordinal_000",
+      "classes": [
+        4,
+        5
+      ]
+    },
+    {
+      "task_id": "task_004_005__client_001__round_00001__ordinal_000",
+      "classes": [
+        4,
+        5
+      ]
+    },
+    {
+      "task_id": "task_004_005__client_002__round_00001__ordinal_000",
+      "classes": [
+        4,
+        5
+      ]
+    },
+    {
+      "task_id": "task_004_005__client_004__round_00001__ordinal_000",
+      "classes": [
+        4,
+        5
+      ]
+    },
+    {
+      "task_id": "task_006_007__client_003__round_00001__ordinal_000",
+      "classes": [
+        6,
+        7
+      ]
+    }
+  ],
+  "pending_unintegrated_classes": [],
+  "integrated_only_test_accuracy": 0.74125,
+  "selected_clients": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "zero_prediction_classes": [],
+  "predicted_class_counts": {
+    "0": 78,
+    "1": 122,
+    "2": 86,
+    "3": 114,
+    "4": 147,
+    "5": 53,
+    "6": 6,
+    "7": 194
+  },
+  "backbone": "resnet18_cifar32",
+  "optimizer": {
+    "name": "sgd",
+    "lr": 0.03,
+    "momentum": 0.9,
+    "weight_decay": 0.0005
+  },
+  "classifier_bias_diagnostics": {},
+  "per_class_true_logit_margin": {
+    "0": 2.0961486220359804,
+    "1": 1.8360525488853454,
+    "2": 0.9016405445337295,
+    "3": 4.054727935791016,
+    "4": 1.5100665092468262,
+    "5": -0.21526428043842316,
+    "6": -1.0088305711746215,
+    "7": 1.6706289052963257
+  },
+  "test_only_no_feedback": true,
+  "entries": [
+    {
+      "client_id": 0,
+      "first_round": 1,
+      "classes": [
+        0,
+        1
+      ],
+      "mean_accuracy": 0.84,
+      "per_class": {
+        "0": 0.73,
+        "1": 0.95
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 0,
+      "first_round": 2,
+      "classes": [
+        4,
+        5
+      ],
+      "mean_accuracy": 0.715,
+      "per_class": {
+        "4": 0.95,
+        "5": 0.48
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 1,
+      "first_round": 1,
+      "classes": [
+        0,
+        1
+      ],
+      "mean_accuracy": 0.84,
+      "per_class": {
+        "0": 0.73,
+        "1": 0.95
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 1,
+      "first_round": 2,
+      "classes": [
+        4,
+        5
+      ],
+      "mean_accuracy": 0.715,
+      "per_class": {
+        "4": 0.95,
+        "5": 0.48
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 2,
+      "first_round": 1,
+      "classes": [
+        2,
+        3
+      ],
+      "mean_accuracy": 0.88,
+      "per_class": {
+        "2": 0.81,
+        "3": 0.95
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 2,
+      "first_round": 2,
+      "classes": [
+        4,
+        5
+      ],
+      "mean_accuracy": 0.715,
+      "per_class": {
+        "4": 0.95,
+        "5": 0.48
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 3,
+      "first_round": 1,
+      "classes": [
+        0,
+        1
+      ],
+      "mean_accuracy": 0.84,
+      "per_class": {
+        "0": 0.73,
+        "1": 0.95
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 3,
+      "first_round": 2,
+      "classes": [
+        6,
+        7
+      ],
+      "mean_accuracy": 0.53,
+      "per_class": {
+        "6": 0.06,
+        "7": 1.0
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 4,
+      "first_round": 1,
+      "classes": [
+        0,
+        1
+      ],
+      "mean_accuracy": 0.84,
+      "per_class": {
+        "0": 0.73,
+        "1": 0.95
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 4,
+      "first_round": 2,
+      "classes": [
+        4,
+        5
+      ],
+      "mean_accuracy": 0.715,
+      "per_class": {
+        "4": 0.95,
+        "5": 0.48
+      },
+      "pending_not_accepted_classes": []
+    }
+  ]
+}

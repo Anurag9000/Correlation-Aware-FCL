@@ -249,6 +249,8 @@ class Arrival:
     indices: tuple[int,...]
     labels: tuple[int,...]
     recurrence: bool = False
+    padding_indices: tuple[int,...] = ()
+    task_id: str = ''
 
 @dataclass
 class Scenario:

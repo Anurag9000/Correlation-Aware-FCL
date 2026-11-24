@@ -1,0 +1,2346 @@
+{
+  "campaign": "cafcl_independent_cifar100_ablations_A_G",
+  "families": {
+    "A": 6,
+    "B": 5,
+    "C": 6,
+    "D": 3,
+    "E": 3,
+    "F": 3,
+    "G": 3
+  },
+  "note": "schedule compilation is not a training result",
+  "run_count": 29,
+  "runs": [
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "class_il_head_width": null,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "A",
+      "learning_setting": "task_il",
+      "learning_syncs": 25,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 2,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "A_clients_2_task_il_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 50,
+      "task_width_histogram": {
+        "2": 50
+      },
+      "tasks_per_client": [
+        25,
+        25
+      ],
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "class_il_head_width": 100,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "A",
+      "learning_setting": "class_il",
+      "learning_syncs": 25,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 2,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "A_clients_2_class_il_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 50,
+      "task_width_histogram": {
+        "2": 50
+      },
+      "tasks_per_client": [
+        25,
+        25
+      ],
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "class_il_head_width": null,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "A",
+      "learning_setting": "task_il",
+      "learning_syncs": 17,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 3,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "A_clients_3_task_il_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 50,
+      "task_width_histogram": {
+        "2": 50
+      },
+      "tasks_per_client": [
+        17,
+        17,
+        16
+      ],
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "class_il_head_width": 100,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "A",
+      "learning_setting": "class_il",
+      "learning_syncs": 17,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 3,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "A_clients_3_class_il_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 50,
+      "task_width_histogram": {
+        "2": 50
+      },
+      "tasks_per_client": [
+        17,
+        17,
+        16
+      ],
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "class_il_head_width": null,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "A",
+      "learning_setting": "task_il",
+      "learning_syncs": 5,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 10,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "A_clients_10_task_il_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 50,
+      "task_width_histogram": {
+        "2": 50
+      },
+      "tasks_per_client": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "class_il_head_width": 100,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "A",
+      "learning_setting": "class_il",
+      "learning_syncs": 5,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 10,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "A_clients_10_class_il_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 50,
+      "task_width_histogram": {
+        "2": 50
+      },
+      "tasks_per_client": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "B",
+      "learning_setting": "task_il",
+      "learning_syncs": 18,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "post_coverage_filler": "same deterministic within-owner recurrence policy at each delay",
+      "recurrence_gap_syncs": 1,
+      "recurrence_return_sync": 3,
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "B_recur_gap_1_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "target_task_classes": [
+        0,
+        1
+      ],
+      "task_instances": 90,
+      "task_width_histogram": {
+        "2": 90
+      },
+      "tasks_per_client": {
+        "0": 18,
+        "1": 18,
+        "2": 18,
+        "3": 18,
+        "4": 18
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "B",
+      "learning_setting": "task_il",
+      "learning_syncs": 18,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "post_coverage_filler": "same deterministic within-owner recurrence policy at each delay",
+      "recurrence_gap_syncs": 2,
+      "recurrence_return_sync": 4,
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "B_recur_gap_2_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "target_task_classes": [
+        0,
+        1
+      ],
+      "task_instances": 90,
+      "task_width_histogram": {
+        "2": 90
+      },
+      "tasks_per_client": {
+        "0": 18,
+        "1": 18,
+        "2": 18,
+        "3": 18,
+        "4": 18
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "B",
+      "learning_setting": "task_il",
+      "learning_syncs": 18,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "post_coverage_filler": "same deterministic within-owner recurrence policy at each delay",
+      "recurrence_gap_syncs": 5,
+      "recurrence_return_sync": 7,
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "B_recur_gap_5_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "target_task_classes": [
+        0,
+        1
+      ],
+      "task_instances": 90,
+      "task_width_histogram": {
+        "2": 90
+      },
+      "tasks_per_client": {
+        "0": 18,
+        "1": 18,
+        "2": 18,
+        "3": 18,
+        "4": 18
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "B",
+      "learning_setting": "task_il",
+      "learning_syncs": 18,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "post_coverage_filler": "same deterministic within-owner recurrence policy at each delay",
+      "recurrence_gap_syncs": 10,
+      "recurrence_return_sync": 12,
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "B_recur_gap_10_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "target_task_classes": [
+        0,
+        1
+      ],
+      "task_instances": 90,
+      "task_width_histogram": {
+        "2": 90
+      },
+      "tasks_per_client": {
+        "0": 18,
+        "1": 18,
+        "2": 18,
+        "3": 18,
+        "4": 18
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "B",
+      "learning_setting": "task_il",
+      "learning_syncs": 18,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "post_coverage_filler": "same deterministic within-owner recurrence policy at each delay",
+      "recurrence_gap_syncs": 15,
+      "recurrence_return_sync": 17,
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "B_recur_gap_15_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "target_task_classes": [
+        0,
+        1
+      ],
+      "task_instances": 90,
+      "task_width_histogram": {
+        "2": 90
+      },
+      "tasks_per_client": {
+        "0": 18,
+        "1": 18,
+        "2": 18,
+        "3": 18,
+        "4": 18
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "C",
+      "hidden_client": 0,
+      "learning_setting": "task_il",
+      "learning_syncs": 16,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "outage_syncs": 1,
+      "participation": "4/5 with a fixed hidden client",
+      "participation_schedule": [
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 0,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 1,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 2,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 3,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 4,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 5,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 6,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 7,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 8,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 9,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 10,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 11,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 12,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 13,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 14,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 15,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      ],
+      "post_coverage_filler": "fixed 6-sync within-owner recurrence tail",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "C_hidden_1_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 80,
+      "task_width_histogram": {
+        "2": 80
+      },
+      "tasks_per_client": {
+        "0": 16,
+        "1": 16,
+        "2": 16,
+        "3": 16,
+        "4": 16
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "C",
+      "hidden_client": 0,
+      "learning_setting": "task_il",
+      "learning_syncs": 16,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "outage_syncs": 2,
+      "participation": "4/5 with a fixed hidden client",
+      "participation_schedule": [
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 0,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 1,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 2,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 3,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 4,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 5,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 6,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 7,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 8,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 9,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 10,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 11,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 12,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 13,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 14,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 15,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      ],
+      "post_coverage_filler": "fixed 6-sync within-owner recurrence tail",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "C_hidden_2_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 80,
+      "task_width_histogram": {
+        "2": 80
+      },
+      "tasks_per_client": {
+        "0": 16,
+        "1": 16,
+        "2": 16,
+        "3": 16,
+        "4": 16
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "C",
+      "hidden_client": 0,
+      "learning_setting": "task_il",
+      "learning_syncs": 16,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "outage_syncs": 3,
+      "participation": "4/5 with a fixed hidden client",
+      "participation_schedule": [
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 0,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 1,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 2,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 3,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 4,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 5,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 6,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 7,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 8,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 9,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 10,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 11,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 12,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 13,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 14,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 15,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      ],
+      "post_coverage_filler": "fixed 6-sync within-owner recurrence tail",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "C_hidden_3_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 80,
+      "task_width_histogram": {
+        "2": 80
+      },
+      "tasks_per_client": {
+        "0": 16,
+        "1": 16,
+        "2": 16,
+        "3": 16,
+        "4": 16
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "C",
+      "hidden_client": 0,
+      "learning_setting": "task_il",
+      "learning_syncs": 16,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "outage_syncs": 5,
+      "participation": "4/5 with a fixed hidden client",
+      "participation_schedule": [
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 0,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 1,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 2,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 3,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 4,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 5,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 6,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 7,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 8,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 9,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 10,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 11,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 12,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 13,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 14,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 15,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      ],
+      "post_coverage_filler": "fixed 6-sync within-owner recurrence tail",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "C_hidden_5_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 80,
+      "task_width_histogram": {
+        "2": 80
+      },
+      "tasks_per_client": {
+        "0": 16,
+        "1": 16,
+        "2": 16,
+        "3": 16,
+        "4": 16
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "C",
+      "hidden_client": 0,
+      "learning_setting": "task_il",
+      "learning_syncs": 16,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "outage_syncs": 10,
+      "participation": "4/5 with a fixed hidden client",
+      "participation_schedule": [
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 0,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 1,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 2,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 3,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 4,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 5,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 6,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 7,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 8,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 9,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 10,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 11,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 12,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 13,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 14,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 15,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      ],
+      "post_coverage_filler": "fixed 6-sync within-owner recurrence tail",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "C_hidden_10_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 80,
+      "task_width_histogram": {
+        "2": 80
+      },
+      "tasks_per_client": {
+        "0": 16,
+        "1": 16,
+        "2": 16,
+        "3": 16,
+        "4": 16
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "C",
+      "hidden_client": 0,
+      "learning_setting": "task_il",
+      "learning_syncs": 16,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "outage_syncs": 15,
+      "participation": "4/5 with a fixed hidden client",
+      "participation_schedule": [
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 0,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 1,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 2,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 3,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 4,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 5,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 6,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 7,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 8,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 9,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 10,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 11,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 12,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 13,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [
+            0
+          ],
+          "sync": 14,
+          "uploaded_clients": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "hidden_clients": [],
+          "sync": 15,
+          "uploaded_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      ],
+      "post_coverage_filler": "fixed 6-sync within-owner recurrence tail",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "C_hidden_15_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 80,
+      "task_width_histogram": {
+        "2": 80
+      },
+      "tasks_per_client": {
+        "0": 16,
+        "1": 16,
+        "2": 16,
+        "3": 16,
+        "4": 16
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "cross_step_shared_clients": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "D",
+      "learning_setting": "task_il",
+      "learning_syncs": 16,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "D_cross_step_2_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 80,
+      "task_width_histogram": {
+        "2": 80
+      },
+      "tasks_per_client": {
+        "0": 16,
+        "1": 16,
+        "2": 16,
+        "3": 16,
+        "4": 16
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "unique_classes_first_seen": 100,
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "cross_step_shared_clients": 3,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "D",
+      "learning_setting": "task_il",
+      "learning_syncs": 24,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "D_cross_step_3_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 120,
+      "task_width_histogram": {
+        "2": 120
+      },
+      "tasks_per_client": {
+        "0": 24,
+        "1": 24,
+        "2": 24,
+        "3": 24,
+        "4": 24
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "unique_classes_first_seen": 100,
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "cross_step_shared_clients": 4,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "D",
+      "learning_setting": "task_il",
+      "learning_syncs": 46,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "D_cross_step_4_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 230,
+      "task_width_histogram": {
+        "2": 230
+      },
+      "tasks_per_client": {
+        "0": 46,
+        "1": 46,
+        "2": 46,
+        "3": 46,
+        "4": 46
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "unique_classes_first_seen": 100,
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "E",
+      "learning_setting": "task_il",
+      "learning_syncs": 13,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "E_within_step_2_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "shared_task_class_width": 2,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 65,
+      "task_width_histogram": {
+        "2": 65
+      },
+      "tasks_per_client": {
+        "0": 13,
+        "1": 13,
+        "2": 13,
+        "3": 13,
+        "4": 13
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005,
+      "within_step_shared_clients": 2
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "E",
+      "learning_setting": "task_il",
+      "learning_syncs": 17,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "E_within_step_3_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "shared_task_class_width": 2,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 85,
+      "task_width_histogram": {
+        "2": 85
+      },
+      "tasks_per_client": {
+        "0": 17,
+        "1": 17,
+        "2": 17,
+        "3": 17,
+        "4": 17
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005,
+      "within_step_shared_clients": 3
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "E",
+      "learning_setting": "task_il",
+      "learning_syncs": 25,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "E_within_step_4_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "shared_task_class_width": 2,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 125,
+      "task_width_histogram": {
+        "2": 125
+      },
+      "tasks_per_client": {
+        "0": 25,
+        "1": 25,
+        "2": 25,
+        "3": 25,
+        "4": 25
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005,
+      "within_step_shared_clients": 4
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "classes_per_task_target": 3,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "F",
+      "learning_setting": "task_il",
+      "learning_syncs": 7,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "F_task_width_3_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 35,
+      "task_width_histogram": {
+        "2": 5,
+        "3": 30
+      },
+      "task_widths": [
+        2,
+        3
+      ],
+      "tasks_per_client": [
+        7,
+        7,
+        7,
+        7,
+        7
+      ],
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "classes_per_task_target": 5,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "F",
+      "learning_setting": "task_il",
+      "learning_syncs": 4,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "F_task_width_5_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 20,
+      "task_width_histogram": {
+        "5": 20
+      },
+      "task_widths": [
+        5
+      ],
+      "tasks_per_client": [
+        4,
+        4,
+        4,
+        4,
+        4
+      ],
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "classes_per_task_target": 10,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "F",
+      "learning_setting": "task_il",
+      "learning_syncs": 2,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "F_task_width_10_seed0",
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 10,
+      "task_width_histogram": {
+        "10": 10
+      },
+      "task_widths": [
+        10
+      ],
+      "tasks_per_client": [
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "adjacent_shared_classes": 2,
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "classes_per_task_target": 5,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "G",
+      "learning_setting": "task_il",
+      "learning_syncs": 6,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "G_width5_overlap_2_seed0",
+      "schedule_rng_seed": 500,
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 30,
+      "task_width_histogram": {
+        "5": 30
+      },
+      "tasks_per_client": {
+        "0": 6,
+        "1": 6,
+        "2": 6,
+        "3": 6,
+        "4": 6
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "adjacent_shared_classes": 3,
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "classes_per_task_target": 5,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "G",
+      "learning_setting": "task_il",
+      "learning_syncs": 8,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "G_width5_overlap_3_seed0",
+      "schedule_rng_seed": 500,
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 40,
+      "task_width_histogram": {
+        "5": 40
+      },
+      "tasks_per_client": {
+        "0": 8,
+        "1": 8,
+        "2": 8,
+        "3": 8,
+        "4": 8
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    },
+    {
+      "adjacent_shared_classes": 4,
+      "aggregator": "fedavg",
+      "batch_size": 64,
+      "classes_covered": 100,
+      "classes_per_task": 2,
+      "classes_per_task_target": 5,
+      "dataset": "cifar100",
+      "epochs_per_task": 10,
+      "family": "G",
+      "learning_setting": "task_il",
+      "learning_syncs": 12,
+      "lr": 0.03,
+      "memory_per_class": 50,
+      "method": "replay",
+      "momentum": 0.9,
+      "num_clients": 5,
+      "optimizer_state_policy": "persist",
+      "participation": "full",
+      "replay_ratio": 1.0,
+      "replay_reservoir_fraction": 0.1111111111111111,
+      "replay_update_policy": "sampled_mixed",
+      "run_id": "G_width5_overlap_4_seed0",
+      "schedule_rng_seed": 500,
+      "schedule_validated": true,
+      "seed": 0,
+      "sync_boundary": "after_complete_client_task",
+      "task_instances": 60,
+      "task_width_histogram": {
+        "5": 60
+      },
+      "tasks_per_client": {
+        "0": 12,
+        "1": 12,
+        "2": 12,
+        "3": 12,
+        "4": 12
+      },
+      "terminal_flush": "communication_only",
+      "training_augmentation": "cifar_crop_flip",
+      "weight_decay": 0.0005
+    }
+  ],
+  "seed": 0
+}

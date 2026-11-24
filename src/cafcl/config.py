@@ -44,6 +44,10 @@ class RunConfig:
     pending_policy: str = "latest"
     max_pending_samples: int = 0
     replay_ratio: float = 1.0
+    replay_update_policy: str = "sampled_mixed"
+    replay_bn_policy: str = "batch_update"
+    replay_buffer_order_policy: str = "archive_order"
+    replay_padding_policy: str = "repeat_chunk"
     der_alpha: float = 0.5
     der_beta: float = 0.5
     regularization_strength: float = 10.0
@@ -86,17 +90,15 @@ class RunConfig:
     # simulator controls, not deployable privacy-preserving policies.
     selection_temperature: float = 1.0
     boundary_mode: str = "known"  # hidden = class-aware, task-boundary-free
-    learning_setting: str = "class_il"
+    learning_setting: str = "task_il"
     label_noise_rate: float = 0.0
     spurious_strength: float = 0.0
     spurious_ood_eval: bool = False
     reset_memory_on_sync: bool = False
     feedback_threshold: float = 0.25
     feedback_gain: float = 0.5
-    # Single class-indexed classifier with optional strict two-label local episodes.
-    # 'compatible' pairs same-round labels where possible and explicitly marks
-    # singleton fallbacks; 'strict' rejects unpairable class arrivals.
-    class_pair_protocol: str = 'compatible'
+    # Strict two-label task IDs; singleton tasks cannot define discriminative heads.
+    class_pair_protocol: str = 'strict'
     classwise_head_merge: bool = True
     # Zero keeps all active clients concurrent. A lower explicit value runs
     # independent client tasks in bounded waves to fit shared GPU memory.
@@ -116,6 +118,8 @@ class RunConfig:
     offline_duration_rounds: int = 0
     stream_terminal_flush: bool = True
     stream_offline_policy: str = "random"  # random or rotate_once (pilot only)
+    stream_sync_every_batch: bool = False
+    stream_partial_batch_policy: str = "include_padding"
     evaluate_final_only: bool = False
 
     def validate(self):
@@ -138,12 +142,16 @@ class RunConfig:
         assert 0 <= self.stream_overlap_fraction <= 1
         assert self.stream_recurrence_rounds >= 0 and self.offline_duration_rounds >= 0
         assert self.stream_offline_policy in {'random','rotate_once'}
+        assert self.stream_partial_batch_policy in {'include_padding','mask_padding_loss'}
+        if self.stream_partial_batch_policy == 'mask_padding_loss':
+            assert self.stream_sync_every_batch and self.stream_client_chain and self.stream_protocol
+            assert self.method == 'replay' and self.replay_update_policy in {'sampled_mixed','sampled_mixed_accumulated'}
         if self.evaluate_final_only:
             assert self.selector in {'random','fixed','round_robin'}, 'Test split cannot guide online client selection'
             assert not self.prepost_diagnostics and not self.gradient_diagnostics
         if self.stream_protocol:
             assert self.dataset in {'cifar100','synthetic'}
-            assert self.learning_setting == 'class_il', 'No task ID or task-specific heads'
+            assert self.learning_setting == 'task_il', 'The stream suite now uses task-specific heads'
             assert self.class_pair_protocol == 'strict'
             assert not self.full_sync and not self.reset_memory_on_sync, 'Offline clients must not receive server model weights or lose memory'
             # Canonical methods update all classifier rows with the same
@@ -188,6 +196,10 @@ class RunConfig:
         assert self.pending_policy in {"latest", "retain_all", "bounded"}
         assert self.max_pending_samples >= 0
         assert self.replay_ratio >= 0 and self.der_alpha >= 0 and self.der_beta >= 0
+        assert self.replay_update_policy in {"exhaustive", "sampled_mixed", "sampled_mixed_accumulated", "sampled_separate"}
+        assert self.replay_bn_policy in {"batch_update", "freeze_replay_buffers"}
+        assert self.replay_buffer_order_policy in {"archive_order", "shuffled_each_pass"}
+        assert self.replay_padding_policy in {"repeat_chunk", "archive_sample"}
         assert 0 <= self.label_noise_rate <= 1 and self.spurious_strength >= 0
         assert 0 <= self.feedback_threshold <= 1 and self.feedback_gain >= 0
         if self.label_noise_rate:
@@ -203,10 +215,15 @@ class RunConfig:
         assert self.local_optimizer in {"sgd"}
         assert self.optimizer_state_policy in {"reset", "persist"}
         assert self.boundary_mode in {"known", "hidden"}
-        assert self.learning_setting in {"class_il","task_il","domain_il","boundary_free"}
+        assert self.learning_setting == 'task_il', 'This repository run suite is task-incremental'
         if self.learning_setting=='task_il':
-            assert self.scenario in {"disjoint", "related", "task_incremental"}
-            assert self.pending_policy=='latest' and self.boundary_mode=='known'
+            assert self.class_pair_protocol=='strict'
+            assert self.boundary_mode=='known'
+            if self.method in {'native_glfc','native_lga','native_feat'}:
+                raise ValueError(
+                    f'{self.method} has no task-head adaptation; refusing to report the generic Task-IL fallback as that method')
+            if self.method in {'der','derpp'} and self.sample_overlap_fraction>0:
+                raise ValueError('Task-IL DER/DER++ cannot disambiguate one sample reused by multiple source task heads')
         if self.learning_setting=='domain_il':
             assert self.scenario in {"domain","gradual_drift"}
         if self.learning_setting=='boundary_free':

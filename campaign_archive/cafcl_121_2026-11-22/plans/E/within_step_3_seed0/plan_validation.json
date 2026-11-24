@@ -1,0 +1,41 @@
+{
+  "aggregator": "fedavg",
+  "batch_size": 64,
+  "classes_covered": 100,
+  "classes_per_task": 2,
+  "dataset": "cifar100",
+  "epochs_per_task": 10,
+  "family": "E",
+  "learning_setting": "task_il",
+  "learning_syncs": 17,
+  "lr": 0.03,
+  "memory_per_class": 50,
+  "method": "replay",
+  "momentum": 0.9,
+  "num_clients": 5,
+  "optimizer_state_policy": "persist",
+  "participation": "full",
+  "replay_ratio": 1.0,
+  "replay_reservoir_fraction": 0.1111111111111111,
+  "replay_update_policy": "sampled_mixed",
+  "run_id": "E_within_step_3_seed0",
+  "schedule_validated": true,
+  "seed": 0,
+  "shared_task_class_width": 2,
+  "sync_boundary": "after_complete_client_task",
+  "task_instances": 85,
+  "task_width_histogram": {
+    "2": 85
+  },
+  "tasks_per_client": {
+    "0": 17,
+    "1": 17,
+    "2": 17,
+    "3": 17,
+    "4": 17
+  },
+  "terminal_flush": "communication_only",
+  "training_augmentation": "cifar_crop_flip",
+  "weight_decay": 0.0005,
+  "within_step_shared_clients": 3
+}

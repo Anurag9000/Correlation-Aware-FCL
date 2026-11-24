@@ -1,0 +1,58 @@
+--- a/classil_src/src/cafcl/simulator.py
++++ b/classil_src/src/cafcl/simulator.py
+@@ -925,8 +925,14 @@
+             history.append(result)
+             # Durable intermediate results, so an interrupted run remains auditable.
+             atomic_json(run_dir/'metrics.json',history)
+-            if cfg.checkpoint_every and (round_id+1)%cfg.checkpoint_every==0 or \
+-               (cfg.stream_protocol or (round_id+1)%cfg.rounds_per_stage==0):
++            # Operational checkpoint cadence only; all training and evaluation
++            # updates still run at every documented logical round.
++            checkpoint_interval = max(1, int(os.environ.get('CAFCL_CHECKPOINT_INTERVAL', '1')))
++            checkpoint_due = ((round_id + 1) % checkpoint_interval == 0
++                              or round_id + 1 == total_rounds)
++            if ((cfg.checkpoint_every and (round_id+1)%cfg.checkpoint_every==0) or
++                    (cfg.stream_protocol and checkpoint_due) or
++                    (not cfg.stream_protocol and (round_id+1)%cfg.rounds_per_stage==0)):
+                 save_round_state(latest_checkpoint,cfg,round_id,global_state,version,
+                                  clients,observed,peak,integrated,history,rng,
+                                  server_optimizer_state,server_class_update_counts,server_cl_state)
+@@ -935,7 +941,8 @@
+                                      cfg,round_id,global_state,version,
+                                      clients,observed,peak,integrated,history,rng,
+                                      server_optimizer_state,server_class_update_counts,server_cl_state)
+-            if (cfg.stream_protocol or (round_id+1)%cfg.rounds_per_stage==0):
++            if ((cfg.stream_protocol and round_id + 1 == total_rounds) or
++                    (not cfg.stream_protocol and (round_id+1)%cfg.rounds_per_stage==0)):
+                 save_checkpoint(run_dir/f'model_stage_{current_stage+1:02d}.pt',global_state,
+                                 cfg,version,clients,full_state=True,server_cl_state=server_cl_state)
+             if verbose:
+--- a/taskil_src/src/cafcl/simulator.py
++++ b/taskil_src/src/cafcl/simulator.py
+@@ -1048,8 +1048,14 @@
+             history.append(result)
+             # Durable intermediate results, so an interrupted run remains auditable.
+             atomic_json(run_dir/'metrics.json',history)
+-            if cfg.checkpoint_every and (round_id+1)%cfg.checkpoint_every==0 or \
+-               (cfg.stream_protocol or (round_id+1)%cfg.rounds_per_stage==0):
++            # Operational checkpoint cadence only; all training and evaluation
++            # updates still run at every documented logical round.
++            checkpoint_interval = max(1, int(os.environ.get('CAFCL_CHECKPOINT_INTERVAL', '1')))
++            checkpoint_due = ((round_id + 1) % checkpoint_interval == 0
++                              or round_id + 1 == total_rounds)
++            if ((cfg.checkpoint_every and (round_id+1)%cfg.checkpoint_every==0) or
++                    (cfg.stream_protocol and checkpoint_due) or
++                    (not cfg.stream_protocol and (round_id+1)%cfg.rounds_per_stage==0)):
+                 save_round_state(latest_checkpoint,cfg,round_id,global_state,version,
+                                  clients,observed,peak,integrated,history,rng,
+                                  server_optimizer_state,server_class_update_counts,server_cl_state)
+@@ -1058,7 +1064,8 @@
+                                      cfg,round_id,global_state,version,
+                                      clients,observed,peak,integrated,history,rng,
+                                      server_optimizer_state,server_class_update_counts,server_cl_state)
+-            if (cfg.stream_protocol or (round_id+1)%cfg.rounds_per_stage==0):
++            if ((cfg.stream_protocol and round_id + 1 == total_rounds) or
++                    (not cfg.stream_protocol and (round_id+1)%cfg.rounds_per_stage==0)):
+                 save_checkpoint(run_dir/f'model_stage_{current_stage+1:02d}.pt',global_state,
+                                 cfg,version,clients,full_state=True,server_cl_state=server_cl_state)
+             if verbose:

@@ -1,0 +1,5 @@
+--- a/compiler/cafcl_independent_ablation_runner.py
++++ b/compiler/cafcl_independent_ablation_runner.py
+@@
+-    run_dir=ROOT/'results'/expected['family']/expected['run_id']
++    run_dir=Path(expected.get('output_dir', ROOT/'results'/expected['family']/expected['run_id']))

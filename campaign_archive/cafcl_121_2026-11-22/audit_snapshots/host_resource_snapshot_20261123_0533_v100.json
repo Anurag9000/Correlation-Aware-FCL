@@ -1,0 +1,33 @@
+{
+  "captured_at_local": "2026-11-23T05:33:01+05:30",
+  "host": "V100-server",
+  "gpu_name": "Tesla V100-PCIE-32GB",
+  "gpu_total_mib": 32768,
+  "gpu_used_mib": 11322,
+  "gpu_free_mib": 21178,
+  "campaign_compute_pids": [],
+  "other_gpu_processes": [
+    {
+      "pid": 2021120,
+      "used_mib": 10900
+    },
+    {
+      "pid": 3486421,
+      "used_mib": 410
+    }
+  ],
+  "campaign_controller": "cafcl-v100-recovery-v8 absent from tmux and matching ps scan",
+  "recovery_manifest": "/run/user/1027/cafcl-results4/v100/v25_offline_epoch_grid_20261122_v2/recovery_v8/recovery_manifest.json; status running; 48 runs; 13 completed, 2 stale running, 33 queued",
+  "worker_status": "attempt_22 and attempt_17 still stale running records; both had reached round 21/21 in last sample; no terminal result audit",
+  "root_available_bytes": 0,
+  "run_user_1027_available_bytes": 0,
+  "dev_shm_available_gib": 11,
+  "host_ram_available_gib": 33,
+  "swap_used_gib": 7,
+  "mounts": [
+    "cafcl-v100-rclone-mount3",
+    "cafcl-v100-rclone-mount4"
+  ],
+  "mount5_setup": "attempt failed before mountpoint; session/log absent; troubleshooting required",
+  "launch_decision": "Do not leave the V100 suite idle: repair results path on /dev/shm, then launch the two stale-cell retries attempt_23 and attempt_18; 21,178 MiB free supports two 10,000-MiB expected workers plus 1,024-MiB aggregate margin under the V8 scheduler."
+}

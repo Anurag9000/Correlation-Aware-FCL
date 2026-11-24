@@ -1,0 +1,53 @@
+{
+  "aggregator": "fedavg",
+  "batch_size": 64,
+  "classes_covered": 100,
+  "classes_per_task": 2,
+  "dataset": "cifar100",
+  "displaced_task_classes": [
+    30,
+    31
+  ],
+  "epochs_per_task": 10,
+  "family": "B",
+  "learning_setting": "task_il",
+  "learning_syncs": 18,
+  "lr": 0.03,
+  "matched_task_multiset": true,
+  "memory_per_class": 50,
+  "method": "replay",
+  "momentum": 0.9,
+  "num_clients": 5,
+  "optimizer_state_policy": "persist",
+  "output_dir": "/dev/shm/cafcl-kakarot-results-v4/mtech/independent_ablation_A_G/B_recur_gap_10_seed0/attempt_05/run",
+  "participation": "full",
+  "recurrence_gap_syncs": 10,
+  "recurrence_return_sync": 12,
+  "replay_ratio": 1.0,
+  "replay_reservoir_fraction": 0.1111111111111111,
+  "replay_update_policy": "sampled_mixed",
+  "run_id": "B_recur_gap_10_seed0__attempt_05",
+  "schedule_rule": "swap target recurrence into requested slot; move displaced task to learning sync 11",
+  "schedule_validated": true,
+  "seed": 0,
+  "swap_sync_zero_based": 10,
+  "sync_boundary": "after_complete_client_task",
+  "target_task_classes": [
+    0,
+    1
+  ],
+  "task_instances": 90,
+  "task_width_histogram": {
+    "2": 90
+  },
+  "tasks_per_client": {
+    "0": 18,
+    "1": 18,
+    "2": 18,
+    "3": 18,
+    "4": 18
+  },
+  "terminal_flush": "communication_only",
+  "training_augmentation": "cifar_crop_flip",
+  "weight_decay": 0.0005
+}

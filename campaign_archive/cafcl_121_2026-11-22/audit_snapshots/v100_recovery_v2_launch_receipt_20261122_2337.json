@@ -1,0 +1,50 @@
+{
+  "campaign": "v25_offline_epoch_grid_20261122_v2",
+  "host": "V100-server",
+  "launched_at_ist": "2026-11-22T23:37:00+05:30",
+  "mount": {
+    "cache_dir": "/run/user/1027/cafcl-vfs-cache2",
+    "max_cache_size": "8G",
+    "path": "/run/user/1027/cafcl-results2",
+    "reason": "prior /dev/shm-backed FUSE cache was full with 47,155,668,301 dirty bytes; that mount remains active and untouched",
+    "tmp_dir": "/run/user/1027/cafcl-tmp"
+  },
+  "notes": "Worker PIDs and running rows confirmed shortly after dispatch. Stable learning and post-start VRAM level remain to be verified after the required observation interval.",
+  "resource_admission": {
+    "admitted_jobs": 3,
+    "estimated_aggregate_peak_mib": 18552,
+    "expected_free_after_peak_mib": 2626,
+    "free_vram_mib": 21178,
+    "observed_single_worker_peak_mib": 6184,
+    "per_worker_safety_margin_mib": 1024
+  },
+  "scheduler_local_path": "/home/anurag-basistha/CORRELATION_AWARE_FCL_ABLATIONS_2026-11-22/remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery/vram_scheduler.py",
+  "scheduler_sha256": "59f986ccb308199c58f27743125dd7603d53d18b625e5c6d11a3206ba3c20a76",
+  "state_counts_at_seed": {
+    "completed": 13,
+    "queued": 35,
+    "unique_cells": 48
+  },
+  "state_seed": "v100/v25_offline_epoch_grid_20261122_v2/recovery_v2/recovery_manifest.json",
+  "state_seed_sha256": "678f01adbe796fece66cfb2173056b745f5343a09ae25315b6bfc96d3b5e7e45",
+  "workers": [
+    {
+      "attempt_id": "attempt_07",
+      "cell_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "output_dir": "/run/user/1027/cafcl-results2/v100/v25_offline_epoch_grid_20261122_v2/recovery_v2/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_07",
+      "pid": 488023
+    },
+    {
+      "attempt_id": "attempt_06",
+      "cell_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "output_dir": "/run/user/1027/cafcl-results2/v100/v25_offline_epoch_grid_20261122_v2/recovery_v2/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_06",
+      "pid": 488031
+    },
+    {
+      "attempt_id": "attempt_06",
+      "cell_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "output_dir": "/run/user/1027/cafcl-results2/v100/v25_offline_epoch_grid_20261122_v2/recovery_v2/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_06",
+      "pid": 488027
+    }
+  ]
+}

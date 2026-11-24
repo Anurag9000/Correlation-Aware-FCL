@@ -36,7 +36,7 @@ def test_paired_fedclass_configs_and_schedule(mode,method,count):
     assert full.memory_per_class==hidden.memory_per_class==count
     assert full.replay_reservoir_fraction==0  # Authors source does not use Algorithm R.
     assert full.share_continual_state and hidden.share_continual_state
-    assert full.learning_setting=="class_il" and hidden.learning_setting=="class_il"
+    assert full.learning_setting=="task_il" and hidden.learning_setting=="task_il"
     assert full.class_pair_protocol=="strict" and hidden.class_pair_protocol=="strict"
     assert full.client_training_concurrency==hidden.client_training_concurrency==2
     assert set(full.to_dict())==set(hidden.to_dict())

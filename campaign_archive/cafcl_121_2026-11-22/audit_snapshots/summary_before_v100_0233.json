@@ -1,0 +1,145 @@
+{
+  "attempt05_preparation": {
+    "cells": [
+      "B_recur_gap_10_seed0",
+      "B_recur_gap_5_seed0",
+      "C_hidden_2_seed0"
+    ],
+    "prep_attempt01_failure": "writable-tempdir missing; fixed with /dev/shm/cafcl-tmp",
+    "queue": "audit_snapshots/mtech_ag_attempt05_queue_validated_20261123_0037.json",
+    "queue_sha256": "5b50a96712a2ff16f4808f184a93ee75d4bb2da1d45d61f562438258e042f43a",
+    "training_launched": 0,
+    "validated": 3
+  },
+  "audit_note": "54 completed, 67 queued, 0 confirmed running per unchanged ledger digest. Mtech attempt05 remains unverified because host authentication is blocked. V100 recovery_v5 is stopped with 13/48 complete; mount2 dirty cache is draining slowly and retry remains deferred until enough storage headroom returns.",
+  "last_ledger_refresh": "2026-11-23T02:03:29+05:30",
+  "ledger_sha256": "a404cbf24a6368f0210f70eb6a63d3527d6ac129fb83c45cce7c6a51371484d7",
+  "live_resource_audit": "audit_snapshots/host_resource_snapshot_20261123_0228.json",
+  "local_archive_observation": "V100 attempts offline1 attempt_05 (50 files, 11,137,405,604 bytes) and offline2 attempt_02 (20 files, 2,756,774,819 bytes) copied directly to central remote_results. Source/destination SHA-256 manifests match exactly; receipt v100_failed_attempts_archive_receipt_20261122_2306.json.",
+  "mtech_access_blocker": "Tailscale SSH additional-check challenge remains; user authorization requested.",
+  "mtech_ag_recovery": {
+    "active_workers": 0,
+    "combined_queue": {
+      "jobs": 14,
+      "note": "3 attempt_05 retries ordered first; 11 unstarted attempt_03 retries follow; five interrupted attempt_03 cells require isolated attempt_04 plan validation before inclusion",
+      "path": "audit_snapshots/mtech_ag_combined_retry_queue_20261123_0118.json",
+      "sha256": "2bf4de0a6506fe22fc372a497a418165eb65a176e4710a6d76aee7aee6c95a05"
+    },
+    "dispatch_receipt": "remote_results/mtech/independent_ablation_A_G/recovery/dispatch_receipt.json",
+    "note": "five attempt_03 workers interrupted; outputs retained; controller pane dead; no new jobs admitted due full storage paths",
+    "priority_B5_dispatch": {
+      "queue_sha256": "60d4973695263d08f46d77961506b7f71cccfb448745b052425b4e6d07365a9b",
+      "session": "cafcl-mtech-ag-bgap5-attempt05-20261123",
+      "state": "controller launched, worker unverified"
+    },
+    "queue": "audit_snapshots/mtech_ag_retry_queue_relocated_20261123_0030.json",
+    "queue_sha256": "2eb6ff19924d1b82a234b14f15d4bda059b5846198760b43311247bd6664cf4a",
+    "queued_validated_retries": 16,
+    "scheduler": "remote_results/tools/mtech_ag_vram_scheduler.py",
+    "scheduler_sha256": "c22abc6094972863f9fd4f5a846621883197660895a46d47da2ab4d3f44b896f",
+    "session": "cafcl-mtech-ag-retries-20261123"
+  },
+  "mtech_recovery_attempt04_observation": {
+    "broad_process_scan": "no CAFCL campaign worker found",
+    "captured_at_local": "2026-11-23T01:27:48+05:30",
+    "cells": {
+      "B_recur_gap_10_seed0": 11,
+      "B_recur_gap_5_seed0": 12,
+      "C_hidden_2_seed0": 8
+    },
+    "note": "partial attempt outputs are preserved; next validated attempt_05 is queued ahead of other retries",
+    "terminal_summaries": 0,
+    "worker_pids_20056_20569_absent": true
+  },
+  "retry_dispatch_queue": {
+    "expected_peak_mib_per_job": 6186,
+    "launches": 0,
+    "margin_mib": 1024,
+    "normalized_from_runtime_plan_validation": true,
+    "path": "plans/AG_retry_dispatch_queue_20261122_2135.json",
+    "per_pid_peak_basis": "largest observed live Mtech campaign process: 6186 MiB",
+    "required_free_mib_per_job": 7210,
+    "sha256": "66cbdaea557be97a5ac178bede838c274c686071da72265cc6733c12fd611828",
+    "validated_A_G_retries": 16
+  },
+  "retry_spec_preparation": {
+    "attempt_id": "attempt_03",
+    "attempt_specs": 16,
+    "runtime_validated": 16,
+    "runtime_validation_pending": 0,
+    "state": "all plan-only checks passed; exact validation counters recorded",
+    "suite": "independent_ablation_A_G",
+    "training_launched": 0
+  },
+  "scope": "121 unique cells; retries recorded as attempts, not cells; V25 reference runs and Trash artifacts excluded",
+  "snapshot_date": "2026-11-22",
+  "snapshot_mtech": "Last successful host sample 01:32 IST: GPU 4 MiB used / 32,497 MiB free; root full, /dev/shm 6.7 GiB free, host RAM available 64 GiB. Single priority attempt_05 controller was relaunched under the project venv, but worker health is unverified: two later SSH status attempts returned Tailscale additional-check challenge https://login.tailscale.com/a/ldd615643242fb.",
+  "snapshot_v100": "02:28 IST: V100 had 21,178 MiB free VRAM and no campaign controller/worker. Recovery_v5 has 13 completed and 35 queued, but status is stale. Root full; /dev/shm has 5.0 GiB free and /run/user/1027 has 4.6 GiB free. Mount2 cache is slowly draining (4.747G, 27 queued, 4 uploading), down from 5.510G at 02:18. No launch while the dirty cache exceeds writable headroom.",
+  "summary": {
+    "by_state": {
+      "completed": 54,
+      "queued": 67,
+      "running": 0
+    },
+    "by_suite": {
+      "fedqcl_local_epochs_visibility": 12,
+      "independent_ablation_A_G": 29,
+      "intra_task_sync_frequency": 6,
+      "task_size_4_vs_5": 12,
+      "v100_epoch_participation_il_curriculum": 48,
+      "v25_incremental_curriculum_participation": 6,
+      "v25_participation_levels": 8
+    },
+    "cells": 121
+  },
+  "v100_recovery_manifest": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v3/recovery_manifest.json; 13 completed, 34 queued, 1 stale running record; attempt_12 worker PID absent and FUSE lock write failed. Recovery_v4 had a controller launch but its manifest and outputs are still in dirty VFS cache and not yet centrally visible.",
+  "v100_recovery_v3_reconciliation": {
+    "attempt14": "failed_result_storage_eio_process_absent; recorded with partial outputs retained",
+    "attempts_appended": 21,
+    "reason": "central manifest and worker status/log evidence; failed attempts retained",
+    "rows": 3
+  },
+  "v100_recovery_v5_reconciliation": {
+    "attempts_appended": [
+      [
+        "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "attempt_13",
+        "failed_worker_exit_terminal_missing"
+      ],
+      [
+        "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "attempt_15",
+        "failed_worker_exit_terminal_missing"
+      ],
+      [
+        "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "attempt_16",
+        "failed_worker_exit_terminal_missing"
+      ],
+      [
+        "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "attempt_11",
+        "failed_worker_exit_terminal_missing"
+      ],
+      [
+        "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "attempt_12",
+        "failed_worker_exit_terminal_missing"
+      ]
+    ],
+    "last_resource_sample": {
+      "active_worker_pids": [],
+      "free_vram_mib": 6018,
+      "launches_this_pass": 0,
+      "outstanding_reserved_mib": 0,
+      "utc": "2026-11-22T20:29:44Z"
+    },
+    "latest_resource_sample": "audit_snapshots/host_resource_snapshot_20261123_0228.json",
+    "manifest_counts": {
+      "completed": 13,
+      "queued": 35
+    },
+    "manifest_status": "running",
+    "worker_terminal_evidence": "controller manifest records nonzero exits; detailed logs pending cache upload"
+  }
+}

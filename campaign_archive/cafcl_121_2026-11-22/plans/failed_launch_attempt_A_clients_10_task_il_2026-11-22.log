@@ -1,0 +1,20 @@
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 289, in <module>
+    if __name__=='__main__':main()
+                            ^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 285, in main
+    if a.worker_spec: return worker(a.worker_spec,a.plan_only)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 106, in worker
+    cfg_data,tasks,expected=load_spec(spec_dir)
+                            ^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 61, in load_spec
+    cfg=json.loads((spec_dir/'config.json').read_text())
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1027, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/plans/server_compiled_v4/A/A_clients_10_task_il_seed0/config.json'

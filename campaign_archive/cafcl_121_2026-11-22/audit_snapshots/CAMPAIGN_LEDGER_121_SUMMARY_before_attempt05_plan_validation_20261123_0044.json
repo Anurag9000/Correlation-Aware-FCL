@@ -1,0 +1,59 @@
+{
+  "audit_note": "Ledger refreshed after five A-G retry launches: 54 completed, 62 queued, 5 running. The V100 grid remains 13 completed/35 pending; Mtech suites now have 41 completed, 26 queued, 5 running. Eleven validated A-G retries remain queued behind the five active attempts; three additional A-G cells still need retry plan preparation.",
+  "last_ledger_refresh": "2026-11-23T00:33:50+05:30",
+  "ledger_sha256": "4e4dfc4d1e7c280f2ac4f31862c2aef8d4776aeb20222ec45aaab23827bfa8a3",
+  "live_resource_audit": "audit_snapshots/host_resource_snapshot_20261123_0033.json",
+  "local_archive_observation": "V100 attempts offline1 attempt_05 (50 files, 11,137,405,604 bytes) and offline2 attempt_02 (20 files, 2,756,774,819 bytes) copied directly to central remote_results. Source/destination SHA-256 manifests match exactly; receipt v100_failed_attempts_archive_receipt_20261122_2306.json.",
+  "mtech_ag_recovery": {
+    "active_workers": 5,
+    "dispatch_receipt": "remote_results/mtech/independent_ablation_A_G/recovery/dispatch_receipt.json",
+    "queue": "audit_snapshots/mtech_ag_retry_queue_relocated_20261123_0030.json",
+    "queue_sha256": "2eb6ff19924d1b82a234b14f15d4bda059b5846198760b43311247bd6664cf4a",
+    "queued_validated_retries": 11,
+    "scheduler": "remote_results/tools/mtech_ag_vram_scheduler.py",
+    "scheduler_sha256": "c22abc6094972863f9fd4f5a846621883197660895a46d47da2ab4d3f44b896f",
+    "session": "cafcl-mtech-ag-retries-20261123"
+  },
+  "retry_dispatch_queue": {
+    "expected_peak_mib_per_job": 6186,
+    "launches": 0,
+    "margin_mib": 1024,
+    "normalized_from_runtime_plan_validation": true,
+    "path": "plans/AG_retry_dispatch_queue_20261122_2135.json",
+    "per_pid_peak_basis": "largest observed live Mtech campaign process: 6186 MiB",
+    "required_free_mib_per_job": 7210,
+    "sha256": "66cbdaea557be97a5ac178bede838c274c686071da72265cc6733c12fd611828",
+    "validated_A_G_retries": 16
+  },
+  "retry_spec_preparation": {
+    "attempt_id": "attempt_03",
+    "attempt_specs": 16,
+    "runtime_validated": 16,
+    "runtime_validation_pending": 0,
+    "state": "all plan-only checks passed; exact validation counters recorded",
+    "suite": "independent_ablation_A_G",
+    "training_launched": 0
+  },
+  "scope": "121 unique cells; retries recorded as attempts, not cells; V25 reference runs and Trash artifacts excluded",
+  "snapshot_date": "2026-11-22",
+  "snapshot_mtech": "00:33 IST: MtechDEServer1 GPU 4 MiB used / 32,497 MiB free at scheduler admission sample. Five validated A-G retry workers launched; worker_status files report running. The fresh Kakarot-backed FUSE mount is active; /dev/shm had 24.8 GB free immediately after launch. The old mount and cache remain intact.",
+  "snapshot_v100": "00:03 IST: V100-server GPU 11,322 MiB used / 21,178 MiB free; no campaign worker/controller. Root 0 free; /dev/shm 2.5 GiB free; /run/user/1027 0 free. Both rclone mounts remain alive; caches retain about 45 GiB and 6.5 GiB respectively.",
+  "summary": {
+    "by_state": {
+      "completed": 54,
+      "queued": 62,
+      "running": 5
+    },
+    "by_suite": {
+      "fedqcl_local_epochs_visibility": 12,
+      "independent_ablation_A_G": 29,
+      "intra_task_sync_frequency": 6,
+      "task_size_4_vs_5": 12,
+      "v100_epoch_participation_il_curriculum": 48,
+      "v25_incremental_curriculum_participation": 6,
+      "v25_participation_levels": 8
+    },
+    "cells": 121
+  },
+  "v100_recovery_manifest": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v2/recovery_manifest.json; 3 V100 attempts from recovery_v2 are failed/interrupted and preserved; no active workers. Next retry must propagate CAFCL_VRAM_BROKER_ADMITTED=1 and wait until result storage can safely accept writes."
+}

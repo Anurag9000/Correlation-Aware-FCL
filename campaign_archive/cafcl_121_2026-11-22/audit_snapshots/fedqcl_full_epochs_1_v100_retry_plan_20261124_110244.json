@@ -1,0 +1,102 @@
+{
+  "captured_at": "2026-11-24T11:02:44+05:30",
+  "suite_id": "fedqcl_local_epochs_visibility",
+  "cell_id": "full_epochs_1",
+  "attempt_id": "oom_retry1",
+  "state": "queued",
+  "host": "V100-server",
+  "reassignment": {
+    "from": "MtechDEServer1",
+    "to": "V100-server",
+    "reason": "V100-specific 48-cell suite is reconciled complete; exact source and input were transferred and hash-verified; V100 has measured capacity for one job."
+  },
+  "source": {
+    "repo_head": "49d709b0227e63198cf0207d94d7016b46f6c476",
+    "main_sha256": "4605323405b59ac822c8db378c59e3b990e5ce04a677353740c93dce3e3777b5",
+    "source_file_count": 21,
+    "source_manifest_sha256": "a13b183319d125307d792d843bd7277bfe8e62bd68647b8696af8f20de346cbf",
+    "source_bundle_sha256": "bad4b06c07448debe4046fcaaac986cb82d85c7ff7f2e06cdb2a3bea1aba6f40",
+    "source_transfer_remote": "kakarot:v100/fedqcl_local_epochs_visibility/full_epochs_1_retry1_transfer_20261124/transfer_staging"
+  },
+  "dataset": {
+    "relative_path": "dataset/CIFAR100_NONIID_alpha10.0_clients5_tasks5",
+    "file_count": 55,
+    "size_bytes": 737791350,
+    "manifest_sha256": "6d57d05e48bfbbaf7cb96f7c751336b3400893a4e6421fc9a2f8f95f7ecdff48",
+    "mtech_remote_check": "0 differences; 55 matching files",
+    "v100_local_sha256_check": "55/55 files match; 0 mismatches"
+  },
+  "runtime": {
+    "python": "3.12.15",
+    "torch": "2.5.1+cu121",
+    "torchvision": "0.20.1+cu121",
+    "cuda_available": true,
+    "v100_help_exit_code": 0,
+    "mtech_help_exit_code": 0,
+    "note": "Transformers emitted an optional PyTorch>=2.6 warning on --help; selected model is resnet18."
+  },
+  "configuration": {
+    "data": "../dataset/CIFAR100_NONIID_alpha10.0_clients5_tasks5",
+    "model": "resnet18",
+    "algorithm": "FedAvg",
+    "tasks": 5,
+    "nb": 20,
+    "num_clients": 5,
+    "join_ratio": 1.0,
+    "global_rounds": 49,
+    "batch_size": 13,
+    "learning_rate": 0.005,
+    "local_epochs": 1,
+    "V": 200,
+    "delta": 1,
+    "memory_size": 500,
+    "memory_batch_size": 13,
+    "seed": 42,
+    "times": 1,
+    "goal": "cifar100_full_e1",
+    "visibility": "full"
+  },
+  "output": {
+    "project_root": "/home/anurag24092/Projects/FedQCL_Task-v100-transfer-20261124",
+    "run_root": "/home/anurag24092/Projects/FedQCL_Task-v100-transfer-20261124/campaigns/cifar100_12_local_epoch_runs_20261124_full_epochs_1_retry1_v100",
+    "run_dir": "/home/anurag24092/Projects/FedQCL_Task-v100-transfer-20261124/campaigns/cifar100_12_local_epoch_runs_20261124_full_epochs_1_retry1_v100/full_epochs_1_retry1",
+    "cwd": "/home/anurag24092/Projects/FedQCL_Task-v100-transfer-20261124/campaigns/cifar100_12_local_epoch_runs_20261124_full_epochs_1_retry1_v100/full_epochs_1_retry1/system",
+    "log": "/home/anurag24092/Projects/FedQCL_Task-v100-transfer-20261124/campaigns/cifar100_12_local_epoch_runs_20261124_full_epochs_1_retry1_v100/logs/full_epochs_1_retry1.log",
+    "result_dir": "/home/anurag24092/Projects/FedQCL_Task-v100-transfer-20261124/campaigns/cifar100_12_local_epoch_runs_20261124_full_epochs_1_retry1_v100/full_epochs_1_retry1/results",
+    "pycache": "/home/anurag24092/Projects/FedQCL_Task-v100-transfer-20261124/campaigns/cifar100_12_local_epoch_runs_20261124_full_epochs_1_retry1_v100/full_epochs_1_retry1/pycache",
+    "observed_absent_at_preflight": true
+  },
+  "vram": {
+    "observed_at": "2026-11-24T11:00:17+05:30",
+    "gpu": "Tesla V100-PCIE-32GB",
+    "total_mib": 32768,
+    "used_mib": 25492,
+    "free_mib": 7008,
+    "compute_apps_mib": {
+      "2021120": 10900,
+      "3486421": 410,
+      "635797": 14170
+    },
+    "campaign_worker_present": false,
+    "broker_reservation_present": false,
+    "measured_peak_mib": 3678,
+    "measurement_ref": "CAMPAIGN_LEDGER_121.jsonl cell full_epochs_2 attempt oom_retry4; verified worker on the same Tesla V100-PCIE-32GB model",
+    "margin_mib": 1024,
+    "admission_required_mib": 4702,
+    "free_headroom_mib": 2306,
+    "broker_sha256": "9738a8f80085f8860dcceb456fe6e3848c244d021ade86b1ce230c95e3a21616",
+    "source_wrapper_estimate_mib": 8192,
+    "reason": "Invoke the existing broker directly with the measured same-GPU peak plus margin; the copied main.py wrapper hardcodes 8192 MiB and would delay otherwise feasible work."
+  },
+  "original_failure": {
+    "attempt_id": "original",
+    "state": "completed_with_oom_in_log",
+    "reason": "CUDA OOM inside client training thread; output invalid for full-participation comparison."
+  },
+  "source_fix": {
+    "change": "Added missing import sys required by existing VRAM wrapper; no other main.py lines changed.",
+    "before_sha256": "219fbb908c2dc763a134f71ce15de6c91e43770effa77b303f8b0aa126c0a80f",
+    "after_sha256": "4605323405b59ac822c8db378c59e3b990e5ce04a677353740c93dce3e3777b5",
+    "receipt_mtech": "/home/anurag24092/Projects/FedQCL_Task/campaigns/cifar100_12_local_epoch_runs_20261124_full_epochs_1_retry1/source_fix_receipt.json"
+  }
+}

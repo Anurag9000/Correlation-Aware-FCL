@@ -1,0 +1,33 @@
+{
+  "completed_at_local": "2026-11-23T15:54:58+05:30",
+  "source_host": "MtechDEServer1 (192.168.3.30)",
+  "destination_host": "V100-server (192.168.2.252)",
+  "destination_root": "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122-v100-script-transfer",
+  "scope": "campaign scripts and Python runtime source only; no runs launched",
+  "mtech_assigned_121_cell_suites": [
+    "independent_ablation_A_G",
+    "task_size_4_vs_5",
+    "intra_task_sync_frequency",
+    "fedqcl_local_epochs_visibility",
+    "v25_incremental_curriculum_participation",
+    "v25_participation_levels"
+  ],
+  "verified_source_file_counts": {
+    "independent_ablation_A_G_and_runtime": 92,
+    "other_mtech_suite_scripts_and_runtime": 282,
+    "total": 374
+  },
+  "source_archive_sha256": {
+    "independent_ablation_A_G_and_runtime": "e84016ca2d501adee3b978e8faa3582f9abfed2cfa321efaf6882edc4599dea0",
+    "other_mtech_suite_scripts_and_runtime": "4c4785fdc8c8b939a940046513f251d62cccc701d1c9f426fe87be72f1af66c0"
+  },
+  "verification": "On V100, sha256sum -c passed for all 92 first-package source entries and all 282 additional-suite entries. Destination count is 377 files including three transfer manifests/origin indexes.",
+  "transfer_route": "Mtech temporary read-only HTTP staging to V100 over the private host network; temporary staging and server were removed after transfer.",
+  "not_transferred": [
+    "datasets",
+    "virtual environments",
+    "compiled run plans/configurations except the V25 eight-run queue manifest",
+    "result artifacts/checkpoints"
+  ],
+  "ledger_action": "No job states or host assignments changed; no training jobs were launched."
+}

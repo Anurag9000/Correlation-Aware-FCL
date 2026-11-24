@@ -1,0 +1,80 @@
+{
+  "attempts": [
+    {
+      "attempt_id": "attempt_07",
+      "cell_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "evidence": "worker logged one learning round; then broker receipt and terminal status writes failed because V100 root filesystem was full; partial metrics/checkpoint retained in second mount cache",
+      "pid": 488008,
+      "state": "failed"
+    },
+    {
+      "attempt_id": "attempt_08",
+      "cell_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "evidence": "PID absent in 23:44 process snapshot; worker could not create .worker.lock due FUSE EIO",
+      "pid": 488065,
+      "state": "interrupted_or_failed_before_training"
+    },
+    {
+      "attempt_id": "attempt_06",
+      "cell_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "evidence": "worker logged one learning round; terminal status write failed after broker receipt ENOSPC; partial metrics/checkpoint retained",
+      "pid": 488012,
+      "state": "failed"
+    },
+    {
+      "attempt_id": "attempt_07",
+      "cell_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "evidence": "PID absent in 23:44 process snapshot; worker could not create .worker.lock due FUSE EIO",
+      "pid": 488069,
+      "state": "interrupted_or_failed_before_training"
+    },
+    {
+      "attempt_id": "attempt_06",
+      "cell_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "evidence": "worker logged one learning round; terminal status write failed after broker receipt ENOSPC; partial outputs retained",
+      "pid": 488016,
+      "state": "failed"
+    }
+  ],
+  "campaign_state_at_observation": {
+    "current_run_workers_alive": 0,
+    "previously_verified_completed": 13,
+    "queued": 33,
+    "stale_running_rows": 2
+  },
+  "filesystem": {
+    "dev_shm_free_mib": 1331,
+    "root_available_bytes": 0,
+    "run_cache_size_bytes": 6407000000,
+    "run_user_1027_free_bytes": 0
+  },
+  "gpu": {
+    "campaign_compute_processes": 0,
+    "free_mib": 21178,
+    "used_mib": 11322
+  },
+  "host": "V100-server",
+  "next_recovery_requirements": [
+    "wait for the second mount to upload its 6.407 GiB backlog and release cache space",
+    "set CAFCL_VRAM_BROKER_ADMITTED=1 for the worker so the outer measured-VRAM scheduler is authoritative",
+    "reconcile stale running rows and preserve each failed attempt before retry",
+    "resume only when destination cache has room and do not delete dirty cache files"
+  ],
+  "observed_at_ist": "2026-11-22T23:44:45+05:30",
+  "old_mount_dirty_cache": {
+    "bytes": 45858185351,
+    "files": 264,
+    "preserved": true
+  },
+  "root_causes": [
+    "Nested V100 VRAM broker was not told the outer scheduler had already admitted the worker; it attempted a second 13,312 MiB gate and wrote reservations under the full root filesystem.",
+    "The /run/user/1027 tmpfs-backed FUSE cache filled while the inner broker waited and the workers wrote stage checkpoints; subsequent create/status writes returned ENOSPC or EIO."
+  ],
+  "second_mount": {
+    "cache": "/run/user/1027/cafcl-vfs-cache2",
+    "last_rclone_cache_stats": "to_upload=21, uploading=4, total_size=6.407G",
+    "mount": "/run/user/1027/cafcl-results2",
+    "status": "full; upload backlog present"
+  },
+  "suite": "v25_offline_epoch_grid_20261122_v2"
+}

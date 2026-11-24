@@ -36,40 +36,41 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
         # group is padded ONLY for forward computation; duplicated predictions
         # are discarded before loss, confusion-matrix and accuracy accounting.
         valid=len(y)
+        evaluation_y=y
         if valid<batch_size:
             indices=torch.arange(batch_size-valid)%valid
             x=torch.cat((x,x[indices]),dim=0)
-        if feat_ecc is None:
-            logits=model(x.to(device))[:valid]
-        else:
-            from .feat_inference_correction import paper_reconstructed_feat_logits
-            logits=paper_reconstructed_feat_logits(model,x.to(device),feat_ecc)[:valid]
-        # The global classifier has shape-stable allocated rows, but classes
-        # that have not arrived anywhere must not compete at inference.
-        # Arrived-yet-offline classes DO compete: they are part of evaluation.
+            evaluation_y=torch.cat((y,y[indices]),dim=0)
         if task_class_groups is None:
+            if feat_ecc is None:
+                logits=model(x.to(device))[:valid]
+            else:
+                from .feat_inference_correction import paper_reconstructed_feat_logits
+                logits=paper_reconstructed_feat_logits(model,x.to(device),feat_ecc)[:valid]
             mask=torch.ones(logits.shape[1],dtype=torch.bool,device=device)
             mask[allowed_class_ids]=False
             logits=logits.masked_fill(mask.unsqueeze(0),-1e9)
-        if task_class_groups is None:
             pred=logits.argmax(1).cpu()
+            task_probabilities=None
         else:
-            # Task-incremental *oracle task ID at inference*, applied per
-            # example. These numbers must not be mixed with class-IL results.
-            pred=torch.empty_like(y)
-            processed=torch.zeros_like(y,dtype=torch.bool)
-            for group in task_class_groups:
-                allowed=[int(c) for c in group]
-                if not allowed:continue
-                mask=torch.zeros_like(y,dtype=torch.bool)
-                for cls in allowed:mask|=(y==cls)
-                if mask.any():
-                    ids=torch.as_tensor(allowed,dtype=torch.long,device=logits.device)
-                    local=logits[mask.to(logits.device)].index_select(1,ids).argmax(1)
-                    pred[mask]=ids[local].cpu()
-                    processed|=mask
-            if not processed.all():
+            # Task IDs are client-task occurrences, not just class tuples. All
+            # known occurrences that have trained a true class are queried.
+            from .models import task_head_key
+            if isinstance(task_class_groups,dict):
+                task_map={task_head_key(task_id):tuple(map(int,classes))
+                          for task_id,classes in task_class_groups.items()}
+            else:
+                task_map={task_head_key(group):tuple(sorted(set(map(int,group))))
+                          for group in task_class_groups}
+            task_ids=[tuple(task_id for task_id,classes in sorted(task_map.items())
+                            if int(label) in set(classes))
+                      for label in evaluation_y.tolist()]
+            if any(not ids_for_sample for ids_for_sample in task_ids):
                 raise ValueError('Task-IL evaluation encountered labels without a task')
+            task_probabilities=model.task_union_scores(x.to(device),task_ids)[:valid]
+            pred=task_probabilities.argmax(1).cpu()
+            logits=task_probabilities.clamp_min(torch.finfo(task_probabilities.dtype).tiny).log()
+            logits=torch.where(task_probabilities>=0,logits,torch.full_like(logits,-1.e9))
         confusion+=torch.bincount(
             y*bank.num_classes+pred,
             minlength=bank.num_classes*bank.num_classes).reshape(
@@ -79,17 +80,8 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
         if task_class_groups is None:
             per_sample_loss=F.cross_entropy(logits,y.to(device),reduction='none').cpu()
         else:
-            per_sample_loss=torch.empty(len(y),dtype=torch.float32)
-            for group in task_class_groups:
-                allowed=[int(c) for c in group]
-                mask=torch.zeros_like(y,dtype=torch.bool)
-                for c in allowed:mask|=(y==c)
-                if mask.any():
-                    ids_task=torch.as_tensor(allowed,dtype=torch.long,device=device)
-                    selected=logits[mask.to(device)].index_select(1,ids_task)
-                    lookup={c:i for i,c in enumerate(allowed)}
-                    labels=torch.tensor([lookup[int(v)] for v in y[mask]],device=device)
-                    per_sample_loss[mask]=F.cross_entropy(selected,labels,reduction='none').cpu()
+            per_sample_loss=-task_probabilities.gather(1,y.to(device).unsqueeze(1)).squeeze(1).clamp_min(
+                torch.finfo(task_probabilities.dtype).tiny).log().cpu()
         true_logit=logits.gather(1,y.to(device).unsqueeze(1)).squeeze(1)
         competing=logits.clone()
         competing.scatter_(1,y.to(device).unsqueeze(1),-1.e9)
@@ -144,4 +136,6 @@ def evaluate(model, bank, observed, batch_size,device,peak=None,*, integrated=No
             'observed_classes':sorted(observed),'test_samples':test_samples,
             'evaluation_samples':len(ids),'evaluation_split':split,
             'task_id_at_inference':task_class_groups is not None,
+            'task_id_assignment':('schedule_class_membership_oracle'
+                                  if task_class_groups is not None else 'none'),
             'unlearned':unlearned},historical

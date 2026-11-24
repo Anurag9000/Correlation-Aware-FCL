@@ -19,9 +19,10 @@ from .simulator import run_experiment,atomic_json
 from .selection import participation_budget
 
 
-def make_jobs():
+def make_jobs(*,sync_every_batch=False):
     seed=0;lr=.03;epochs=10;replay_fraction=1/9
     pct_tag='11p1111'
+    variant=('V28_BATCH_SYNC' if sync_every_batch else 'V27_SOURCE_TASK_REPLAY')
     cfg=replace(base(seed=seed,model='cnn'),num_clients=5,batch_size=64,classwise_head_merge=False,method='replay',replay_reservoir_fraction=replay_fraction,share_continual_state=True,
         aggregator='fedavg',scenario='disjoint',stream_overlap_kind='none',
         stream_overlap_fraction=0.,stream_client_chain=True,
@@ -29,11 +30,13 @@ def make_jobs():
         stream_recurrence_rounds=0,stream_terminal_flush=True,participation=1.,
         stream_offline_policy='random',evaluate_final_only=True,lr=lr,epochs=epochs,memory_per_class=ceil(450*replay_fraction),
         optimizer_state_policy='persist',client_training_concurrency=5,
-        training_augmentation='cifar_crop_flip',
-        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V23_CHAIN20_'+resolve_backbone('cnn'))
+        training_augmentation='cifar_crop_flip',replay_ratio=1.0,
+        replay_update_policy='sampled_mixed',
+        stream_sync_every_batch=sync_every_batch,
+        job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_TASKIL_'+variant+'_'+resolve_backbone('cnn'))
     partial=replace(cfg,participation=.8,stream_offline_policy='random',
-                    job_id='PRIMARY_RANDOM_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_V23_CHAIN20_'+resolve_backbone('cnn'))
-    cfg=replace(cfg,job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_V23_CHAIN20_'+resolve_backbone('cnn'))
+                    job_id='PRIMARY_RANDOM_OFFLINE_REPLAY_RESERVOIR'+pct_tag+'_TASKIL_'+variant+'_'+resolve_backbone('cnn'))
+    cfg=replace(cfg,job_id='PRIMARY_FULL_REPLAY_RESERVOIR'+pct_tag+'_TASKIL_'+variant+'_'+resolve_backbone('cnn'))
     for job in (cfg,partial):job.validate()
     return cfg,partial
 
@@ -41,8 +44,8 @@ def make_jobs():
 def audited_plan(jobs):
     baseline,partial=jobs
     stream=make_task_schedule(100,baseline)
-    rounds=1+max(r for r,_,_,_,_ in stream)
-    assert rounds==20 and len(stream)==5*20
+    task_rounds=1+max(r for r,_,_,_,_ in stream)
+    assert task_rounds==20 and len(stream)==5*20
     assert all(task==0 for _,_,task,_,_ in stream)
     assert all(len(labels)==2 for _,_,_,labels,_ in stream)
     by_client_round={(r,cid):labels for r,cid,_,labels,_ in stream}
@@ -65,38 +68,88 @@ def audited_plan(jobs):
     assert all(by_client_round[0,cid]==(cid,cid+1) for cid in range(5))
     assert all(by_client_round[1,cid]==(cid+5,cid+6) for cid in range(5))
     assert by_client_round[19,3]==(98,99) and by_client_round[19,4]==(98,99)
+    sync_timeline=[]
+    if baseline.stream_sync_every_batch:
+        class_occurrences={c:sum(c in labels for _,_,_,labels,_ in stream)
+                           for c in range(100)}
+        by_task_round={}
+        for r,cid,_,labels,_ in stream:
+            # CIFAR-100 supplies 450 train images per class. The stream
+            # compiler partitions them evenly across that class's task visits.
+            sample_count=sum(450//class_occurrences[int(cls)] for cls in labels)
+            by_task_round.setdefault(r,{})[cid]=(labels,sample_count)
+        for r in range(task_rounds):
+            clients=by_task_round[r]
+            batch_counts={cid:ceil(count/baseline.batch_size)
+                          for cid,(_,count) in clients.items()}
+            max_batches=max(batch_counts.values())
+            for epoch in range(baseline.epochs):
+                for batch_index in range(max_batches):
+                    active={cid:labels for cid,(labels,_) in clients.items()
+                            if batch_index<batch_counts[cid]}
+                    sync_timeline.append(dict(task_round=r,epoch=epoch,
+                        batch_index=batch_index,active_tasks=active))
+        assert sync_timeline
+    else:
+        for r in range(task_rounds):
+            sync_timeline.append(dict(task_round=r,epoch=0,batch_index=0,
+                active_tasks={cid:labels for (round_id,cid),labels in by_client_round.items()
+                              if round_id==r}))
+    rounds=len(sync_timeline)
     from .selection import select_clients
     rng=np.random.default_rng(partial.seed+888_777)
     states={cid:None for cid in range(partial.num_clients)}
     offline=[]
-    for r in range(rounds):
+    assigned=set()
+    for r,step in enumerate(sync_timeline):
         standard=select_clients(states,partial,r,rng)
-        selected=select_offline_cohort(partial,r,rounds+1,standard)
+        selected=select_offline_cohort(partial,r,rounds+int(baseline.stream_terminal_flush),standard)
         absent=set(range(5))-set(selected)
         assert len(absent)==1
         offline.append(next(iter(absent)))
+        step_labels=step['active_tasks']
+        new_labels=[]
+        if (not baseline.stream_sync_every_batch or
+                (step['epoch']==0 and step['batch_index']==0)):
+            for cid in sorted(step_labels):
+                for label in step_labels[cid]:
+                    if label not in assigned:
+                        assigned.add(label);new_labels.append(label)
+        step['new_classes']=new_labels
+    assert assigned==set(range(100))
     by_round=[]
     for r in range(rounds):
-        by_round.append(dict(round=r+1,offline_client=offline[r],
-            offline_classes=list(by_client_round[r,offline[r]]),
-            online_clients=[c for c in range(5) if c!=offline[r]]))
-        assert len(by_round[-1]['offline_classes'])==2
+        active=sync_timeline[r]['active_tasks']
+        by_round.append(dict(round=r+1,task_round=sync_timeline[r]['task_round']+1,
+            epoch=sync_timeline[r]['epoch']+1,batch_index=sync_timeline[r]['batch_index']+1,
+            active_clients=sorted(active),offline_client=offline[r],
+            offline_classes=list(active.get(offline[r],())),
+            online_clients=sorted(set(active)-{offline[r]}),
+            new_classes=sync_timeline[r]['new_classes']))
     source_fedclass=baseline.model=='fedclass_resnet8'
     per_class_source=(baseline.memory_per_class if source_fedclass and baseline.method=='replay'
                       else ceil(450*baseline.replay_reservoir_fraction))
     source_selection=('authors_original_first_k' if source_fedclass and baseline.method=='replay'
                       else 'none' if source_fedclass else 'independent_classwise_algorithm_r')
-    plan=dict(dataset='cifar100',seed=baseline.seed,backbone=baseline.model,batch_size=baseline.batch_size,sgd_momentum=baseline.momentum,sgd_weight_decay=baseline.weight_decay,
+    plan=dict(dataset='cifar100',seed=baseline.seed,backbone=baseline.model,
+        learning_setting=baseline.learning_setting,
+        classifier='one independent head per arrived task class set; shared feature extractor',
+        overlap_prediction='average selected-head probabilities by global class, then renormalize union',
+        batch_size=baseline.batch_size,sgd_momentum=baseline.momentum,sgd_weight_decay=baseline.weight_decay,
         client_execution_mode=('parallel_task_barriers' if not baseline.client_training_concurrency
                                else 'bounded_concurrent_task_barriers'),
         client_models_per_run=baseline.num_clients,
         canonical_whole_model_aggregation=not baseline.classwise_head_merge,
+        task_head_aggregation='contributor-weighted per-head averaging',
         process_topology='two_independent_runs_on_one_gpu',
         replay_reservoir_fraction=baseline.replay_reservoir_fraction,
         replay_sampling=source_selection,
-        replay_update='each incoming batch plus every unique currently available archive example before one optimizer step',
+        replay_update='two optimizer steps per incoming 64-image batch; each uses 32 fresh plus 32 sampled replay images',
+        replay_class_sampling='uniform over classes in the clients currently available private and synchronized archive',
+        replay_image_sampling='uniform within selected class; without replacement while buffer size permits',
+        replay_ratio=baseline.replay_ratio,
         replay_microbatch_size=baseline.batch_size,
-        archive_broadcast='complete aggregate replay archive to all clients each sync; model only to selected clients',
+        archive_broadcast='complete aggregate replay archive only to selected clients at model sync',
         source_memory_count_per_class=per_class_source,
         training_augmentation=baseline.training_augmentation,
         optimizer_state_policy=baseline.optimizer_state_policy,
@@ -106,18 +159,47 @@ def audited_plan(jobs):
                                               for c in range(100)},
         clients=5,classes_per_local_task=2,initial_local_tasks=1,
         subsequent_local_tasks=1,initial_new_classes_per_client=2,
-        new_unique_classes_first_sync=6,new_unique_classes_syncs_2_to_19=5,
-        new_unique_classes_final_sync=4,
-        local_tasks_per_client_per_sync=1,training_intervals=rounds,
+        new_unique_classes_first_sync=len(sync_timeline[0]['new_classes']),
+        new_unique_classes_syncs_2_to_19=(
+            (len(sync_timeline[1]['new_classes']) if baseline.stream_sync_every_batch else 5)
+            if rounds>1 else 0),
+        new_unique_classes_final_sync=len(sync_timeline[-1]['new_classes']),
+        new_unique_classes_per_sync=[len(step['new_classes']) for step in sync_timeline],
+        new_classes_by_logical_task_round={
+            str(r+1):sorted({int(cls) for step in sync_timeline
+                             if step['task_round']==r for cls in step['new_classes']})
+            for r in range(task_rounds)},
+        local_tasks_per_client_per_sync=1,logical_task_rounds=task_rounds,
+        training_intervals=rounds,
+        synchronization_protocol=('one_sync_per_physical_batch' if baseline.stream_sync_every_batch
+                                  else 'one_sync_per_local_task_round'),
         terminal_communication_only_flush=True,all_classes_covered=True,
         offline_selection='seeded random one-client outage independently each learning sync',
-        all_clients_train_each_sync=True,all_clients_receive_replay_archive_each_sync=True,
+        all_clients_train_each_sync=all(len(step['active_tasks'])==baseline.num_clients
+                                        for step in sync_timeline),
+        active_client_count_per_sync={str(n):sum(len(step['active_tasks'])==n
+                                                 for step in sync_timeline)
+                                      for n in sorted({len(step['active_tasks'])
+                                                       for step in sync_timeline})},
+        syncs_offline_client_has_no_batch=sum(
+            row['offline_client'] not in row['active_clients'] for row in by_round),
+        syncs_with_no_active_batch_contributor_selected=sum(
+            len(row['active_clients'])==1 and row['offline_client'] in row['active_clients']
+            for row in by_round),
+        selected_clients_receive_replay_archive_each_sync=True,
+        offline_clients_keep_last_received_archive=True,
+        offline_archive_policy="retain the last received archive until the client is selected again",
         selected_clients_receive_model_each_sync=True,
         server_models_per_run=1,
-        models_per_run=6,server_model_updates='only after the five-client learning barrier',
+        models_per_run=6,
+        server_model_updates=('only after all currently active clients reach the batch barrier'
+                              if baseline.stream_sync_every_batch else
+                              'only after the five-client task barrier'),
         experiment_processes_concurrent=2,
         server_models_across_both_arms=2,client_models_across_both_arms=10,
         concurrently_training_client_models_across_both_arms=10,
+        peak_active_client_models_across_both_arms=2*max(
+            len(step['active_tasks']) for step in sync_timeline),
         class_occurrence_counts={str(c):occurrences[c] for c in range(100)},
         terminal_pair_repeated_for_full_20_sync_coverage=[98,99],
         total_jobs=2,job_ids=[c.job_id for c in jobs],offline_schedule=by_round)
@@ -133,6 +215,10 @@ def build_report(root,jobs):
         if not path.exists():return None
         summaries.append(json.loads(path.read_text()))
     full,partial=[x['final_metrics'] for x in summaries]
+    execution_path=root/'execution.json'
+    execution=(json.loads(execution_path.read_text()) if execution_path.exists() else {})
+    design_path=root/'design.json'
+    design=(json.loads(design_path.read_text()) if design_path.exists() else audited_plan(jobs))
     if set(map(int,full['per_class']))!=set(range(100)) or set(map(int,partial['per_class']))!=set(range(100)):
         raise RuntimeError('Pilot final evaluation must cover all 100 class IDs')
     rows=[]
@@ -153,11 +239,15 @@ def build_report(root,jobs):
     atomic_json(folder/'per_class.json',rows)
     with (folder/'per_class.csv').open('w',newline='') as f:
         wr=csv.DictWriter(f,fieldnames=list(rows[0]));wr.writeheader();wr.writerows(rows)
+    sync_description=('one server synchronization after each physical client batch'
+                      if jobs[0].stream_sync_every_batch else
+                      'one server synchronization after each two-class task round')
     markdown=['# CIFAR-100 Replay/FedAvg: full participation versus random one-client outage','',
-        'Two matched runs, five clients, one adjacent two-class task/client at every learning sync,',
-        '20 learning syncs cover all 100 labels, followed by one communication-only flush.',
+        f'Two matched runs, five clients, {sync_description};',
+        f"{design['logical_task_rounds']} logical task rounds expand to {design['training_intervals']} learning syncs covering all 100 labels, followed by one communication-only flush.",
         'All five client models train each sync; the hidden arm randomly omits one upload per sync.',
-        'Two independent experiment processes run concurrently on one GPU.',
+        'Only selected clients receive the committed model and replay archive; omitted clients retain their last received archive.',
+        f"Arm execution: {execution.get('arm_process_mode','not recorded')}; worker order: {', '.join(execution.get('worker_order',[])) or 'unspecified'}.",
         'The terminal schedule repeats pair 98,99 for the fifth client so all five train in sync 20.',
         f"Training augmentation: {jobs[0].training_augmentation}; optimizer-state policy: {jobs[0].optimizer_state_policy}.",
         'Per-sync held-out scores are REPORTING ONLY: never used by client selection/training.',
@@ -181,12 +271,16 @@ def main(argv=None):
     p.add_argument('--gpus',default=None,
                    help='Legacy spelling, must specify the SAME GPU twice, e.g. 0,0')
     p.add_argument('--plan-only',action='store_true')
+    p.add_argument('--sync-every-batch',action='store_true',
+                   help='Run a separate ablation with one server synchronization after each physical client batch')
     p.add_argument('--no-download',action='store_true')
     p.add_argument('--worker',type=int,choices=(0,1),default=None,help=argparse.SUPPRESS)
     args=p.parse_args(argv)
-    jobs=make_jobs()
+    jobs=make_jobs(sync_every_batch=args.sync_every_batch)
     design=audited_plan(jobs)
-    root=Path(args.output_dir)/'primary_cifar100_fedavg_v23_resnet18_cropflip_exhaustive_replay_chain20_randomoffline_bs64_seed0'
+    variant=('v28_batch_sync_source_task_replay' if args.sync_every_batch
+             else 'v27_source_task_replay')
+    root=Path(args.output_dir)/f'primary_cifar100_taskil_fedavg_{variant}_resnet18_cropflip_classuniform_sampledmixed_chain20_randomoffline_ratio1_bs64_seed0'
     root.mkdir(parents=True,exist_ok=True)
     atomic_json(root/'design.json',design)
     if args.plan_only:
@@ -209,6 +303,7 @@ def main(argv=None):
     cmd=[sys.executable,'-m','cafcl.primary_probe',
          '--data-root',args.data_root,
          '--output-dir',args.output_dir,'--no-download']
+    if args.sync_every_batch:cmd.append('--sync-every-batch')
     processes=[]
     for idx,gpu in enumerate(available):
         env=os.environ.copy();env['CUDA_VISIBLE_DEVICES']=gpu

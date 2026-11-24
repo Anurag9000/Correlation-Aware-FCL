@@ -1,0 +1,18 @@
+{
+  "captured_at_local": "2026-11-23T05:11:13+05:30",
+  "host": "MtechDEServer1",
+  "host_ip": "192.168.3.30",
+  "gpu_name": "Tesla V100-PCIE-32GB",
+  "gpu_used_mib": 4,
+  "gpu_free_mib": 32497,
+  "campaign_processes": [],
+  "campaign_sessions": "Relevant A-G and FedQCL tmux panes remained dead; no matching CAFCL/FedQCL process; no compute PIDs.",
+  "host_ram_available_gib": 95,
+  "swap_used_gib": 0.72,
+  "root_available_bytes": 0,
+  "dev_shm_available_gib": 38,
+  "result_mount": "/dev/shm/cafcl-kakarot-results-fresh",
+  "mount_cache_observation": "17 objects, 17 in use, 17 to upload, 4 uploading, total 6.622 GiB at 05:11:12; same counts/size as 05:00, 05:05. No ERROR/EIO/ENOSPC lines appeared in tail search; filesystem/cache is not demonstrably advancing.",
+  "attempt05_terminal_audit": "B_recur_gap_5_seed0 attempt_05 scheduler PID 35754 absent, scheduler state exit_code=1 and needs_audit; direct Kakarot remote listing shows status running, metrics rounds 0-4, sync_001..003 and checkpoints, no worker.log, no terminal summary or wrapper status. Remote listing lacks terminal evidence.",
+  "launch_decision": "Do not retry through the existing mount until its backlog is reconciled and storage path repaired. Mtech GPU has ample VRAM for four 6186-MiB peaks plus 1024-MiB aggregate margin, but result durability is currently unverified."
+}

@@ -1,0 +1,88 @@
+{
+  "created_local": "2026-11-23T00:16:00+05:30",
+  "input_manifest": "audit_snapshots/mtech_ag_retry_relocation_manifest_20261123_0030.json",
+  "input_manifest_sha256": "503ac899239b6e967eea53bbcf3e9d7e24b5dc35f301564c3b5f03d91e934480",
+  "launch": {
+    "aggregate_margin_mib": 1024,
+    "captured_local": "2026-11-23T00:33:50+05:30",
+    "expected_peak_mib_per_worker": 6186,
+    "host": "MtechDEServer1",
+    "output_mount": "/dev/shm/cafcl-kakarot-results-fresh",
+    "prelaunch_free_vram_mib": 32497,
+    "queued_validated_retries": 11,
+    "scheduler_state": "/dev/shm/cafcl-ag-recovery/mtech_ag_vram_scheduler_state.json",
+    "tmux_session": "cafcl-mtech-ag-retries-20261123",
+    "worker_status_files": "all five reported running at first sample; training stability check pending",
+    "workers": [
+      {
+        "attempt_id": "attempt_03",
+        "cell_id": "B_recur_gap_15_seed0",
+        "pid": 32289,
+        "run_id": "B_recur_gap_15__attempt_03"
+      },
+      {
+        "attempt_id": "attempt_03",
+        "cell_id": "C_hidden_10_seed0",
+        "pid": 32293,
+        "run_id": "C_hidden_10__attempt_03"
+      },
+      {
+        "attempt_id": "attempt_03",
+        "cell_id": "C_hidden_1_seed0",
+        "pid": 32297,
+        "run_id": "C_hidden_1__attempt_03"
+      },
+      {
+        "attempt_id": "attempt_03",
+        "cell_id": "C_hidden_3_seed0",
+        "pid": 32301,
+        "run_id": "C_hidden_3__attempt_03"
+      },
+      {
+        "attempt_id": "attempt_03",
+        "cell_id": "C_hidden_5_seed0",
+        "pid": 32308,
+        "run_id": "C_hidden_5__attempt_03"
+      }
+    ]
+  },
+  "old_mount": "preserved; prior FUSE-cached C_hidden_10 run_id mismatch remains isolated in old mount",
+  "output_dirs": "16 unique attempt_03/run paths; all were absent or empty before dispatch",
+  "output_mount": "/dev/shm/cafcl-kakarot-results-fresh",
+  "preflight": "all 16 run IDs, seed 0, output paths, and runtime validation SHA-256 values match the dispatch queue",
+  "preflight_observation": {
+    "first_mount_finding": "Mtech FUSE-cached C_hidden_10 spec had mismatched run_id and was rejected before launch",
+    "input_repair": "All 16 plan inputs copied from central checksum-verified specs into Mtech /dev/shm; output paths remain on central mount",
+    "mtech_pid": 30866,
+    "observed_at_local": "2026-11-23T00:23:06+05:30",
+    "state": "scheduler preflight process alive in FUSE request wait while checking isolated output directories; no workers admitted"
+  },
+  "preflight_success": {
+    "captured_local": "2026-11-23T00:30:55+05:30",
+    "host": "MtechDEServer1",
+    "output_directories_empty": true,
+    "runtime_plan_checksums_match": true,
+    "source": "Mtech pinned Python 3.12 scheduler --preflight-only returned exit 0",
+    "validated_jobs": 16
+  },
+  "queue_path": "remote_results/mtech/independent_ablation_A_G/recovery/AG_retry_dispatch_queue_20261122_2135.json",
+  "queue_sha256": "66cbdaea557be97a5ac178bede838c274c686071da72265cc6733c12fd611828",
+  "remote_runner": "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py",
+  "remote_runner_sha256": "ca32523ce5cde93a159d8d3fdb0b8c745f973c6ad1523972f20949b3c69f085f",
+  "scheduler_path": "remote_results/tools/mtech_ag_vram_scheduler.py",
+  "scheduler_sha256": "c22abc6094972863f9fd4f5a846621883197660895a46d47da2ab4d3f44b896f",
+  "spec_bundle": "audit_snapshots/mtech_ag_retry_relocated_specs_20261123_0030.tar.gz",
+  "spec_bundle_sha256": "0351a2dc3c0108f5f8d037bf207a4e66f6f40f49db4aae9652ed9da378bc8296",
+  "status": "launched",
+  "suite": "independent_ablation_A_G",
+  "transformed_queue": "audit_snapshots/mtech_ag_retry_queue_relocated_20261123_0030.json",
+  "transformed_queue_sha256": "2eb6ff19924d1b82a234b14f15d4bda059b5846198760b43311247bd6664cf4a",
+  "validated_retry_specs": 16,
+  "vram_admission": {
+    "admission_source": "measured nvidia-smi free VRAM; active workers reserve expected peak until reflected in observed per-PID allocation",
+    "aggregate_margin_mib": 1024,
+    "formula": "measured free VRAM - outstanding reservations >= 6186 MiB + 1024 MiB",
+    "observed_sample_before_dispatch_mib": 32497,
+    "peak_mib_per_worker": 6186
+  }
+}

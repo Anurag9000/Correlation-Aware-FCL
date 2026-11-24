@@ -1,0 +1,19 @@
+{
+  "created_at_local": "2026-11-23T02:47:44+05:30",
+  "deployed_at_local": "2026-11-23T02:54:42+05:30",
+  "design_unchanged": true,
+  "launch_state": "script deployed to V100 tmpfs; controller not started because /run backing space is below the 4 GiB startup floor",
+  "previous_script": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v5/vram_scheduler_v5.py",
+  "previous_sha256": "3ea6c439fc022b1146396166b5d34e35cd26f2e71c1ad02977d791bf73e3fbe6",
+  "remote_sha256_verified": "ab344217eecc22503f5b1ee73000cad0a1a4fbbae4a0f9d233e35dceb0d0e954",
+  "remote_tmpfs_path": "/dev/shm/cafcl-tools/cafcl-vram-scheduler-v6-20261123.py",
+  "repaired_script": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v5/vram_scheduler_v6.py",
+  "repaired_sha256": "ab344217eecc22503f5b1ee73000cad0a1a4fbbae4a0f9d233e35dceb0d0e954",
+  "repairs": [
+    "sets CAFCL_VRAM_BROKER_ADMITTED=1 to bypass nested broker since outer scheduler already performs VRAM admission",
+    "moves HOME, XDG, TorchInductor, matplotlib, and torch caches to the configured tmpfs directory",
+    "requires at least 4 GiB backing tmpfs headroom before resume and reserves 2 GiB per active worker plus a 2 GiB floor before further admissions",
+    "checks worker_status PID before retrying an apparently exited controller process, refusing duplicate launch if detached worker remains live"
+  ],
+  "validation": "AST parse succeeded; no experiment was launched with this revision yet"
+}

@@ -1,0 +1,46 @@
+nohup: ignoring input
+{"event": "admitted", "run_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0", "worker_pid": 482408, "estimate_mib": 6184, "margin_mib": 1024, "prelaunch_free_vram_mib": 21178, "other_outstanding_reservations_mib": 6184, "admitted_at_epoch": 1795359954.5417747, "command": ["env", "HOME=/dev/shm/cafcl-home", "TMPDIR=/dev/shm/cafcl-tmp", "XDG_CACHE_HOME=/dev/shm/cafcl-cache", "TORCHINDUCTOR_CACHE_DIR=/dev/shm/cafcl-cache/inductor", "PYTHONDONTWRITEBYTECODE=1", "CAFCL_VRAM_BROKER_ADMITTED=1", "CAFCL_SOURCE_DIR=/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/source_variants/classil_src", "PYTHONPATH=/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/source_variants/classil_src/src", "OMP_NUM_THREADS=1", "MKL_NUM_THREADS=1", "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/bin/python", "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/scripts/run_v25_offline_epoch_grid.py", "--worker", "--setting", "class_il", "--curriculum", "joint", "--offline-count", "2", "--epochs", "1", "--job-id", "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0", "--block-id", "block_04_CLASS_IL_JOINT_offline0to3_ep1", "--output-dir", "/dev/shm/cafcl-kakarot-results/v100/v25_offline_epoch_grid_20261122_v2/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_01"], "reservation_file": "/dev/shm/cafcl-broker-home/.cache/cafcl-vram-broker/reservations/V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0.482398.reservation.json", "status": "running"}
+Matplotlib is building the font cache; this may take a moment.
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 1/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 2/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 3/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 4/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 5/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 6/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 7/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 8/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 9/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 10/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 11/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 12/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 13/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 14/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 15/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 16/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 17/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 18/21 acc=deferred forgetting=deferred clients=3
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 850, in save
+    _save(
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1090, in _save
+OSError: [Errno 28] No space left on device
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/dev/shm/cafcl-tools/vram_broker.py", line 198, in main
+    atomic_json(TERMINAL / f"{args.run_id}.{child.pid}.json", current)
+  File "/dev/shm/cafcl-tools/vram_broker.py", line 24, in atomic_json
+    tmp.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n")
+  File "/opt/anaconda3/lib/python3.7/pathlib.py", line 1219, in write_text
+    return f.write(data)
+OSError: [Errno 28] No space left on device
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/dev/shm/cafcl-tools/vram_broker.py", line 208, in <module>
+    raise SystemExit(main())
+  File "/dev/shm/cafcl-tools/vram_broker.py", line 202, in main
+    reservation.unlink(missing_ok=True)
+TypeError: unlink() got an unexpected keyword argument 'missing_ok'

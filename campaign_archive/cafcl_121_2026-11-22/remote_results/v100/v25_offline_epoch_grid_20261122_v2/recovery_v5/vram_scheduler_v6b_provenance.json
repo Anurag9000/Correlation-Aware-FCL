@@ -1,0 +1,22 @@
+{
+  "changes": [
+    "reduces independent storage reserve floor to 1 GiB and per-active-worker cache reserve to 1.5 GiB, based on observed 0.9 GiB checkpoint_latest files; supports two V100 workers at the observed 4.5 GiB backing free while keeping a 1 GiB floor"
+  ],
+  "controller_session": "cafcl-v100-recovery-v6b-20261123",
+  "created_at_local": "2026-11-23T03:20:29+05:30",
+  "design_unchanged": true,
+  "launch_evidence": "manifest showed 13 completed/33 queued/2 running; PIDs 493960 and 493964, each 5152 MiB; total free VRAM 11170 MiB at 03:22:28",
+  "launch_state": "running_on_v100",
+  "launched_at_local": "2026-11-23T03:21:52+05:30",
+  "launched_cells": {
+    "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0": "attempt_20",
+    "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0": "attempt_15"
+  },
+  "previous_repaired_script": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v5/vram_scheduler_v6.py",
+  "previous_sha256": "ab344217eecc22503f5b1ee73000cad0a1a4fbbae4a0f9d233e35dceb0d0e954",
+  "prior_repairs_retained": true,
+  "progress_validation": "pending next observation after 5 minutes",
+  "repaired_script": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v5/vram_scheduler_v6b.py",
+  "repaired_sha256": "23fb9af857de9d5659459dee36ceb11c37d77a3834b1e8f56632a07a595cb3e5",
+  "validation": "AST parse succeeded; not yet launched"
+}

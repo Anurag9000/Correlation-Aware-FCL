@@ -1,0 +1,34 @@
+{
+  "active_attempt_record": "offline1 attempt_19 PID 492937; worker_status PID493002, both process-absent at follow-up",
+  "active_campaign_worker_pids": [],
+  "campaign_controller_sessions": [],
+  "captured_at_local": "2026-11-23T02:44:24+05:30",
+  "controller_action": "campaign scheduler exited; no workers or controller remain at 02:44 follow-up; no worker PID was signaled by recovery action",
+  "duplicate_retry_evidence": "attempt17/18 for offline1 and attempt13/14 for offline2 overlapped; four detached workers each held 5152 MiB at 02:42 then all disappeared; v5 retried because parent broker exited",
+  "failed_attempts": {
+    "offline1": [
+      "attempt_17",
+      "attempt_18",
+      "attempt_19"
+    ],
+    "offline2": [
+      "attempt_13",
+      "attempt_14"
+    ]
+  },
+  "failure_evidence": "ENOSPC on /home/anurag24092/.cache/cafcl-vram-broker/reservations and /run FUSE status writes; direct-copied logs verified by SHA-256",
+  "gpu_free_mib": 21178,
+  "gpu_name": "Tesla V100-PCIE-32GB",
+  "gpu_total_mib": 32768,
+  "gpu_used_mib": 11322,
+  "host": "V100-server",
+  "launch_decision": "paused retries pending scheduler repair and restored writable storage; root and run tmpfs both full",
+  "recovery_v5_manifest_counts": {
+    "completed": 13,
+    "queued": 34,
+    "running": 1
+  },
+  "recovery_v5_manifest_status": "running_stale",
+  "root_available_bytes": 0,
+  "run_user_1027_available_bytes": 57344
+}

@@ -1,0 +1,39 @@
+{
+  "aggregator": "fedavg",
+  "batch_size": 64,
+  "classes_per_task": 2,
+  "dataset": "cifar100",
+  "displaced_task_classes": [
+    60,
+    61
+  ],
+  "epochs_per_task": 10,
+  "family": "B",
+  "learning_setting": "task_il",
+  "learning_syncs": 18,
+  "lr": 0.03,
+  "matched_task_multiset": true,
+  "memory_per_class": 50,
+  "method": "replay",
+  "momentum": 0.9,
+  "num_clients": 5,
+  "optimizer_state_policy": "persist",
+  "participation": "full",
+  "recurrence_gap_syncs": 5,
+  "recurrence_return_sync": 7,
+  "replay_ratio": 1.0,
+  "replay_reservoir_fraction": 0.1111111111111111,
+  "replay_update_policy": "sampled_mixed",
+  "run_id": "B_recur_gap_5_seed0",
+  "schedule_rule": "swap target recurrence into requested slot; move displaced task to learning sync 11",
+  "seed": 0,
+  "swap_sync_zero_based": 10,
+  "sync_boundary": "after_complete_client_task",
+  "target_task_classes": [
+    0,
+    1
+  ],
+  "terminal_flush": "communication_only",
+  "training_augmentation": "cifar_crop_flip",
+  "weight_decay": 0.0005
+}

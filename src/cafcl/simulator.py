@@ -26,11 +26,86 @@ from .causal import aggregation_leave_one_out,aggregation_subset_report
 from collections import Counter
 from .diagnostics import (diagnostic_gradient_relationships,
     class_gradient_representations, arrived_feature_means, pairwise_vector_cosines)
+from .task_ids import task_instance_id
 
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v23_chain20_random_offline_parallel5'
+PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay'
+
+def protocol_version_for(cfg):
+    suffix=[]
+    if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
+    if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
+    if cfg.stream_partial_batch_policy!='include_padding':suffix.append('streampartial_'+cfg.stream_partial_batch_policy)
+    if cfg.replay_padding_policy!='repeat_chunk':suffix.append('replaypad_'+cfg.replay_padding_policy)
+    return PROTOCOL_VERSION + (('_'+'_'.join(suffix)) if suffix else '')
+
+
+def _normalize_saved_config(config):
+    """Migrate config fields whose new defaults preserve old semantics."""
+    normalized=dict(config)
+    normalized.setdefault('replay_buffer_order_policy','archive_order')
+    normalized.setdefault('replay_update_policy','exhaustive')
+    for k,v in (('replay_padding_policy','repeat_chunk'),('stream_partial_batch_policy','include_padding'),('stream_sync_every_batch',False)):normalized.setdefault(k,v)
+    return normalized   # legacy defaults
+
+
+def _assign_task_ids(scenario,bank,cfg):
+    """Give every client task occurrence a unique head ID and label map."""
+    from collections import defaultdict
+    task_class_map={}
+    task_first_round={}
+    arrivals=list(scenario.arrivals)
+    if cfg.stream_protocol:
+        assigned=[]
+        for arrival in arrivals:
+            if not arrival.labels:continue
+            classes=tuple(sorted(set(map(int,arrival.labels))))
+            task_id=(arrival.task_id or task_instance_id(
+                arrival.client_id,arrival.round_id,arrival.stage,classes))
+            task_class_map[task_id]=classes
+            task_first_round[task_id]=min(task_first_round.get(task_id,int(arrival.round_id)),
+                                          int(arrival.round_id))
+            assigned.append(replace(arrival,task_id=task_id))
+        arrivals=assigned
+    else:
+        groups=defaultdict(list)
+        for position,arrival in enumerate(arrivals):
+            groups[(int(arrival.round_id),int(arrival.client_id))].append((position,arrival))
+        assigned=[None]*len(arrivals)
+        for (round_id,client_id),events in sorted(groups.items()):
+            ordered=sorted(events,key=lambda item:(int(item[1].stage),item[1].labels,
+                                                   item[1].indices[:1]))
+            for ordinal,start in enumerate(range(0,len(ordered),2)):
+                pair=ordered[start:start+2]
+                classes=tuple(sorted({int(cls) for _,event in pair for cls in event.labels}))
+                if len(classes)<2 and cfg.class_pair_protocol=='strict':
+                    raise ValueError(f'Task-IL replay provenance contains singleton task {classes}')
+                task_id=task_instance_id(client_id,round_id,ordinal,classes)
+                task_class_map[task_id]=classes
+                task_first_round[task_id]=min(task_first_round.get(task_id,round_id),round_id)
+                for position,event in pair:
+                    assigned[position]=replace(event,task_id=task_id)
+        arrivals=assigned
+    annotated=replace(scenario,arrivals=arrivals)
+    provenance=defaultdict(set)
+    for arrival in arrivals:
+        if not arrival.task_id:continue
+        for index in arrival.indices:
+            provenance[int(index)].add(arrival.task_id)
+    return (annotated,{index:tuple(sorted(tasks)) for index,tasks in provenance.items()},
+            task_class_map,task_first_round)
+
+
+def _integrated_task_class_sets(task_ids_by_index, acknowledged_train_indices,
+                                task_class_map):
+    """Return unique task heads represented by server-acknowledged examples."""
+    if task_ids_by_index is None:return {}
+    ids={task_id
+        for index in acknowledged_train_indices
+        for task_id in task_ids_by_index.get(int(index),())}
+    return {task_id:task_class_map[task_id] for task_id in sorted(ids)}
 
 
 def _classwise_fedavg_contribution(uploads):
@@ -134,9 +209,11 @@ def anchored_upload(client, global_state, *, current_version=None):
             candidate[key]=gv.detach().cpu().clone() if stale else lv.detach().cpu().clone()
     if not check_finite(candidate):
         raise RuntimeError('Nonfinite accumulated client update')
+    task_head_examples=dict(client.pending_task_head_examples)
     return {'weights':candidate,'examples':client.pending_upload_examples,
             'class_counts':dict(client.pending_upload_class_counts),
             'class_update_steps':dict(client.pending_class_update_steps),
+            'task_head_examples':task_head_examples,
             'accumulated_steps':client.pending_upload_steps,
             'accumulated_classes':sorted(client.pending_upload_classes),
             'anchor_version':client.model_version,
@@ -162,6 +239,32 @@ def _guard_single_stale_terminal_flush(candidate, base, uploads, cfg, *, termina
     if not check_finite(guarded):
         raise RuntimeError('Nonfinite terminal stale-update guard result')
     return guarded,scale
+
+
+def _merge_task_heads_fedavg(updates,base,candidate):
+    # Average each task head only across clients that trained that head.
+    import re
+    out={k:v.clone() for k,v in candidate.items()}
+    head_pattern=re.compile(r'^classifier\.heads\.(task_[A-Za-z0-9_]+)\.')
+    heads=sorted({m.group(1) for key in base if (m:=head_pattern.match(key))})
+    for head in heads:
+        contributors=[u for u in updates if float(u.get('task_head_examples',{}).get(head,0.))>0]
+        prefix=f'classifier.heads.{head}.'
+        keys=[key for key in base if key.startswith(prefix)]
+        if not contributors:
+            for key in keys:out[key]=base[key].clone()
+            continue
+        denom=sum(float(u['task_head_examples'][head]) for u in contributors)
+        if denom<=0:continue
+        for key in keys:
+            if base[key].is_floating_point():
+                value=sum((u['weights'][key].to(torch.float64)*float(u['task_head_examples'][head])
+                           for u in contributors),torch.zeros_like(base[key],dtype=torch.float64))
+                out[key]=(value/denom).to(base[key].dtype)
+            else:
+                chosen=max(contributors,key=lambda u:float(u['task_head_examples'][head]))
+                out[key]=chosen['weights'][key].clone()
+    return out
 
 
 def aggregate(updates,base,method,*,clients=None,round_id=0,old_gradient=None,class_history_counts=None,source_method=None):
@@ -307,7 +410,7 @@ def server_optimizer_step(base,mean,method,cfg,state):
 def save_round_state(path,cfg,round_id,global_state,version,clients,observed,peak,
                      integrated,history,rng,server_optimizer_state,server_class_update_counts=None,server_cl_state=None):
     """Durable full-state checkpoint for exact logical-round resumption."""
-    payload={'config':cfg.to_dict(),'protocol_version':PROTOCOL_VERSION,'last_completed_round':round_id,
+    payload={'config':cfg.to_dict(),'protocol_version':protocol_version_for(cfg),'last_completed_round':round_id,
              'global_state':global_state,'version':version,
              'clients':{cid:asdict(s) for cid,s in clients.items()},
              'observed':observed,'peak':peak,'integrated':integrated,
@@ -336,7 +439,7 @@ def atomic_json(path,obj):
 def save_checkpoint(path,weights,cfg,version,states=None,full_state=False,server_cl_state=None):
     path=Path(path)
     tmp=path.with_suffix(path.suffix+'.tmp')
-    payload={'model_state':weights,'model_version':version,'protocol_version':PROTOCOL_VERSION,
+    payload={'model_state':weights,'model_version':version,'protocol_version':protocol_version_for(cfg),
              'configuration':cfg.to_dict()}
     if full_state:
         payload['clients']={cid:asdict(s) for cid,s in states.items()}
@@ -358,7 +461,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
     if status_file.exists():
         old=json.loads(status_file.read_text())
         if old.get('status')=='completed':
-            if old.get('protocol_version')!=PROTOCOL_VERSION:
+            if old.get('protocol_version')!=protocol_version_for(cfg):
                 raise RuntimeError('Completed run uses incompatible local-training protocol; use a new output root')
             normalized_config=json.loads(json.dumps(cfg.to_dict(),default=str))
             if not config_file.exists() or json.loads(config_file.read_text())!=normalized_config:
@@ -372,7 +475,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     run_dir,json.loads((run_dir/'metrics.json').read_text()))
             return {'status':'already_completed','run_dir':str(run_dir)}
     atomic_json(config_file,cfg.to_dict())
-    atomic_json(status_file,{'status':'running','protocol_version':PROTOCOL_VERSION,'started_at':time.time()})
+    atomic_json(status_file,{'status':'running','protocol_version':protocol_version_for(cfg),'started_at':time.time()})
     try:
         # Stable independent randomness for independent processes.
         random.seed(cfg.seed);np.random.seed(cfg.seed);torch.manual_seed(cfg.seed)
@@ -381,13 +484,24 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         bank=get_data_bank(cfg.dataset,data_root,download=download,seed=cfg.seed,class_subset=cfg.class_subset)
         scenario=(compile_stream_scenario(bank,cfg) if cfg.stream_protocol
                   else compile_scenario(bank,cfg))
+        if cfg.learning_setting=='task_il':
+            (scenario,task_ids_by_index,task_class_map,
+             task_head_first_round)=_assign_task_ids(scenario,bank,cfg)
+            task_class_sets=task_class_map
+        else:
+            task_ids_by_index=None;task_class_map={};task_head_first_round={}
+            task_class_sets=None
+        if cfg.learning_setting=='task_il' and not task_class_sets:
+            raise RuntimeError('Task-IL scenario has no task heads')
         torch.save({'arrivals':[asdict(a) for a in scenario.arrivals],
                     'stages':scenario.stages,
                     'original_labels':bank.original_labels,
+                    'task_ids_by_training_index':task_ids_by_index,
+                    'task_id_to_classes':task_class_map,
                     'duplicated_training_samples':scenario.duplicate_sample_ids,
                     'unused_training_samples':scenario.unused_sample_ids},run_dir/'scenario.pt')
         clients={cid:LocalState(cid) for cid in range(cfg.num_clients)}
-        model=create_model(cfg.model,bank.num_classes,allow_test_model=(cfg.dataset=='synthetic')).to(device)
+        model=create_model(cfg.model,bank.num_classes,allow_test_model=(cfg.dataset=='synthetic'),task_class_sets=task_class_sets).to(device)
         backbone_description=getattr(model,'backbone_description',{'test_only':True})
         if cfg.dataset=='cifar100':
             # All clients and the server start from the identical configured
@@ -419,7 +533,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            (latest_checkpoint if cfg.resume and latest_checkpoint.exists() else None))
         if source_checkpoint is not None:
             saved=torch.load(source_checkpoint,map_location='cpu',weights_only=False)
-            if saved.get('protocol_version')!=PROTOCOL_VERSION:
+            if saved.get('protocol_version')!=protocol_version_for(cfg):
                 raise RuntimeError('Cannot resume or fork a checkpoint from an incompatible training protocol')
             if fork_from_checkpoint:
                 # Forks may only change the participation intervention and
@@ -427,12 +541,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 allowed={'job_id','force_target','target_client','intervention_round',
                          'causal_diagnostics','gradient_diagnostics','checkpoint_every',
                          'fork_source_job','fork_checkpoint_round'}
-                old={k:v for k,v in saved['config'].items() if k not in allowed}
+                old={k:v for k,v in _normalize_saved_config(saved['config']).items()
+                     if k not in allowed}
                 new={k:v for k,v in cfg.to_dict().items() if k not in allowed}
                 if old!=new:
                     changed=[k for k in old if old[k]!=new.get(k)]
                     raise RuntimeError(f'Fork changes confounded settings: {changed}')
-            elif saved['config']!=cfg.to_dict():
+            elif _normalize_saved_config(saved['config'])!=cfg.to_dict():
                 raise RuntimeError('Resumption configuration does not match saved checkpoint')
             first_round=int(saved['last_completed_round'])+1
             global_state=saved['global_state'];version=saved['version']
@@ -458,11 +573,15 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         # The global server remains a sixth, separately held model object.
         # A single-GPU pilot launches two independent simulations as two
         # simultaneous processes; each process retains five client models.
-        client_runtimes=create_client_runtimes(cfg,bank,clients,device)
+        client_runtimes=create_client_runtimes(cfg,bank,clients,device,task_class_sets)
         client_executor=ThreadPoolExecutor(
             max_workers=(cfg.client_training_concurrency or cfg.num_clients),
             thread_name_prefix='fcl-client')
         for round_id in range(first_round,total_rounds):
+            active_task_ids=tuple(sorted(head for head,first in task_head_first_round.items()
+                                          if first<=round_id))
+            active_task_sets={task_id:task_class_map[task_id]
+                              for task_id in active_task_ids}
             round_start=time.monotonic()
             if (cfg.method=='native_lga' and round_id==1
                     and server_cl_state.native_lga_radius is None):
@@ -483,7 +602,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 if cfg.stream_protocol:
                     new_events[arrival.client_id].append({
                         'indices':list(map(int,arrival.indices)),
+                        'padding_indices':list(map(int,arrival.padding_indices)),
                         'class_ids':tuple(map(int,arrival.labels)),
+                        'task_id':arrival.task_id,
                         'global_stage':int(arrival.stage),
                         'is_recurrence':bool(arrival.recurrence)})
                     observed.update(arrival.labels)
@@ -494,6 +615,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     if ids:
                         new_events[arrival.client_id].append({
                             'indices':ids,'class_id':int(cls),
+                            'task_id':arrival.task_id,
                             'global_stage':int(arrival.stage),
                             'is_recurrence':bool(arrival.recurrence)})
                 # Global test exposure is independent of participation, and
@@ -512,7 +634,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     runtimes=client_runtimes,executor=client_executor,
                     clients=clients,bank=bank,cfg=cfg,device=device,
                     round_id=round_id,current_stage=current_stage,
-                    scenario=scenario,new_events=new_events))
+                    scenario=scenario,new_events=new_events,
+                    known_task_sets=active_task_ids,
+                    task_ids_by_index=task_ids_by_index))
             class_relationships=None
             if cfg.selector in {'feature_max','feature_min','gradient_align','gradient_conflict'}:
                 # Simulation-privileged: historical data that have *arrived*,
@@ -603,7 +727,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 pre_aggregation_metrics,_=evaluate(model,evaluation_bank,observed,cfg.batch_size,
                                                     device,peak.copy(),integrated=integrated,
                                                     old=old,new=new,
-                                                    task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                                                    task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,
                                                     split='validation',feat_ecc=(server_cl_state.feat_ecc if cfg.method=='native_feat' else None))
             if accepted and cfg.representation_diagnostics and old:
                 model.load_state_dict(global_state)
@@ -624,10 +748,16 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 mean=aggregate(accepted,global_state,cfg.aggregator,
                                clients=clients,round_id=round_id,old_gradient=old_gradient,
                                class_history_counts=server_cl_state.class_sample_exposure,
-                               source_method=(cfg.method if cfg.method in {'native_glfc','native_lga','native_feat'} else
+                               source_method=(None if cfg.learning_setting=='task_il' else cfg.method if cfg.method in {'native_glfc','native_lga','native_feat'} else
                                               'fedclass_resnet8' if cfg.model=='fedclass_resnet8' else None))
                 candidate,new_server_state=server_optimizer_step(
                     global_state,mean,cfg.aggregator,cfg,server_optimizer_state)
+                if cfg.learning_setting=='task_il' and cfg.aggregator=='fedavg':
+                    # The per-head contributor average is the Task-IL form of
+                    # canonical FedAvg. Do not apply it after FedAdam/FedAvgM
+                    # or a custom server rule: doing so would erase that
+                    # aggregator's head update and momentum/adaptive state.
+                    candidate=_merge_task_heads_fedavg(accepted,global_state,candidate)
                 is_terminal_flush=bool(cfg.stream_protocol and cfg.stream_terminal_flush and round_id==total_rounds-1)
                 candidate,terminal_stale_scale=_guard_single_stale_terminal_flush(
                     candidate,global_state,accepted,cfg,terminal_flush=is_terminal_flush)
@@ -636,7 +766,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 custom_head_fusion=bool(cfg.classwise_head_merge and cfg.aggregator in
                     {'class_balanced','inverse_participation','conflict_aware',
                      'conflict_projection','retention_aware'})
-                if custom_head_fusion:
+                if custom_head_fusion and cfg.learning_setting!='task_il':
                     candidate=classwise_merge(global_state,candidate,accepted,
                         server_class_update_counts,classifier_parameter_names(model),
                         method=cfg.aggregator)
@@ -649,7 +779,8 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 # the model/state acknowledgement; inactive clients are untouched.
                 if cfg.share_continual_state:
                     server_cl_state.merge_clients([clients[u['client_id']] for u in accepted],
-                        bank,cfg.method,candidate,version+1)
+                        bank,cfg.method,candidate,version+1,
+                        task_ids_by_index=task_ids_by_index)
                     if cfg.method in {'native_glfc','native_lga'}:
                         # Execute original source proxy inversion, monitor,
                         # and model_back on accepted gradients only.
@@ -684,15 +815,6 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                         server_cl_state.broadcast_to(
                             clients[cid],clients[cid].last_learning_method or cfg.method)
                         server_cl_state.assert_complete_download(clients[cid])
-            if cfg.share_continual_state:
-                # Shared replay archives reach every client at each sync, even
-                # when its model stays offline/stale. Only selected clients
-                # receive the committed model and optimizer acknowledgement.
-                for cid,client in clients.items():
-                    if cid not in selected:
-                        server_cl_state.broadcast_replay_archive_to(
-                            client,client.last_learning_method or cfg.method)
-                        server_cl_state.assert_replay_archive_complete(client)
             # Capture server-level backbone/head compatibility diagnostics
             # after the commit, without changing any global or local weights.
             aggregation_norm_diagnostics=_normalization_aggregation_diagnostics(
@@ -775,7 +897,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 evaluation_peaks=(peak.copy() if cfg.evaluate_final_only else peak)
                 result,new_eval_peaks=evaluate(model,evaluation_bank,observed,cfg.batch_size,device,evaluation_peaks,
                                      integrated=integrated,old=old,new=new,
-                                     task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                                     task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,
                                      split=('test' if cfg.evaluate_final_only else 'validation'),feat_ecc=(server_cl_state.feat_ecc if cfg.method=='native_feat' else None))
                 if not cfg.evaluate_final_only:
                     peak=new_eval_peaks
@@ -794,22 +916,28 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 validation_report,peak=evaluate(model,evaluation_bank,observed,
                     cfg.batch_size,device,peak=peak,integrated=integrated,
                     old=old,new=new,
-                    task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                    task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,
                     split='validation',feat_ecc=(server_cl_state.feat_ecc if cfg.method=='native_feat' else None))
             per_sync_test,test_peak=evaluate(model,evaluation_bank,observed,
                 cfg.batch_size,device,peak=test_peak,integrated=integrated,
                 old=old,new=new,
-                task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,
                 split='test',feat_ecc=(server_cl_state.feat_ecc if cfg.method=='native_feat' else None))
             # Report the previously defined all-arrived metric AND the
             # accepted-only server capability. Offline unsent classes must
             # never be presented as already learned by the server.
             integrated_test=None
-            if integrated:
+            integrated_task_sets={}
+            if cfg.learning_setting=='task_il':
+                integrated_task_sets=_integrated_task_class_sets(
+                    task_ids_by_index,server_cl_state.acknowledged_train_indices,
+                    task_class_map)
+            if integrated and not (cfg.learning_setting=='task_il' and
+                                   not integrated_task_sets):
                 integrated_test,_=evaluate(model,evaluation_bank,set(integrated),
                     cfg.batch_size,device,peak={},integrated=integrated,
                     old=old,new=new,
-                    task_class_groups=scenario.stages if cfg.learning_setting=='task_il' else None,
+                    task_class_groups=integrated_task_sets if cfg.learning_setting=='task_il' else None,
                     split='test',feat_ecc=(server_cl_state.feat_ecc if cfg.method=='native_feat' else None))
             sync_report=render_sync_report(run_dir,round_number=round_id+1,
                 model_version=version,num_clients=cfg.num_clients,
@@ -820,13 +948,17 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 optimizer=dict(name='sgd',lr=cfg.lr,momentum=cfg.momentum,weight_decay=cfg.weight_decay),
                 classifier_bias=(global_state[classifier_parameter_names(model)[1]]
                                  if classifier_parameter_names(model)[1] is not None else None),
-                integrated_classes=integrated,integrated_metrics=integrated_test)
+                integrated_classes=integrated,integrated_metrics=integrated_test,
+                integrated_task_heads=integrated_task_sets)
             # Used by validation-based selectors and never by the test audit.
             result['selection_validation_per_class']=(
                 validation_report['per_class'] if validation_report else {})
             result['per_sync_test_accuracy']=per_sync_test['accuracy']
             result['per_sync_server_integrated_only_accuracy']=(
                 integrated_test['accuracy'] if integrated_test else None)
+            result['per_sync_server_integrated_task_heads']=[
+                {'task_id':task_id,'classes':list(classes)}
+                for task_id,classes in sorted(integrated_task_sets.items())]
             result['per_sync_pending_classes']=sorted(set(observed)-set(integrated))
             result['per_sync_test_per_class']=per_sync_test['per_class']
             result['per_sync_validation_accuracy']=(
@@ -867,7 +999,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                            'uploaded_since_version':{str(u['client_id']):u['anchor_version'] for u in accepted},
                            'uploaded_accumulated_steps':{str(u['client_id']):u['accumulated_steps'] for u in accepted},
                            'client_unsent_steps':{str(cid):c.pending_upload_steps for cid,c in clients.items()},
-                           'protocol_version':PROTOCOL_VERSION,
+                           'protocol_version':protocol_version_for(cfg),
                            'aggregation_algorithm':cfg.aggregator,
                            'aggregation_family':('stale_delta_damped_bn_safe' if any(u['stale_rebased'] for u in accepted)
                                 else ('uniform_mean_ablation' if cfg.aggregator=='uniform'
@@ -946,13 +1078,13 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     'shared_continual_state':server_cl_state.statistics(),
                     'per_sync_accuracy_report_dir':str(run_dir/'per_sync_accuracy'),
                     'per_sync_report_count':total_rounds})
-        atomic_json(status_file,{'status':'completed','protocol_version':PROTOCOL_VERSION,
+        atomic_json(status_file,{'status':'completed','protocol_version':protocol_version_for(cfg),
                                 'finished_at':time.time(),
                                 'rounds':total_rounds})
         return {'status':'completed','run_dir':str(run_dir),'final_accuracy':history[-1]['accuracy']}
     except Exception as exc:
         if 'client_executor' in locals():
             client_executor.shutdown(wait=True,cancel_futures=True)
-        atomic_json(status_file,{'status':'failed','protocol_version':PROTOCOL_VERSION,
+        atomic_json(status_file,{'status':'failed','protocol_version':protocol_version_for(cfg),
                                   'error':repr(exc),'traceback':traceback.format_exc()})
         raise

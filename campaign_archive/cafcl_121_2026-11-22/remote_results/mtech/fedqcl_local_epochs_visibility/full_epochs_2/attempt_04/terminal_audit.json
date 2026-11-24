@@ -1,0 +1,94 @@
+{
+  "attempt_output_dir": "/home/anurag-basistha/CORRELATION_AWARE_FCL_ABLATIONS_2026-11-22/remote_results/mtech/fedqcl_local_epochs_visibility/full_epochs_2/attempt_04",
+  "cell_id": "full_epochs_2",
+  "classification": "completed_verified_with_metadata_reconciliation",
+  "evidence": {
+    "broker_exit_code": 0,
+    "broker_log_final_event": "finished",
+    "broker_peak_observed_mib": 3678,
+    "broker_prelaunch_free_vram_mib": 32497,
+    "broker_status": "terminal",
+    "cell_design": {
+      "clients": 5,
+      "join_ratio": 1.0,
+      "local_epochs_per_sync": 2,
+      "seed": 42,
+      "tasks": 5,
+      "visibility": "full"
+    },
+    "final_five_task_test_accuracies": [
+      0.408,
+      0.4805,
+      0.514,
+      0.5415,
+      0.606
+    ],
+    "final_mean_task_test_accuracy": 0.51,
+    "global_rounds": 50,
+    "hdf5_datasets": {
+      "rs_test_acc": {
+        "finite_values": 150,
+        "last_five_task_accuracies": [
+          0.408,
+          0.4805,
+          0.514,
+          0.5415,
+          0.606
+        ],
+        "length": 150,
+        "max": 0.61
+      },
+      "rs_test_auc": {
+        "length": 0
+      },
+      "rs_train_loss": {
+        "length": 0
+      }
+    },
+    "result_file": "CIFAR100_NONIID_alpha10.0_clients5_tasks5_FedAvg_cifar100_full_e2_retry4_0.h5",
+    "result_file_sha256": "a4477a930fb8c4c0f06359174f1fe50d50244a47303d4279e82583ebe5bd5324",
+    "result_file_size": 3248,
+    "rounding_basis": "launch -gr 49; source uses global_rounds + 1; source evaluation schedule yields 150 taskwise test records for 5 tasks over 50 rounds",
+    "source": {
+      "hash_limit": "only main.py was recorded in launch receipt; the other current file hashes and pre-run mtimes are retained as reconstructed source evidence",
+      "launch_main_sha256": "219fbb908c2dc763a134f71ce15de6c91e43770effa77b303f8b0aa126c0a80f",
+      "mtech_git_head": "49d709b0227e63198cf0207d94d7016b46f6c476",
+      "mtech_main_sha256_matches_receipt": true,
+      "reconstructed_file_mtimes_before_worker_admission": {
+        "clientavg_tl.py": "2026-11-21 18:07:56 +0530",
+        "main.py": "2026-11-22 20:04:31 +0530",
+        "resnet.py": "2026-11-21 14:17:20 +0530",
+        "serveravg.py": "2026-11-21 22:41:28 +0530",
+        "serverbase.py": "2026-11-21 14:17:20 +0530",
+        "worker_admission": "2026-11-22 20:17:46 +0530"
+      },
+      "relevant_current_hashes": {
+        "clientavg_tl.py": "4e64264aa61060ad506e7fe253ef81d8e6f3ef22409986fb3b677c649be80477",
+        "resnet.py": "ddb927659f6df27b75bfdce7bd7218a6a5a40e1ac95f63065ecac7e0e245b0af",
+        "serveravg.py": "73d8bd18d7b1284e51a63f7c67a9bee709acdb11c735bbeb88af7cd1ff666f6a",
+        "serverbase.py": "9014e27fd4205ad918f1b061426fbf3ff8f2c503e3b99cad514dab699b4c37c2"
+      },
+      "relevant_dirty_files_at_audit": [
+        "system/main.py",
+        "system/flcore/servers/serveravg.py",
+        "system/flcore/clients/clientavg_tl.py"
+      ],
+      "tracked_worktree_was_dirty": true
+    },
+    "worker_log_error_scan": "no CUDA OOM, traceback, or exception marker",
+    "worker_log_sha256": "730ac597c51e1dcbc263a3b92a169b32ef47c4d116ef563ff7b7d8266f1dd221",
+    "worker_log_terminal_marker": "All done!",
+    "wrapper_status_ended_at": "2026-11-22T21:35:15+05:30",
+    "wrapper_status_exit_code": 0
+  },
+  "host": "MtechDEServer1",
+  "interpretation": "The final HDF5 test accuracies are taskwise. Their mean is 51.0%; the last task is 60.6%. The separately logged best single task accuracy is 61.0%, not the final mean.",
+  "launch_attempt_id": "oom_retry4",
+  "ledger_attempt": "attempt_04",
+  "metadata_discrepancies": [
+    "design.json and environment_attempt03.json refer to oom_retry3/attempt03, while launch receipt, broker run_id and generated HDF5 filename identify oom_retry4; command goal string is retry3. The tracked design values still match full visibility, 2 epochs/sync, 5 clients, 5 tasks and seed42.",
+    "PID metadata differs across launch receipt, ledger and broker receipt; completion is correlated by run_id/output filename, exit-0 wrapper and broker, terminal worker log, and matching HDF5 artifact."
+  ],
+  "run_id": "fedqcl_full_e2_retry4",
+  "verified_at": "2026-11-23T19:07:00+05:30"
+}

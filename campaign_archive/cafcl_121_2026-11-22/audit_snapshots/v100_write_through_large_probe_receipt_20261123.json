@@ -1,0 +1,14 @@
+{
+  "created_at_local": "2026-11-23T04:08:01+05:30",
+  "purpose": "validate checkpoint-sized output through V100 mount3 before recovery_v7 launch",
+  "source_host": "V100-server",
+  "source_path": "/dev/shm/cafcl-results3/audit_snapshots/v100_write_through_large_probe_20261123.bin",
+  "destination_host": "Kakarot",
+  "destination_path": "remote_results/audit_snapshots/v100_write_through_large_probe_20261123.bin",
+  "bytes": 943718400,
+  "sha256": "d9830da02180e2223df91e0a6a39e104ac057a4d7dae97ea487678d17aa416be",
+  "mount": "/dev/shm/cafcl-results3",
+  "mode": "rclone VFS writes",
+  "verification": "source SHA-256 observed on V100 at 04:06 IST; destination reached exact size and identical SHA-256 on Kakarot by 04:08 IST",
+  "result": "verified checkpoint-sized write-through path; probe retained as transfer evidence"
+}

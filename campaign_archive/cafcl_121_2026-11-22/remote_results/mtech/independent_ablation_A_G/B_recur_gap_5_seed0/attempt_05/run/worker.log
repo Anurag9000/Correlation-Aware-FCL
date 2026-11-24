@@ -1,0 +1,49 @@
+[CAFCL_B_B_recur_gap_5_seed0__attempt_05] round 1/19 acc=0.5000 forgetting=0.0000 clients=5
+[CAFCL_B_B_recur_gap_5_seed0__attempt_05] round 2/19 acc=0.6060 forgetting=0.0280 clients=5
+[CAFCL_B_B_recur_gap_5_seed0__attempt_05] round 3/19 acc=0.7713 forgetting=0.0453 clients=5
+[CAFCL_B_B_recur_gap_5_seed0__attempt_05] round 4/19 acc=0.8025 forgetting=0.0480 clients=5
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/runtime_baseline_taskil/.venv/lib/python3.12/site-packages/torch/serialization.py", line 850, in save
+    _save(
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/runtime_baseline_taskil/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1114, in _save
+    zip_file.write_record(name, storage, num_bytes)
+RuntimeError: [enforce fail at inline_container.cc:778] . PytorchStreamWriter failed writing file data/4870: file write failed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/runtime_baseline_taskil/src/cafcl/simulator.py", line 1053, in run_experiment
+    save_round_state(latest_checkpoint,cfg,round_id,global_state,version,
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/runtime_baseline_taskil/src/cafcl/simulator.py", line 426, in save_round_state
+    torch.save(payload,tmp);os.replace(tmp,path)
+    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/runtime_baseline_taskil/.venv/lib/python3.12/site-packages/torch/serialization.py", line 849, in save
+    with _open_zipfile_writer(f) as opened_zipfile:
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/runtime_baseline_taskil/.venv/lib/python3.12/site-packages/torch/serialization.py", line 690, in __exit__
+    self.file_like.write_end_of_file()
+RuntimeError: [enforce fail at inline_container.cc:603] . unexpected pos 876337408 vs 876337304
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 192, in worker
+    result=run_experiment(cfg,str(run_dir/'run'),str(runtime_root/'data'),download=False,verbose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/runtime_baseline_taskil/src/cafcl/simulator.py", line 1088, in run_experiment
+    atomic_json(status_file,{'status':'failed','protocol_version':protocol_version_for(cfg),
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/runtime_baseline_taskil/src/cafcl/simulator.py", line 435, in atomic_json
+    with tmp.open('w') as fh:json.dump(obj,fh,indent=2,sort_keys=True,default=str)
+         ^^^^^^^^^^^^^
+  File "/home/anurag24092/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 5] Input/output error: '/dev/shm/cafcl-kakarot-results-fresh/mtech/independent_ablation_A_G/B_recur_gap_5_seed0/attempt_05/run/run/CAFCL_B_B_recur_gap_5_seed0__attempt_05/status.json.35754.tmp'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 323, in <module>
+    if __name__=='__main__':main()
+                            ^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 319, in main

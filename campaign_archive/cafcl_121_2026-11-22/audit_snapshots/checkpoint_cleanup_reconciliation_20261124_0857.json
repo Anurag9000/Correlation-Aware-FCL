@@ -1,0 +1,34 @@
+{
+  "captured_at": "2026-11-24T08:57:00+05:30",
+  "scope": "account-owned model/checkpoint .pt files only; data/scenario .pt files and other users files preserved",
+  "V100-server": {
+    "cleanup_receipt": "/home/anurag24092/checkpoint_cleanup_receipts/20261124_v100_local/receipt.json",
+    "local_filesystem_scope_only": true,
+    "local_owned_pt_inventory_count": 2260,
+    "local_owned_pt_inventory_bytes": 293445339137,
+    "preserved_data_pt_count": 15,
+    "preserved_data_pt_bytes": 6895644,
+    "model_checkpoint_candidates": 2237,
+    "deleted_count": 2236,
+    "deleted_bytes": 292121182039,
+    "delete_failures": 0,
+    "remaining_open_checkpoint_count": 1,
+    "remaining_open_checkpoint_bytes": 1317235566,
+    "remaining_open_checkpoint": "/dev/shm/cafcl-vfs-cache5/vfs/kakarot/v100/v25_offline_epoch_grid_20261122_v2/recovery_v10_dual_v100/runs/V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0/attempt_02/runs/V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0/checkpoint_latest.pt",
+    "reason_preserved": "open by the V100 rclone mount process; path is a VFS cache of Kakarot-mounted results and was excluded from deletion",
+    "disk_after_cleanup": "277 GB available, 93% used",
+    "broader_rclone_mounts_excluded": true
+  },
+  "MtechDEServer1": {
+    "first_pass_receipt": "/home/anurag24092/checkpoint_cleanup_receipts/20261124_mtech/receipt.json",
+    "first_pass_deleted_count": 856,
+    "first_pass_deleted_bytes": 1094604599023,
+    "first_pass_failures": 0,
+    "last_recorded_rescan_remaining_model_named_pt_count": 69,
+    "last_recorded_rescan_remaining_model_named_pt_bytes": 422449754,
+    "current_cleanup": "not completed; B550 and V100 SSH attempts returned Permission denied (publickey,password)",
+    "no_other_users_files_deleted": true
+  },
+  "data_files_retained": true,
+  "other_users_files_retained": true
+}

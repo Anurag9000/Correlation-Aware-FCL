@@ -13,8 +13,8 @@ The launchers are `GLFC/pilot/run.sh`, `LGA/pilot/run.sh`, and
 Both FULL and random-OFFLINE arms launch in separate CUDA:0 processes.
 Five local clients learn in both arms. At each of 20 learning syncs, the
 hidden arm randomly omits one client model upload; all clients continue
-training, and every client receives the complete committed replay archive.
-Only selected clients receive updated model weights. A communication-only
+training from their local model and last received archive. Only selected
+clients receive updated model weights and the current committed replay archive. A communication-only
 terminal flush follows the 20 learning syncs. The class stream is the
 adjacent two-class chain documented in [PRIMARY_PROBE.md](PRIMARY_PROBE.md).
 Each process runs all five clients concurrently (ten client workers across

@@ -1,0 +1,68 @@
+{
+  "created_at_ist": "2026-11-22 07:14:51 IST",
+  "fix": "record schedule_rng_seed=500; no random calls, schedules, task assignments, or syncs changed.",
+  "new_compiler_sha256": "973e99e5c215cac0dd27f9dd61ad93385f9e6c69fe4cc9d8e0979c9fa3c240ba",
+  "old_compiler_sha256": "92cd8f6bca3ebc0b1fc0189c3fe27c27ffb22c034428aa3a9fa69aa243047ef3",
+  "old_v4_plan_metadata_archived": "plans/archive/G_seed_metadata_before_fix",
+  "plans": [
+    {
+      "correct_schedule_rng_seed": 500,
+      "old_recorded_seed": 502,
+      "plan_root": "server_compiled_v4",
+      "run": "width5_overlap_2_seed0",
+      "schedule_sha256": "3ac40057e423b19ad7366305a704dfeed6a63e4a696df90f3652db651ad0f0fd",
+      "schedule_unchanged": true
+    },
+    {
+      "correct_schedule_rng_seed": 500,
+      "old_recorded_seed": 502,
+      "plan_root": "server_compiled_v6",
+      "run": "width5_overlap_2_seed0",
+      "schedule_sha256": "3ac40057e423b19ad7366305a704dfeed6a63e4a696df90f3652db651ad0f0fd",
+      "schedule_unchanged": true
+    },
+    {
+      "correct_schedule_rng_seed": 500,
+      "old_recorded_seed": 503,
+      "plan_root": "server_compiled_v4",
+      "run": "width5_overlap_3_seed0",
+      "schedule_sha256": "d5a63c2f84c64021855adfcd4dacaaea874e9e8d7124327fb9cad4e082313d8b",
+      "schedule_unchanged": true
+    },
+    {
+      "correct_schedule_rng_seed": 500,
+      "old_recorded_seed": 503,
+      "plan_root": "server_compiled_v6",
+      "run": "width5_overlap_3_seed0",
+      "schedule_sha256": "d5a63c2f84c64021855adfcd4dacaaea874e9e8d7124327fb9cad4e082313d8b",
+      "schedule_unchanged": true
+    },
+    {
+      "correct_schedule_rng_seed": 500,
+      "old_recorded_seed": 504,
+      "plan_root": "server_compiled_v4",
+      "run": "width5_overlap_4_seed0",
+      "schedule_sha256": "874097198704115aa53d732009523d360ab2281e89d4300d7259bf50adfa9ccf",
+      "schedule_unchanged": true
+    },
+    {
+      "correct_schedule_rng_seed": 500,
+      "old_recorded_seed": 504,
+      "plan_root": "server_compiled_v6",
+      "run": "width5_overlap_4_seed0",
+      "schedule_sha256": "874097198704115aa53d732009523d360ab2281e89d4300d7259bf50adfa9ccf",
+      "schedule_unchanged": true
+    }
+  ],
+  "reason": "G plan metadata claimed per-level seeds 502/503/504, while compile_g used a single RNG seed 500 for class and client order.",
+  "runner_plan_only_validation": {
+    "all_runner_plan_validated": true,
+    "report": "plans/G_runner_plan_validation_after_metadata_fix.json",
+    "run_ids": [
+      "G_width5_overlap_2_seed0",
+      "G_width5_overlap_3_seed0",
+      "G_width5_overlap_4_seed0"
+    ],
+    "validated_at_local": "2026-11-22 07:28:36 IST"
+  }
+}

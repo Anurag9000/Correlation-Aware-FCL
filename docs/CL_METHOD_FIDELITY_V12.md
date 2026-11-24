@@ -1,6 +1,10 @@
+# Historical class-IL method fidelity audit
+
+This audit describes the pre-Task-IL single-head protocol. New task-head runs change the classifier and evaluation setting; consult TASK_INCREMENTAL_PROTOCOL.md.
+
 > **Post-audit v14 update:** The original-paper descriptions below are historical v12 mechanisms. The active class-IL implementation now uses seen-class supervised CE for non-ER-ACE methods and allows all *known* classifier rows to update. Only future rows remain frozen, and ER-ACE retains asymmetric incoming CE. See [v14 correction ledger](V14_SEEN_CLASS_OPTIMIZATION_AND_SYNC_EVAL.md).
 
-> **Current primary stream:** The stream and federation statements in this dated v12 audit describe the prior method audit. The active primary paired experiment uses the V23 adjacent-chain schedule in [PRIMARY_PROBE.md](PRIMARY_PROBE.md).
+> **Current primary stream:** The stream and federation statements in this dated v12 audit describe the prior method audit. The active primary paired experiment uses the V25 adjacent-chain schedule in [PRIMARY_PROBE.md](PRIMARY_PROBE.md).
 
 # v12: Whole-repository continual-learning method fidelity ledger
 

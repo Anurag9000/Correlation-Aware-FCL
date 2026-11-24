@@ -1,0 +1,62 @@
+{
+  "dispatch_queue": {
+    "expected_peak_mib_per_job": 6186,
+    "jobs": 16,
+    "launches": 0,
+    "margin_mib": 1024,
+    "path": "plans/AG_retry_dispatch_queue_20261122_2135.json",
+    "plan_validation_crosscheck": "16/16 run IDs, output dirs, spec dirs, and hashes match attempt artifacts and authoritative receipt.",
+    "required_free_mib_per_job": 7210,
+    "sha256": "66cbdaea557be97a5ac178bede838c274c686071da72265cc6733c12fd611828"
+  },
+  "ledger_counts": {
+    "completed": 54,
+    "queued": 62,
+    "running": 5
+  },
+  "mtech": {
+    "accounting_note": "Per-PID memory sum exceeds device used-memory total; treat individual values as worker footprint estimates and admit using raw device-free memory only.",
+    "admission_margin_mib": 1024,
+    "all_five_known_pids_live": true,
+    "campaign_pids": {
+      "19997": 3678,
+      "20048": 6184,
+      "20056": 6186,
+      "20569": 6186,
+      "24730": 6184
+    },
+    "dev_shm_available": "5.0G",
+    "dev_shm_use_percent": 93,
+    "device_memory_free_mib": 4077,
+    "device_memory_used_mib": 28424,
+    "device_used_minus_pid_sum_mib": -1994,
+    "gpu": "Tesla V100-PCIE-32GB",
+    "gpu_pid_memory_sum_mib": 30418,
+    "host": "MtechDEServer1",
+    "largest_live_campaign_process_mib": 6186,
+    "ram_available": "29GiB",
+    "required_free_for_next_worker_mib": 7210,
+    "root_available": "0",
+    "root_use_percent": 100,
+    "swap_used": "621MiB"
+  },
+  "observed_at": "2026-11-22T21:34:17+05:30",
+  "route": "Existing B550 codex-v100-link pane to V100; existing b550-hop pane to Mtech; status-only commands",
+  "v100": {
+    "active_rclone_mount_processes": 1,
+    "active_v25_worker_processes": 0,
+    "admission": "Storage and failed uploads prevent safe output writes despite VRAM capacity.",
+    "dev_shm_available": "6.3G",
+    "dev_shm_use_percent": 87,
+    "dev_shm_used": "41G",
+    "error": "checkpoint upload failed: object not found",
+    "gpu_memory_free_mib": 21178,
+    "gpu_memory_used_mib": 11322,
+    "host": "V100-server",
+    "last_mount_log_errors_at": "2026-11-22T21:14:05+05:30",
+    "observed_at": "2026-11-22T21:29:09+05:30",
+    "root_available": "0",
+    "root_use_percent": 100,
+    "vfs_cache_size": "41G"
+  }
+}

@@ -1,4 +1,4 @@
-"""Single class-indexed output layer; local binary tasks and row-wise federation.
+"""Class-indexed compatibility helpers; Task-IL uses independent task heads.
 
 One output row is reserved per canonical dataset class ID. Rows are activated
 by observed class labels; there are no task-specific heads. This preallocated
@@ -10,13 +10,18 @@ import torch.nn.functional as F
 from torch import nn
 
 
-def classifier_parameter_names(model):
+def classifier_parameter_names(model,task_id=None):
     """Return the last 2D affine projection's parameter names.
 
     Frozen upstream methods may implement their linear output head as a
     custom ``nn.Module`` with ``nn.Parameter`` weight/bias fields rather than
     subclassing ``nn.Linear`` (FedCLASS SimpleLinear is one example).
     """
+    classifier=getattr(model,'classifier',None)
+    if hasattr(classifier,'task_classes'):
+        key=classifier._key(task_id)
+        prefix=f'classifier.heads.{key}.'
+        return prefix+'weight',prefix+'bias' if getattr(classifier.heads[key],'bias',None) is not None else None
     found = []
     for name, module in model.named_modules():
         weight = getattr(module, 'weight', None)
@@ -29,6 +34,19 @@ def classifier_parameter_names(model):
     name, layer=found[-1]
     prefix=f'{name}.' if name else ''
     return prefix+'weight', prefix+'bias' if layer.bias is not None else None
+
+
+def task_head_loss(logits,labels,classes):
+    """Cross-entropy in a task head whose columns map to global class IDs."""
+    active=tuple(sorted(set(map(int,classes))))
+    if len(active)!=logits.shape[1]:
+        raise ValueError('Task-head output width does not match its global class map')
+    lookup={c:i for i,c in enumerate(active)}
+    values=labels.detach().cpu().tolist()
+    if not set(map(int,values)).issubset(lookup):
+        raise ValueError('Task labels fall outside the selected task head')
+    local=torch.tensor([lookup[int(v)] for v in values],dtype=torch.long,device=logits.device)
+    return F.cross_entropy(logits,local)
 
 
 def canonical_active_loss(logits, labels, classes):
@@ -57,7 +75,9 @@ def canonical_pair_loss(logits, labels, classes):
 
 
 def freeze_other_class_rows(model, active):
-    """Keep every non-current output row fixed even after CL regularization/projection."""
+    """Protect inactive classes in legacy single-head models."""
+    if hasattr(getattr(model,'classifier',None),'task_classes'):
+        return
     names=classifier_parameter_names(model)
     params=dict(model.named_parameters())
     rows=params[names[0]].shape[0]
@@ -106,7 +126,9 @@ def classwise_merge(base, candidate, uploads, previous_counts, classifier_keys, 
 
 
 def snapshot_frozen_rows(model, active):
-    """Capture inactive class parameters to protect against SGD momentum drift."""
+    """Capture inactive global rows; Task-IL heads have no shared inactive rows."""
+    if hasattr(getattr(model,'classifier',None),'task_classes'):
+        return None
     names=classifier_parameter_names(model)
     params=dict(model.named_parameters())
     mask=torch.ones(params[names[0]].shape[0],dtype=torch.bool,device=params[names[0]].device)
@@ -116,6 +138,7 @@ def snapshot_frozen_rows(model, active):
 
 def restore_frozen_rows(model, optimizer, snapshot):
     """Restore exact row values and remove momentum on inactive outputs."""
+    if snapshot is None:return
     mask,old=snapshot
     params=dict(model.named_parameters())
     with torch.no_grad():

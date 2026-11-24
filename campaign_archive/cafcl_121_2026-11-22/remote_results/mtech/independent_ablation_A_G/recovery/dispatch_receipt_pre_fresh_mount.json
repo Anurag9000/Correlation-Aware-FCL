@@ -1,0 +1,34 @@
+{
+  "created_local": "2026-11-23T00:16:00+05:30",
+  "input_manifest": "audit_snapshots/mtech_ag_retry_input_manifest_20261123_0019.json",
+  "input_manifest_sha256": "bfc7d8da9c93ca36b4983a29e5143998e3d72184c9b8eebbf0ca93a64d120cf2",
+  "output_dirs": "16 unique attempt_03/run paths; all were absent or empty before dispatch",
+  "preflight": "all 16 run IDs, seed 0, output paths, and runtime validation SHA-256 values match the dispatch queue",
+  "preflight_observation": {
+    "first_mount_finding": "Mtech FUSE-cached C_hidden_10 spec had mismatched run_id and was rejected before launch",
+    "input_repair": "All 16 plan inputs copied from central checksum-verified specs into Mtech /dev/shm; output paths remain on central mount",
+    "mtech_pid": 30866,
+    "observed_at_local": "2026-11-23T00:23:06+05:30",
+    "state": "scheduler preflight process alive in FUSE request wait while checking isolated output directories; no workers admitted"
+  },
+  "queue_path": "remote_results/mtech/independent_ablation_A_G/recovery/AG_retry_dispatch_queue_20261122_2135.json",
+  "queue_sha256": "66cbdaea557be97a5ac178bede838c274c686071da72265cc6733c12fd611828",
+  "remote_runner": "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py",
+  "remote_runner_sha256": "ca32523ce5cde93a159d8d3fdb0b8c745f973c6ad1523972f20949b3c69f085f",
+  "scheduler_path": "remote_results/tools/mtech_ag_vram_scheduler.py",
+  "scheduler_sha256": "18eee958ce9d3d5c1bc9dcec4f0aec0f8d2162d55a5edd97d27a25abec242dfa",
+  "spec_bundle": "audit_snapshots/mtech_ag_retry_specs_20261123_0019.tar.gz",
+  "spec_bundle_sha256": "cfb23f10cf52f5a845ac953cddd549e4201e3c75833ba3d272972c2b47206993",
+  "status": "preflight_waiting_on_fuse_output_path",
+  "suite": "independent_ablation_A_G",
+  "transformed_queue": "audit_snapshots/mtech_ag_retry_queue_20261123_0019.json",
+  "transformed_queue_sha256": "9652b175c1a10365ad9337ebb7cf198debf1c54ff337ebfe2df5c13fa2532b00",
+  "validated_retry_specs": 16,
+  "vram_admission": {
+    "admission_source": "measured nvidia-smi free VRAM; active workers reserve expected peak until reflected in observed per-PID allocation",
+    "aggregate_margin_mib": 1024,
+    "formula": "measured free VRAM - outstanding reservations >= 6186 MiB + 1024 MiB",
+    "observed_sample_before_dispatch_mib": 32497,
+    "peak_mib_per_worker": 6186
+  }
+}

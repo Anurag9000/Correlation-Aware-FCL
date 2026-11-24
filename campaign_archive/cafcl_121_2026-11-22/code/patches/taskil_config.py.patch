@@ -1,0 +1,11 @@
+--- original_six_runs/taskil/config.py
++++ independent_ablation/taskil/config.py
+@@ -120,6 +120,8 @@
+     stream_offline_policy: str = "random"  # random or rotate_once (pilot only)
+     stream_sync_every_batch: bool = False
+     stream_partial_batch_policy: str = "include_padding"
++    # Explicit, independently compiled CIFAR-100 schedule for ablation runs.
++    stream_schedule_override: tuple = ()
+     evaluate_final_only: bool = False
+ 
+     def validate(self):

@@ -1,0 +1,300 @@
+{
+  "actual_command": {
+    "arguments_match_validated_plan": true,
+    "interpreter": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/bin/python",
+    "run_receipt": "full_epochs_1_retry1/vram_admission.json",
+    "script": "/home/anurag24092/Projects/FedQCL_Task-v100-transfer-20261124/system/main.py"
+  },
+  "attempt_id": "oom_retry1",
+  "audit_limits": [],
+  "audit_version": 1,
+  "cell_id": "full_epochs_1",
+  "checkpoint_cleanup": {
+    "deleted_after_terminal_verification": true,
+    "path": "/home/anurag24092/Projects/FedQCL_Task-v100-transfer-20261124/campaigns/cifar100_12_local_epoch_runs_20261124_full_epochs_1_retry1_v100/full_epochs_1_retry1/system/dataset/CIFAR100_NONIID_alpha10.0_clients5_tasks5/FedAvg_server.pt",
+    "run_dir_post_cleanup_pt_file_count": 0,
+    "size_bytes": 44962322
+  },
+  "classification": "completed_verified",
+  "configuration": {
+    "V": 200,
+    "algorithm": "FedAvg",
+    "batch_size": 13,
+    "data": "../dataset/CIFAR100_NONIID_alpha10.0_clients5_tasks5",
+    "delta": 1,
+    "global_rounds": 49,
+    "goal": "cifar100_full_e1",
+    "join_ratio": 1.0,
+    "learning_rate": 0.005,
+    "local_epochs": 1,
+    "memory_batch_size": 13,
+    "memory_size": 500,
+    "model": "resnet18",
+    "nb": 20,
+    "num_clients": 5,
+    "seed": 42,
+    "tasks": 5,
+    "times": 1,
+    "visibility": "full"
+  },
+  "dataset": {
+    "file_count": 55,
+    "manifest_sha256": "6d57d05e48bfbbaf7cb96f7c751336b3400893a4e6421fc9a2f8f95f7ecdff48",
+    "size_bytes": 737791350,
+    "task_configs": {
+      "class_sets": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        [
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39
+        ],
+        [
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59
+        ],
+        [
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79
+        ],
+        [
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99
+        ]
+      ],
+      "classes_per_task": 20,
+      "count": 5,
+      "overlap_count": 0,
+      "test_examples_per_client_per_class": 400,
+      "train_examples_per_client_per_class": 2000,
+      "union_class_count": 100,
+      "union_range": [
+        0,
+        99
+      ]
+    },
+    "transfer_check": "55/55 files match; zero mismatches on V100 prelaunch"
+  },
+  "evidence_refs": [
+    "audit_snapshots/fedqcl_full_epochs_1_v100_retry_plan_20261124_110244.json",
+    "full_epochs_1_retry1/vram_admission.json",
+    "full_epochs_1_retry1/result_path_redirect.json",
+    "V100 terminal log and HDF5 inspected in place; exact paths and hashes recorded above"
+  ],
+  "execution": {
+    "all_done_marker_count": 1,
+    "broker_exit_code": 0,
+    "broker_pid": 636468,
+    "broker_status": "terminal",
+    "client_round_pairs": 250,
+    "client_rounds": [
+      0,
+      49
+    ],
+    "client_train_completions": 250,
+    "clients": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "duplicate_client_round_pairs": 0,
+    "error_markers": 0,
+    "evaluation_accuracy_lines": 150,
+    "finished_at_epoch": 1795501282.3104563,
+    "mean_accuracy_lines": 50,
+    "missing_client_round_pairs": 0,
+    "no_oom_or_traceback": true,
+    "peak_worker_vram_mib": 3690,
+    "reported_training_time_seconds": 2706.49,
+    "round_log_count": 50,
+    "round_range": [
+      0,
+      49
+    ],
+    "run_id": "fedqcl_full_epochs_1_oom_retry1_v100_20261124",
+    "server_rounds_expected_and_observed": 50,
+    "start_at": "2026-11-24T11:05:42+05:30",
+    "terminal_snapshots": [
+      {
+        "all_done_markers": 1,
+        "at": "2026-11-24T12:25:38+05:30",
+        "broker_and_worker_pids_absent": true,
+        "log_bytes": 212742,
+        "log_mtime": "2026-11-24T11:51:22.307022812+05:30",
+        "result_sha256": "f49839f503c30964a6060f766f79e703867dd0b1ab5350fa7c548effeb67796e",
+        "round_markers": 50
+      },
+      {
+        "all_done_markers": 1,
+        "at": "2026-11-24T12:26:09+05:30",
+        "broker_and_worker_pids_absent": true,
+        "log_bytes": 212742,
+        "log_mtime": "2026-11-24T11:51:22.307022812+05:30",
+        "result_sha256": "f49839f503c30964a6060f766f79e703867dd0b1ab5350fa7c548effeb67796e",
+        "round_markers": 50
+      }
+    ],
+    "worker_pid": 636473
+  },
+  "host": "v100",
+  "output_path_redirect": {
+    "source_and_target_sha256_equal": true,
+    "source_link": "/home/anurag24092/Projects/FedQCL_Task-v100-transfer-20261124/dataset/CIFAR100_NONIID_alpha10.0_clients5_tasks5_FedAvg_cifar100_full_e1_0.h5",
+    "symlink_target_verified": true,
+    "target_result_path": "/home/anurag24092/Projects/FedQCL_Task-v100-transfer-20261124/campaigns/cifar100_12_local_epoch_runs_20261124_full_epochs_1_retry1_v100/full_epochs_1_retry1/results/CIFAR100_NONIID_alpha10.0_clients5_tasks5_FedAvg_cifar100_full_e1_0.h5",
+    "temporary_symlink_removed_after_verification": true
+  },
+  "result": {
+    "best_single_task_accuracy_percent": 60.15,
+    "empty_auc_and_train_loss_explanation": "Current FedAvg source initializes these arrays and writes them into HDF5 but does not append values; the train-loss append is commented. rs_test_acc is the populated evaluation metric for this run.",
+    "final_accuracy_mean_percent": 47.13,
+    "final_task_accuracy_percent": [
+      32.15,
+      41.3,
+      49.6,
+      52.45,
+      60.15
+    ],
+    "hdf5_datasets": {
+      "rs_test_acc": {
+        "final_five_task_mean": 0.4713,
+        "finite": true,
+        "last_five": [
+          0.3215,
+          0.413,
+          0.496,
+          0.5245,
+          0.6015
+        ],
+        "max": 0.6015,
+        "min": 0.054,
+        "shape": [
+          150
+        ]
+      },
+      "rs_test_auc": {
+        "shape": [
+          0
+        ]
+      },
+      "rs_train_loss": {
+        "shape": [
+          0
+        ]
+      }
+    },
+    "log_bytes": 212742,
+    "log_mtime": "2026-11-24T11:51:22.307022812+05:30",
+    "log_sha256": "83af62ac4d25ce5e59b303b7baa749bf5b56579edc51882f8339c6c3430e0d65",
+    "path": "/home/anurag24092/Projects/FedQCL_Task-v100-transfer-20261124/campaigns/cifar100_12_local_epoch_runs_20261124_full_epochs_1_retry1_v100/full_epochs_1_retry1/results/CIFAR100_NONIID_alpha10.0_clients5_tasks5_FedAvg_cifar100_full_e1_0.h5",
+    "sha256": "f49839f503c30964a6060f766f79e703867dd0b1ab5350fa7c548effeb67796e",
+    "size_bytes": 3248,
+    "stable_across_terminal_samples": true
+  },
+  "source_identity": {
+    "interpretation": "Source bundle and file manifest were verified before launch; current main.py hash still matches. The transferred directory is not itself a Git checkout, so the source HEAD is taken from the prelaunch transfer receipt.",
+    "main_py_expected_sha256": "4605323405b59ac822c8db378c59e3b990e5ce04a677353740c93dce3e3777b5",
+    "main_py_rehashed_after_run_matches": true,
+    "source_bundle_sha256": "bad4b06c07448debe4046fcaaac986cb82d85c7ff7f2e06cdb2a3bea1aba6f40",
+    "source_file_count": 21,
+    "source_manifest_sha256": "a13b183319d125307d792d843bd7277bfe8e62bd68647b8696af8f20de346cbf",
+    "source_repo_head_from_prelaunch_receipt": "49d709b0227e63198cf0207d94d7016b46f6c476",
+    "transferred_project_has_no_git_metadata": true
+  },
+  "suite_id": "fedqcl_local_epochs_visibility",
+  "verified_at": "2026-11-24T12:30:27+05:30"
+}

@@ -1,0 +1,49 @@
+{
+  "audit_note": "Ledger reconciled at 00:03 IST: 54 completed, 67 queued, 0 running; V100 grid 13 completed and 35 pending; Mtech suites 41 completed and 32 pending. Retry histories are preserved. No new dispatch until a durable output path is writable without cache exhaustion.",
+  "last_ledger_refresh": "2026-11-23T00:03:33+05:30",
+  "ledger_sha256": "dd8bbf5ae0afa5d18f0dbf50d88cb099637c16fd402fe4ef9ec1b34772839af0",
+  "live_resource_audit": "audit_snapshots/host_resource_snapshot_20261123_0003.json",
+  "local_archive_observation": "V100 attempts offline1 attempt_05 (50 files, 11,137,405,604 bytes) and offline2 attempt_02 (20 files, 2,756,774,819 bytes) copied directly to central remote_results. Source/destination SHA-256 manifests match exactly; receipt v100_failed_attempts_archive_receipt_20261122_2306.json.",
+  "retry_dispatch_queue": {
+    "expected_peak_mib_per_job": 6186,
+    "launches": 0,
+    "margin_mib": 1024,
+    "normalized_from_runtime_plan_validation": true,
+    "path": "plans/AG_retry_dispatch_queue_20261122_2135.json",
+    "per_pid_peak_basis": "largest observed live Mtech campaign process: 6186 MiB",
+    "required_free_mib_per_job": 7210,
+    "sha256": "66cbdaea557be97a5ac178bede838c274c686071da72265cc6733c12fd611828",
+    "validated_A_G_retries": 16
+  },
+  "retry_spec_preparation": {
+    "attempt_id": "attempt_03",
+    "attempt_specs": 16,
+    "runtime_validated": 16,
+    "runtime_validation_pending": 0,
+    "state": "all plan-only checks passed; exact validation counters recorded",
+    "suite": "independent_ablation_A_G",
+    "training_launched": 0
+  },
+  "scope": "121 unique cells; retries recorded as attempts, not cells; V25 reference runs and Trash artifacts excluded",
+  "snapshot_date": "2026-11-22",
+  "snapshot_mtech": "00:03 IST: MtechDEServer1 GPU 4 MiB used / 32,497 MiB free; root 0 available; /dev/shm 21 GiB free. No A-G campaign workers detected. Kakarot rclone mount PID 19259 is alive; VFS cache is about 42 GiB and last observed upload success was 00:00:59 IST, so output-write throughput needs revalidation before dispatch.",
+  "snapshot_v100": "00:03 IST: V100-server GPU 11,322 MiB used / 21,178 MiB free; no campaign worker/controller. Root 0 free; /dev/shm 2.5 GiB free; /run/user/1027 0 free. Both rclone mounts remain alive; caches retain about 45 GiB and 6.5 GiB respectively.",
+  "summary": {
+    "by_state": {
+      "completed": 54,
+      "queued": 67,
+      "running": 0
+    },
+    "by_suite": {
+      "fedqcl_local_epochs_visibility": 12,
+      "independent_ablation_A_G": 29,
+      "intra_task_sync_frequency": 6,
+      "task_size_4_vs_5": 12,
+      "v100_epoch_participation_il_curriculum": 48,
+      "v25_incremental_curriculum_participation": 6,
+      "v25_participation_levels": 8
+    },
+    "cells": 121
+  },
+  "v100_recovery_manifest": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v2/recovery_manifest.json; 3 V100 attempts from recovery_v2 are failed/interrupted and preserved; no active workers. Next retry must propagate CAFCL_VRAM_BROKER_ADMITTED=1 and wait until result storage can safely accept writes."
+}

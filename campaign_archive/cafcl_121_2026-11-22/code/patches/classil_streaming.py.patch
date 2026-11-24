@@ -1,0 +1,29 @@
+--- original_six_runs/classil/streaming.py
++++ independent_ablation/classil/streaming.py
+@@ -18,6 +18,26 @@
+ 
+ 
+ def make_task_schedule(num_classes, cfg):
++    """Return ordered (round, client, task ordinal, class IDs, recurrence flag)."""
++    if cfg.stream_schedule_override:
++        schedule=[]; keys=set(); rounds=set()
++        for row in cfg.stream_schedule_override:
++            if isinstance(row, dict):
++                r=int(row["sync"]); cid=int(row["client"]); task=int(row.get("task_ordinal",0))
++                labels=tuple(map(int,row["classes"])); recurrent=bool(row.get("recurrent",False))
++            else:
++                r,cid,task,labels,recurrent=row
++                r=int(r);cid=int(cid);task=int(task);labels=tuple(map(int,labels));recurrent=bool(recurrent)
++            if r<0 or not 0<=cid<cfg.num_clients or task<0 or len(labels)<2 or len(set(labels))!=len(labels):
++                raise ValueError(f"Invalid explicit stream task: {(r,cid,task,labels)}")
++            if any(x<0 or x>=num_classes for x in labels):
++                raise ValueError(f"Explicit stream task has out-of-range class: {labels}")
++            key=(r,cid,task)
++            if key in keys: raise ValueError(f"Duplicate explicit task slot: {key}")
++            keys.add(key);rounds.add(r);schedule.append((r,cid,task,labels,recurrent))
++        if rounds!=set(range(max(rounds)+1)):
++            raise ValueError("Explicit stream sync IDs must be contiguous from zero")
++        return schedule
+     """Return ordered (round, client, task ordinal, class IDs, recurrence flag).
+ 
+     With ``stream_client_chain``, each round assigns one adjacent pair to

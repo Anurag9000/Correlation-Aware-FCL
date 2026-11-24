@@ -1,0 +1,107 @@
+{
+  "central_ledger": {
+    "audit_classifications": {
+      "completed": 69,
+      "completed_verified": 25,
+      "completed_verified_with_metadata_reconciliation": 27
+    },
+    "path": "/home/anurag-basistha/CORRELATION_AWARE_FCL_ABLATIONS_2026-11-22/CAMPAIGN_LEDGER_121.jsonl",
+    "sha256": "8f7b9066c56cc508055216ff04a71fde8e7426441d76d8698510abcac21f6e4b",
+    "suite_counts": {
+      "fedqcl_local_epochs_visibility": 12,
+      "independent_ablation_A_G": 29,
+      "intra_task_sync_frequency": 6,
+      "task_size_4_vs_5": 12,
+      "v100_epoch_participation_il_curriculum": 48,
+      "v25_incremental_curriculum_participation": 6,
+      "v25_participation_levels": 8
+    },
+    "top_level_states": {
+      "completed": 121
+    },
+    "unique_rows": 121
+  },
+  "checkpoint_cleanup": {
+    "mtech": {
+      "deleted_bytes": 1064278218,
+      "deleted_count": 163,
+      "post_cleanup_model_named_candidate_count": 0,
+      "receipt": "/home/anurag24092/checkpoint_cleanup_receipts/20261124_mtech/receipt_codex_0949.json"
+    },
+    "v100": {
+      "open_cache_checkpoint": {
+        "deleted": false,
+        "descriptor_count": 4,
+        "open_by_pid": 501070,
+        "path": "/dev/shm/cafcl-vfs-cache5/vfs/kakarot/v100/v25_offline_epoch_grid_20261122_v2/recovery_v10_dual_v100/runs/V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0/attempt_02/runs/V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0/checkpoint_latest.pt",
+        "size_bytes": 1317235566
+      },
+      "prior_deleted_bytes": 292121182039,
+      "prior_deleted_count": 2236
+    }
+  },
+  "host_snapshots": {
+    "mtech": {
+      "gpu": "Tesla V100-PCIE-32GB",
+      "manifest_cell_count": 32,
+      "manifest_counts": {
+        "completed": 32
+      },
+      "manifest_status": "completed",
+      "memory_free_mib": 32497,
+      "memory_total_mib": 32768,
+      "memory_used_mib": 4,
+      "observed_at": "2026-11-24T10:03:40+05:30",
+      "supervisor_pid": 19615,
+      "supervisor_stopped": true,
+      "training_workers": 0
+    },
+    "v100": {
+      "gpu": "Tesla V100-PCIE-32GB",
+      "manifest_cell_count": 48,
+      "manifest_counts": {
+        "completed": 48
+      },
+      "manifest_status": "completed",
+      "memory_free_mib": 6614,
+      "memory_total_mib": 32768,
+      "memory_used_mib": 25886,
+      "observed_at": "2026-11-24T10:03:40+05:30",
+      "supervisor_pid": 594102,
+      "supervisor_stopped": true,
+      "training_workers": 0,
+      "unrelated_compute_processes": [
+        {
+          "memory_mib": 10900,
+          "pid": 2021120
+        },
+        {
+          "memory_mib": 410,
+          "pid": 3486421
+        },
+        {
+          "memory_mib": 14564,
+          "pid": 631719
+        }
+      ]
+    }
+  },
+  "manifest_backups": {
+    "mtech": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/audit_snapshots/recovery_manifest_before_external_completion_reconciliation_20261124.json",
+    "v100": "/dev/shm/cafcl-v25-dual-v100-controller/audit_snapshots/recovery_manifest_before_external_completion_reconciliation_20261124.json"
+  },
+  "observed_at": "2026-11-24T10:03:40+05:30",
+  "scope_note": "The four original five-epoch FedQCL reference runs are excluded from the seven-suite 121-cell campaign per SUITE_LEDGER.md; they are separate historical results. The 12-cell FedQCL local-epochs-by-visibility suite is included in the 121.",
+  "v25_48_cell_grid": {
+    "mtech_completed_id_set_sha256_lf": "02075d0a9e5550f70730377209a8a9e6d675469f0f7007cafd17b48a135527eb",
+    "mtech_delegated_cell": "V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0",
+    "terminal_attempt_host_counts": {
+      "mtech": 31,
+      "v100": 17
+    },
+    "terminal_order": "other 73 cells terminal by 2026-11-23 19:00 IST; grid terminal attempts recorded from 2026-11-24 03:21 IST onward",
+    "unique_cells": 48,
+    "v100_completed_id_set_sha256_lf": "ebcf0778b4a0c0b7f27b1847c12964420c92efa8dd680fe9edef02e75101a3e0",
+    "v100_delegated_mtech_id_set_sha256_lf": "02075d0a9e5550f70730377209a8a9e6d675469f0f7007cafd17b48a135527eb"
+  }
+}

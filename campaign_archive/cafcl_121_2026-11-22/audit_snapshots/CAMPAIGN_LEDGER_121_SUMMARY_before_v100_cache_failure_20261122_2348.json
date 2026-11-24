@@ -1,0 +1,48 @@
+{
+  "audit_note": "Prior five Mtech items remain needs_audit. V100 48-run grid has 13 previously verified cells, 3 current recovery workers, 32 queued. Previous stale V100 failures preserved. The first new FUSE mount failed after /dev/shm cache filled; partial attempt data remain in its dirty cache and are not removed. Recovery continues on an independent /run-backed mount.",
+  "last_ledger_refresh": "2026-11-22T23:38:00+05:30",
+  "live_resource_audit": "audit_snapshots/host_resource_snapshot_20261122_2135.json",
+  "local_archive_observation": "V100 attempts offline1 attempt_05 (50 files, 11,137,405,604 bytes) and offline2 attempt_02 (20 files, 2,756,774,819 bytes) copied directly to central remote_results. Source/destination SHA-256 manifests match exactly; receipt v100_failed_attempts_archive_receipt_20261122_2306.json.",
+  "retry_dispatch_queue": {
+    "expected_peak_mib_per_job": 6186,
+    "launches": 0,
+    "margin_mib": 1024,
+    "normalized_from_runtime_plan_validation": true,
+    "path": "plans/AG_retry_dispatch_queue_20261122_2135.json",
+    "per_pid_peak_basis": "largest observed live Mtech campaign process: 6186 MiB",
+    "required_free_mib_per_job": 7210,
+    "sha256": "66cbdaea557be97a5ac178bede838c274c686071da72265cc6733c12fd611828",
+    "validated_A_G_retries": 16
+  },
+  "retry_spec_preparation": {
+    "attempt_id": "attempt_03",
+    "attempt_specs": 16,
+    "runtime_validated": 16,
+    "runtime_validation_pending": 0,
+    "state": "all plan-only checks passed; exact validation counters recorded",
+    "suite": "independent_ablation_A_G",
+    "training_launched": 0
+  },
+  "scope": "121 unique cells; retries recorded as attempts, not cells; V25 reference runs and Trash artifacts excluded",
+  "snapshot_date": "2026-11-22",
+  "snapshot_mtech": "23:01 IST: Mtech GPU 4 MiB used / 32,497 MiB free; RAM available 72,570 MiB, swap 720 MiB used; root 0 available; /dev/shm 51 GiB used / 13 GiB free. Previously active five campaign PIDs are absent.",
+  "snapshot_v100": "23:36 IST: V100 had 21,178 MiB free before admission; prior V100 worker peak 6,184 MiB, scheduler admitted three concurrent jobs with 1,024 MiB margin per next-job admission. Root filesystem is full. Existing /dev/shm-backed Kakarot FUSE cache is full at 47 GiB with 265 dirty files (47,155,668,301 bytes), so new outputs use a second Kakarot FUSE mount backed by /run tmpfs (9.4 GiB free at launch). Three workers launched at 23:37 IST; post-launch steady-state VRAM check pending.",
+  "summary": {
+    "by_state": {
+      "completed": 54,
+      "queued": 64,
+      "running": 3
+    },
+    "by_suite": {
+      "fedqcl_local_epochs_visibility": 12,
+      "independent_ablation_A_G": 29,
+      "intra_task_sync_frequency": 6,
+      "task_size_4_vs_5": 12,
+      "v100_epoch_participation_il_curriculum": 48,
+      "v25_incremental_curriculum_participation": 6,
+      "v25_participation_levels": 8
+    },
+    "cells": 121
+  },
+  "v100_recovery_manifest": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v2/recovery_manifest.json; scheduler and all attempts retained on Kakarot-backed mount; SHA-256 scheduler source 59f986ccb308199c58f27743125dd7603d53d18b625e5c6d11a3206ba3c20a76."
+}

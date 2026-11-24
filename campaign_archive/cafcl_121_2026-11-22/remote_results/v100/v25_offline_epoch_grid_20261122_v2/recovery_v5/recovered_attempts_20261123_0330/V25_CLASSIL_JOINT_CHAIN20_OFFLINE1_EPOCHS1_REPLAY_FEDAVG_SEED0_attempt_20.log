@@ -1,0 +1,51 @@
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0] round 1/21 acc=deferred forgetting=deferred clients=4
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 850, in save
+    _save(
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1114, in _save
+    zip_file.write_record(name, storage, num_bytes)
+RuntimeError: [enforce fail at inline_container.cc:778] . PytorchStreamWriter failed writing file data/1626: file write failed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/source_variants/classil_src/src/cafcl/simulator.py", line 930, in run_experiment
+    save_round_state(latest_checkpoint,cfg,round_id,global_state,version,
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/source_variants/classil_src/src/cafcl/simulator.py", line 339, in save_round_state
+    torch.save(payload,tmp);os.replace(tmp,path)
+    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 849, in save
+    with _open_zipfile_writer(f) as opened_zipfile:
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 690, in __exit__
+    self.file_like.write_end_of_file()
+RuntimeError: [enforce fail at inline_container.cc:603] . unexpected pos 70769984 vs 70769880
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/scripts/run_v25_offline_epoch_grid.py", line 251, in run_worker
+    result = run_experiment(cfg, str(out_dir / "runs"), str(DATA), download=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/source_variants/classil_src/src/cafcl/simulator.py", line 965, in run_experiment
+    atomic_json(status_file,{'status':'failed','protocol_version':protocol_version_for(cfg),
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/source_variants/classil_src/src/cafcl/simulator.py", line 348, in atomic_json
+    with tmp.open('w') as fh:json.dump(obj,fh,indent=2,sort_keys=True,default=str)
+         ^^^^^^^^^^^^^
+  File "/home/anurag24092/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 5] Input/output error: '/run/user/1027/cafcl-results2/v100/v25_offline_epoch_grid_20261122_v2/recovery_v5/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_20/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0/status.json.493960.tmp'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/scripts/run_v25_offline_epoch_grid.py", line 504, in <module>
+    main()
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/scripts/run_v25_offline_epoch_grid.py", line 500, in main
+    raise SystemExit(run_worker(args))
+                     ^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/scripts/run_v25_offline_epoch_grid.py", line 265, in run_worker
+    atomic_json(status_path, {
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/scripts/run_v25_offline_epoch_grid.py", line 44, in atomic_json
+    temp.write_tex

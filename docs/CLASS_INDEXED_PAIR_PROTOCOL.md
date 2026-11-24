@@ -1,3 +1,7 @@
+# Historical class-indexed protocol (pre-Task-IL)
+
+This document records the former single-head class-incremental design. New runs use task-specific heads and task-ID-assisted evaluation; see TASK_INCREMENTAL_PROTOCOL.md. The remainder is retained only to describe historical experiments.
+
 # CIFAR-100 v3: sequential local learning and class-indexed synchronization
 
 ## Precise per-client clock

@@ -1,0 +1,905 @@
+{
+  "aggregator": "fedavg",
+  "arrival_lag_by_client": {},
+  "batch_size": 64,
+  "block_id": "C",
+  "boundary_mode": "known",
+  "causal_diagnostics": false,
+  "causal_max_clients": 6,
+  "checkpoint_every": 0,
+  "class_holder_weights": {},
+  "class_imbalance_power": 0.0,
+  "class_order_override": [],
+  "class_pair_protocol": "strict",
+  "class_sample_fraction": {},
+  "class_subset": [],
+  "classes_per_local_task": 2,
+  "classwise_head_merge": false,
+  "client_heterogeneity": false,
+  "client_sample_skew": 0.0,
+  "client_training_concurrency": 5,
+  "dataset": "cifar100",
+  "der_alpha": 0.5,
+  "der_beta": 0.5,
+  "dirichlet_alpha": 0.5,
+  "epochs": 10,
+  "evaluate_final_only": false,
+  "fedadam_epsilon": 1e-08,
+  "fedprox_mu": 0.0,
+  "feedback_gain": 0.5,
+  "feedback_threshold": 0.25,
+  "force_target": "none",
+  "fork_checkpoint_round": 0,
+  "fork_source_job": "",
+  "full_sync": false,
+  "gem_grouping": "class",
+  "gradient_diagnostics": false,
+  "holders_override": {},
+  "intervention_round": -1,
+  "job_id": "CAFCL_C_C_hidden_2_seed0__attempt_05",
+  "label_noise_rate": 0.0,
+  "learning_setting": "task_il",
+  "local_optimizer": "sgd",
+  "local_tasks_per_round": 1,
+  "lr": 0.03,
+  "max_pending_samples": 0,
+  "memory_per_class": 50,
+  "memory_policy": "random_per_class",
+  "method": "replay",
+  "model": "resnet18_cifar32",
+  "momentum": 0.9,
+  "num_clients": 5,
+  "offline_duration_rounds": 2,
+  "optimizer_state_policy": "persist",
+  "overlap": 0.5,
+  "participation": 0.8,
+  "participation_overrides": {},
+  "participation_schedule": "constant",
+  "pending_policy": "latest",
+  "prepost_diagnostics": false,
+  "recurrence_client_policy": "different",
+  "recurrence_delay": 1,
+  "recurrence_period": 0,
+  "recurrence_repeats": 1,
+  "recurrence_round_delay": 0,
+  "regularization_strength": 10.0,
+  "relation": "natural",
+  "replay_bn_policy": "batch_update",
+  "replay_buffer_order_policy": "archive_order",
+  "replay_padding_policy": "repeat_chunk",
+  "replay_ratio": 1.0,
+  "replay_reservoir_fraction": 0.1111111111111111,
+  "replay_update_policy": "sampled_mixed",
+  "representation_diagnostics": false,
+  "reset_memory_on_sync": false,
+  "resume": false,
+  "rounds_per_stage": 1,
+  "sample_overlap_fraction": 0.0,
+  "scenario": "disjoint",
+  "seed": 0,
+  "selection_temperature": 1.0,
+  "selector": "random",
+  "server_beta1": 0.9,
+  "server_beta2": 0.999,
+  "server_lr": 1.0,
+  "si_xi": 0.1,
+  "spurious_ood_eval": false,
+  "spurious_strength": 0.0,
+  "stage_participation": [],
+  "stages": 1,
+  "stream_client_chain": false,
+  "stream_offline_policy": "random",
+  "stream_overlap_fraction": 0.0,
+  "stream_overlap_kind": "none",
+  "stream_partial_batch_policy": "include_padding",
+  "stream_protocol": true,
+  "stream_recurrence_rounds": 0,
+  "stream_schedule_override": [
+    [
+      0,
+      3,
+      0,
+      [
+        0,
+        1
+      ],
+      false
+    ],
+    [
+      0,
+      4,
+      0,
+      [
+        2,
+        3
+      ],
+      false
+    ],
+    [
+      0,
+      2,
+      0,
+      [
+        4,
+        5
+      ],
+      false
+    ],
+    [
+      0,
+      1,
+      0,
+      [
+        6,
+        7
+      ],
+      false
+    ],
+    [
+      0,
+      0,
+      0,
+      [
+        8,
+        9
+      ],
+      false
+    ],
+    [
+      1,
+      3,
+      0,
+      [
+        10,
+        11
+      ],
+      false
+    ],
+    [
+      1,
+      4,
+      0,
+      [
+        12,
+        13
+      ],
+      false
+    ],
+    [
+      1,
+      0,
+      0,
+      [
+        14,
+        15
+      ],
+      false
+    ],
+    [
+      1,
+      2,
+      0,
+      [
+        16,
+        17
+      ],
+      false
+    ],
+    [
+      1,
+      1,
+      0,
+      [
+        18,
+        19
+      ],
+      false
+    ],
+    [
+      2,
+      3,
+      0,
+      [
+        20,
+        21
+      ],
+      false
+    ],
+    [
+      2,
+      2,
+      0,
+      [
+        22,
+        23
+      ],
+      false
+    ],
+    [
+      2,
+      4,
+      0,
+      [
+        24,
+        25
+      ],
+      false
+    ],
+    [
+      2,
+      0,
+      0,
+      [
+        26,
+        27
+      ],
+      false
+    ],
+    [
+      2,
+      1,
+      0,
+      [
+        28,
+        29
+      ],
+      false
+    ],
+    [
+      3,
+      1,
+      0,
+      [
+        30,
+        31
+      ],
+      false
+    ],
+    [
+      3,
+      2,
+      0,
+      [
+        32,
+        33
+      ],
+      false
+    ],
+    [
+      3,
+      0,
+      0,
+      [
+        34,
+        35
+      ],
+      false
+    ],
+    [
+      3,
+      4,
+      0,
+      [
+        36,
+        37
+      ],
+      false
+    ],
+    [
+      3,
+      3,
+      0,
+      [
+        38,
+        39
+      ],
+      false
+    ],
+    [
+      4,
+      4,
+      0,
+      [
+        40,
+        41
+      ],
+      false
+    ],
+    [
+      4,
+      1,
+      0,
+      [
+        42,
+        43
+      ],
+      false
+    ],
+    [
+      4,
+      3,
+      0,
+      [
+        44,
+        45
+      ],
+      false
+    ],
+    [
+      4,
+      2,
+      0,
+      [
+        46,
+        47
+      ],
+      false
+    ],
+    [
+      4,
+      0,
+      0,
+      [
+        48,
+        49
+      ],
+      false
+    ],
+    [
+      5,
+      3,
+      0,
+      [
+        50,
+        51
+      ],
+      false
+    ],
+    [
+      5,
+      4,
+      0,
+      [
+        52,
+        53
+      ],
+      false
+    ],
+    [
+      5,
+      1,
+      0,
+      [
+        54,
+        55
+      ],
+      false
+    ],
+    [
+      5,
+      0,
+      0,
+      [
+        56,
+        57
+      ],
+      false
+    ],
+    [
+      5,
+      2,
+      0,
+      [
+        58,
+        59
+      ],
+      false
+    ],
+    [
+      6,
+      2,
+      0,
+      [
+        60,
+        61
+      ],
+      false
+    ],
+    [
+      6,
+      0,
+      0,
+      [
+        62,
+        63
+      ],
+      false
+    ],
+    [
+      6,
+      4,
+      0,
+      [
+        64,
+        65
+      ],
+      false
+    ],
+    [
+      6,
+      3,
+      0,
+      [
+        66,
+        67
+      ],
+      false
+    ],
+    [
+      6,
+      1,
+      0,
+      [
+        68,
+        69
+      ],
+      false
+    ],
+    [
+      7,
+      0,
+      0,
+      [
+        70,
+        71
+      ],
+      false
+    ],
+    [
+      7,
+      2,
+      0,
+      [
+        72,
+        73
+      ],
+      false
+    ],
+    [
+      7,
+      3,
+      0,
+      [
+        74,
+        75
+      ],
+      false
+    ],
+    [
+      7,
+      4,
+      0,
+      [
+        76,
+        77
+      ],
+      false
+    ],
+    [
+      7,
+      1,
+      0,
+      [
+        78,
+        79
+      ],
+      false
+    ],
+    [
+      8,
+      0,
+      0,
+      [
+        80,
+        81
+      ],
+      false
+    ],
+    [
+      8,
+      2,
+      0,
+      [
+        82,
+        83
+      ],
+      false
+    ],
+    [
+      8,
+      3,
+      0,
+      [
+        84,
+        85
+      ],
+      false
+    ],
+    [
+      8,
+      4,
+      0,
+      [
+        86,
+        87
+      ],
+      false
+    ],
+    [
+      8,
+      1,
+      0,
+      [
+        88,
+        89
+      ],
+      false
+    ],
+    [
+      9,
+      4,
+      0,
+      [
+        90,
+        91
+      ],
+      false
+    ],
+    [
+      9,
+      3,
+      0,
+      [
+        92,
+        93
+      ],
+      false
+    ],
+    [
+      9,
+      2,
+      0,
+      [
+        94,
+        95
+      ],
+      false
+    ],
+    [
+      9,
+      1,
+      0,
+      [
+        96,
+        97
+      ],
+      false
+    ],
+    [
+      9,
+      0,
+      0,
+      [
+        98,
+        99
+      ],
+      false
+    ],
+    [
+      10,
+      3,
+      0,
+      [
+        38,
+        39
+      ],
+      true
+    ],
+    [
+      10,
+      4,
+      0,
+      [
+        40,
+        41
+      ],
+      true
+    ],
+    [
+      10,
+      2,
+      0,
+      [
+        22,
+        23
+      ],
+      true
+    ],
+    [
+      10,
+      1,
+      0,
+      [
+        18,
+        19
+      ],
+      true
+    ],
+    [
+      10,
+      0,
+      0,
+      [
+        8,
+        9
+      ],
+      true
+    ],
+    [
+      11,
+      3,
+      0,
+      [
+        44,
+        45
+      ],
+      true
+    ],
+    [
+      11,
+      1,
+      0,
+      [
+        28,
+        29
+      ],
+      true
+    ],
+    [
+      11,
+      4,
+      0,
+      [
+        52,
+        53
+      ],
+      true
+    ],
+    [
+      11,
+      2,
+      0,
+      [
+        32,
+        33
+      ],
+      true
+    ],
+    [
+      11,
+      0,
+      0,
+      [
+        14,
+        15
+      ],
+      true
+    ],
+    [
+      12,
+      4,
+      0,
+      [
+        64,
+        65
+      ],
+      true
+    ],
+    [
+      12,
+      0,
+      0,
+      [
+        26,
+        27
+      ],
+      true
+    ],
+    [
+      12,
+      1,
+      0,
+      [
+        30,
+        31
+      ],
+      true
+    ],
+    [
+      12,
+      2,
+      0,
+      [
+        46,
+        47
+      ],
+      true
+    ],
+    [
+      12,
+      3,
+      0,
+      [
+        50,
+        51
+      ],
+      true
+    ],
+    [
+      13,
+      4,
+      0,
+      [
+        76,
+        77
+      ],
+      true
+    ],
+    [
+      13,
+      3,
+      0,
+      [
+        66,
+        67
+      ],
+      true
+    ],
+    [
+      13,
+      2,
+      0,
+      [
+        58,
+        59
+      ],
+      true
+    ],
+    [
+      13,
+      1,
+      0,
+      [
+        42,
+        43
+      ],
+      true
+    ],
+    [
+      13,
+      0,
+      0,
+      [
+        34,
+        35
+      ],
+      true
+    ],
+    [
+      14,
+      3,
+      0,
+      [
+        74,
+        75
+      ],
+      true
+    ],
+    [
+      14,
+      1,
+      0,
+      [
+        54,
+        55
+      ],
+      true
+    ],
+    [
+      14,
+      0,
+      0,
+      [
+        48,
+        49
+      ],
+      true
+    ],
+    [
+      14,
+      4,
+      0,
+      [
+        86,
+        87
+      ],
+      true
+    ],
+    [
+      14,
+      2,
+      0,
+      [
+        60,
+        61
+      ],
+      true
+    ],
+    [
+      15,
+      1,
+      0,
+      [
+        68,
+        69
+      ],
+      true
+    ],
+    [
+      15,
+      0,
+      0,
+      [
+        56,
+        57
+      ],
+      true
+    ],
+    [
+      15,
+      3,
+      0,
+      [
+        84,
+        85
+      ],
+      true
+    ],
+    [
+      15,
+      2,
+      0,
+      [
+        72,
+        73
+      ],
+      true
+    ],
+    [
+      15,
+      4,
+      0,
+      [
+        90,
+        91
+      ],
+      true
+    ]
+  ],
+  "stream_sync_every_batch": false,
+  "stream_terminal_flush": true,
+  "subset_diagnostics": false,
+  "target_client": -1,
+  "training_augmentation": "cifar_crop_flip",
+  "weight_decay": 0.0005
+}

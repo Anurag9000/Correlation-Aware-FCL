@@ -1,0 +1,43 @@
+{"event": "admitted", "run_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0__attempt_05", "worker_pid": 485037, "estimate_mib": 6186, "margin_mib": 1024, "prelaunch_free_vram_mib": 21178, "other_outstanding_reservations_mib": 0, "admitted_at_epoch": 1795365918.283187, "command": ["/usr/bin/env", "HOME=/dev/shm/cafcl-home", "TMPDIR=/dev/shm/cafcl-tmp", "XDG_CACHE_HOME=/dev/shm/cafcl-cache", "TORCHINDUCTOR_CACHE_DIR=/dev/shm/cafcl-cache/inductor", "PYTHONDONTWRITEBYTECODE=1", "CUDA_VISIBLE_DEVICES=0", "CAFCL_SOURCE_DIR=/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/source_variants/classil_src", "PYTHONPATH=/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/source_variants/classil_src/src", "OMP_NUM_THREADS=1", "MKL_NUM_THREADS=1", "OPENBLAS_NUM_THREADS=1", "NUMEXPR_NUM_THREADS=1", "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/bin/python", "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/scripts/run_v25_offline_epoch_grid.py", "--worker", "--setting", "class_il", "--curriculum", "joint", "--offline-count", "1", "--epochs", "1", "--job-id", "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0", "--block-id", "block_04_CLASS_IL_JOINT_offline1_ep1", "--output-dir", "/dev/shm/cafcl-kakarot-results/v100/v25_offline_epoch_grid_20261122_v2/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_05"], "reservation_file": "/dev/shm/cafcl-broker-home/.cache/cafcl-vram-broker/reservations/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0__attempt_05.485034.reservation.json", "status": "running"}
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0] round 1/21 acc=deferred forgetting=deferred clients=4
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0] round 2/21 acc=deferred forgetting=deferred clients=4
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0] round 3/21 acc=deferred forgetting=deferred clients=4
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0] round 4/21 acc=deferred forgetting=deferred clients=4
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0] round 5/21 acc=deferred forgetting=deferred clients=4
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0] round 6/21 acc=deferred forgetting=deferred clients=4
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0] round 7/21 acc=deferred forgetting=deferred clients=4
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 850, in save
+    _save(
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1114, in _save
+    zip_file.write_record(name, storage, num_bytes)
+RuntimeError: [enforce fail at inline_container.cc:778] . PytorchStreamWriter failed writing file data/9258: file write failed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/source_variants/classil_src/src/cafcl/simulator.py", line 939, in run_experiment
+    save_checkpoint(run_dir/f'model_stage_{current_stage+1:02d}.pt',global_state,
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/source_variants/classil_src/src/cafcl/simulator.py", line 361, in save_checkpoint
+    torch.save(payload,tmp)
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 849, in save
+    with _open_zipfile_writer(f) as opened_zipfile:
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 690, in __exit__
+    self.file_like.write_end_of_file()
+RuntimeError: [enforce fail at inline_container.cc:603] . unexpected pos 1178829248 vs 1178829144
+Traceback (most recent call last):
+  File "/dev/shm/cafcl-tools/vram_broker.py", line 208, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/dev/shm/cafcl-tools/vram_broker.py", line 200, in main
+    atomic_json(receipt, current)
+  File "/dev/shm/cafcl-tools/vram_broker.py", line 24, in atomic_json
+    tmp.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n")
+  File "/home/anurag24092/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1047, in write_text
+    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 5] Input/output error: '/dev/shm/cafcl-kakarot-results/v100/v25_offline_epoch_grid_20261122_v2/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_05/vram_broker_receipt.json.485034.tmp'

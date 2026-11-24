@@ -1,0 +1,1841 @@
+{
+  "admission_required_mib": 6440,
+  "assignment_note": "Thirty queued Mtech cells plus two re-assigned V100 20-sync cells. V100 attempt_01 partial outputs preserved after forecast found insufficient disk to finish; attempt_02 will retry the same unique cells on Mtech.",
+  "campaign": "V25 CIFAR-100 Replay/FedAvg offline and local-epoch grid",
+  "created_utc": "2026-11-23T22:21:39Z",
+  "host": "MtechDEServer1",
+  "host_assignments": {
+    "mtech": [
+      "V25_CLASSIL_DISJOINT10_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_DISJOINT10_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_DISJOINT10_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_DISJOINT10_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_JOINT_CHAIN20_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_JOINT_CHAIN20_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_JOINT_CHAIN20_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_JOINT_CHAIN20_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_JOINT_CHAIN20_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "V25_TASKIL_JOINT_CHAIN20_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0"
+    ]
+  },
+  "last_resource_sample": {
+    "active_worker_pids": [
+      14948,
+      15117,
+      15289,
+      16150,
+      16263
+    ],
+    "disk_free_mib": 572912,
+    "free_vram_mib": 6447,
+    "launches_this_pass": [],
+    "margin_mib": 256,
+    "outstanding_vram_reservation_mib": 4874,
+    "storage_outstanding_reservation_mib": 70000,
+    "utc": "2026-11-23T22:42:40Z",
+    "worker_peak_estimate_mib": 6184
+  },
+  "preflight_completed_utc": "2026-11-23T22:33:18Z",
+  "remote_manifest_synced_utc": "2026-11-23T22:42:20Z",
+  "runs": [
+    {
+      "attempts": [
+        {
+          "attempt_id": "original_stale",
+          "status": "failed_or_interrupted"
+        },
+        {
+          "attempt_id": "attempt_02",
+          "failure_reason": "worker could not find writable temp directory; retry uses /dev/shm/cafcl-tmp",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_03",
+          "failure_reason": "worker could not find writable temp directory; retry uses /dev/shm/cafcl-tmp",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_04",
+          "failure_reason": "worker could not find writable temp directory; retry uses /dev/shm/cafcl-tmp",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_05",
+          "failure_reason": "worker could not find writable temp directory; retry uses /dev/shm/cafcl-tmp",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_06",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_07",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_08",
+          "failure_reason": "controller was stopped after worker exited during temp-directory initialization",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_09",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_10",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_11",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_12",
+          "failure_reason": "worker PID absent during recovery; previous attempt outputs and logs retained for audit",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_13",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_14",
+          "failure_reason": "worker PID absent during recovery; previous attempt outputs and logs retained for audit",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_15",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_16",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_17",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_18",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_19",
+          "failure_reason": "worker PID absent during recovery; previous attempt outputs and logs retained for audit",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_20",
+          "failure_reason": "Round 1/21 reached, then PyTorchStreamWriter checkpoint write failed with FUSE I/O error; terminal status write also failed. No result summary or verified metrics; PID absent at 03:30.",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_21",
+          "failure_reason": "Atomic status writes failed with Errno 5 EIO after sync_004 while V100 /dev/shm reached 100%; root had 0 free bytes. Worker PID absent at 04:23:09 IST. Four sync outputs and partial checkpoint/model files are preserved.",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_22",
+          "failure_reason": "All 21 metric rounds emitted; final torch.save failed with PyTorchStreamWriter file write error. No terminal success status or result summary. Previous output and logs retained.",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_23",
+          "status": "failed"
+        },
+        {
+          "archive_completed_utc": "2026-11-23T22:34:27Z",
+          "archive_status": "compact_evidence_copied_to_b550_webdav",
+          "attempt_id": "attempt_24",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "class_il",
+            "--curriculum",
+            "joint",
+            "--offline-count",
+            "1",
+            "--epochs",
+            "1",
+            "--job-id",
+            "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_04_CLASS_IL_JOINT_offline0to3_ep1",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_24"
+          ],
+          "evidence_archive": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/evidence_archives/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0_attempt_24_evidence.tar.gz",
+          "finished_utc": "2026-11-23T22:34:25Z",
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0_attempt_24.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_24",
+          "peak_estimate_mib": 6184,
+          "pid": 13731,
+          "prelaunch_free_vram_mib": 32497,
+          "return_code": null,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/classil_src",
+          "started_utc": "2026-11-23T22:21:39Z",
+          "status": "completed",
+          "verification": {
+            "result_summary_present": true,
+            "worker_status": "completed"
+          }
+        }
+      ],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:39:32Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 23,
+      "spec": {
+        "block_id": "block_04_CLASS_IL_JOINT_offline0to3_ep1",
+        "curriculum": "joint",
+        "epochs_per_task": 1,
+        "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "offline_count": 1,
+        "participation": 0.8,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "completed",
+      "supervisor_recovery_note": "Requeued: prior controller counted pre-v10 historical failures against the new retry limit."
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "attempt_01",
+          "failure_reason": "worker could not find writable temp directory; retry uses /dev/shm/cafcl-tmp",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_02",
+          "failure_reason": "worker could not find writable temp directory; retry uses /dev/shm/cafcl-tmp",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_03",
+          "failure_reason": "worker could not find writable temp directory; retry uses /dev/shm/cafcl-tmp",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_04",
+          "failure_reason": "worker could not find writable temp directory; retry uses /dev/shm/cafcl-tmp",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_05",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_06",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_07",
+          "failure_reason": "controller was stopped after worker exited during temp-directory initialization",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_08",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_09",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_10",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_11",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_12",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_13",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_14",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_15",
+          "failure_reason": "Round 1/21 reached, then PyTorchStreamWriter checkpoint write failed with FUSE I/O error; terminal status write also failed. No result summary or verified metrics; PID absent at 03:30.",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_16",
+          "failure_reason": "Atomic status writes failed with Errno 5 EIO after sync_004 while V100 /dev/shm reached 100%; root had 0 free bytes. Worker PID absent at 04:23:09 IST. Four sync outputs and partial checkpoint/model files are preserved.",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_17",
+          "failure_reason": "All 21 metric rounds emitted; final torch.save failed with PyTorchStreamWriter file write error. No terminal success status or result summary. Previous output and logs retained.",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_18",
+          "status": "failed"
+        },
+        {
+          "archive_completed_utc": "2026-11-23T22:34:01Z",
+          "archive_status": "compact_evidence_copied_to_b550_webdav",
+          "attempt_id": "attempt_19",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "class_il",
+            "--curriculum",
+            "joint",
+            "--offline-count",
+            "2",
+            "--epochs",
+            "1",
+            "--job-id",
+            "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_04_CLASS_IL_JOINT_offline0to3_ep1",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_19"
+          ],
+          "evidence_archive": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/evidence_archives/V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0_attempt_19_evidence.tar.gz",
+          "finished_utc": "2026-11-23T22:34:00Z",
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0_attempt_19.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_19",
+          "peak_estimate_mib": 6184,
+          "pid": 13757,
+          "prelaunch_free_vram_mib": 32497,
+          "return_code": null,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/classil_src",
+          "started_utc": "2026-11-23T22:21:40Z",
+          "status": "completed",
+          "verification": {
+            "result_summary_present": true,
+            "worker_status": "completed"
+          }
+        }
+      ],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:39:35Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 18,
+      "spec": {
+        "block_id": "block_04_CLASS_IL_JOINT_offline0to3_ep1",
+        "curriculum": "joint",
+        "epochs_per_task": 1,
+        "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "offline_count": 2,
+        "participation": 0.6,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "completed",
+      "supervisor_recovery_note": "Requeued: prior controller counted pre-v10 historical failures against the new retry limit."
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "attempt_01",
+          "failure_reason": "worker could not find writable temp directory; retry uses /dev/shm/cafcl-tmp",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_02",
+          "failure_reason": "worker could not find writable temp directory; retry uses /dev/shm/cafcl-tmp",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_03",
+          "failure_reason": "worker could not find writable temp directory; retry uses /dev/shm/cafcl-tmp",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_04",
+          "failure_reason": "worker could not find writable temp directory; retry uses /dev/shm/cafcl-tmp",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_05",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_06",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_07",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_08",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_09",
+          "failure_reason": "worker exited 1 or terminal status/summary missing",
+          "status": "failed"
+        },
+        {
+          "archive_completed_utc": "2026-11-23T22:34:02Z",
+          "archive_status": "compact_evidence_copied_to_b550_webdav",
+          "attempt_id": "attempt_10",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "class_il",
+            "--curriculum",
+            "joint",
+            "--offline-count",
+            "3",
+            "--epochs",
+            "1",
+            "--job-id",
+            "V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS1_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_04_CLASS_IL_JOINT_offline0to3_ep1",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_10"
+          ],
+          "evidence_archive": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/evidence_archives/V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS1_REPLAY_FEDAVG_SEED0_attempt_10_evidence.tar.gz",
+          "finished_utc": "2026-11-23T22:34:01Z",
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS1_REPLAY_FEDAVG_SEED0_attempt_10.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS1_REPLAY_FEDAVG_SEED0/attempt_10",
+          "peak_estimate_mib": 6184,
+          "pid": 13783,
+          "prelaunch_free_vram_mib": 32497,
+          "return_code": null,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/classil_src",
+          "started_utc": "2026-11-23T22:21:41Z",
+          "status": "completed",
+          "verification": {
+            "result_summary_present": true,
+            "worker_status": "completed"
+          }
+        }
+      ],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:39:39Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS1_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 9,
+      "spec": {
+        "block_id": "block_04_CLASS_IL_JOINT_offline0to3_ep1",
+        "curriculum": "joint",
+        "epochs_per_task": 1,
+        "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "offline_count": 3,
+        "participation": 0.4,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "completed",
+      "supervisor_recovery_note": "Requeued: prior controller counted pre-v10 historical failures against the new retry limit."
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_DISJOINT10_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:39:43Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_DISJOINT10_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_05_TASK_IL_DISJOINT_offline0to3_ep2",
+        "curriculum": "disjoint",
+        "epochs_per_task": 2,
+        "job_id": "V25_TASKIL_DISJOINT10_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 0,
+        "participation": 1.0,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:39:46Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_05_TASK_IL_DISJOINT_offline0to3_ep2",
+        "curriculum": "disjoint",
+        "epochs_per_task": 2,
+        "job_id": "V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 1,
+        "participation": 0.8,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:39:50Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_05_TASK_IL_DISJOINT_offline0to3_ep2",
+        "curriculum": "disjoint",
+        "epochs_per_task": 2,
+        "job_id": "V25_TASKIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 2,
+        "participation": 0.6,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:39:53Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_05_TASK_IL_DISJOINT_offline0to3_ep2",
+        "curriculum": "disjoint",
+        "epochs_per_task": 2,
+        "job_id": "V25_TASKIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 3,
+        "participation": 0.4,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:39:57Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_06_TASK_IL_JOINT_offline0to3_ep2",
+        "curriculum": "joint",
+        "epochs_per_task": 2,
+        "job_id": "V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 0,
+        "participation": 1.0,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:40:00Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_JOINT_CHAIN20_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_06_TASK_IL_JOINT_offline0to3_ep2",
+        "curriculum": "joint",
+        "epochs_per_task": 2,
+        "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 1,
+        "participation": 0.8,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:40:04Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_JOINT_CHAIN20_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_06_TASK_IL_JOINT_offline0to3_ep2",
+        "curriculum": "joint",
+        "epochs_per_task": 2,
+        "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 2,
+        "participation": 0.6,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:40:08Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_JOINT_CHAIN20_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_06_TASK_IL_JOINT_offline0to3_ep2",
+        "curriculum": "joint",
+        "epochs_per_task": 2,
+        "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 3,
+        "participation": 0.4,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [
+        {
+          "archive_completed_utc": "2026-11-23T22:29:55Z",
+          "archive_status": "compact_evidence_copied_to_b550_webdav",
+          "attempt_id": "attempt_01",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "class_il",
+            "--curriculum",
+            "disjoint",
+            "--offline-count",
+            "2",
+            "--epochs",
+            "2",
+            "--job-id",
+            "V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_07_CLASS_IL_DISJOINT_offline0to3_ep2",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0/attempt_01"
+          ],
+          "evidence_archive": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/evidence_archives/V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0_attempt_01_evidence.tar.gz",
+          "finished_utc": "2026-11-23T22:29:54Z",
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0_attempt_01.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0/attempt_01",
+          "peak_estimate_mib": 6184,
+          "pid": 13836,
+          "prelaunch_free_vram_mib": 32497,
+          "return_code": 0,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/classil_src",
+          "started_utc": "2026-11-23T22:21:44Z",
+          "status": "completed",
+          "verification": {
+            "result_summary_present": true,
+            "worker_status": "completed"
+          }
+        }
+      ],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:40:18Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_07_CLASS_IL_DISJOINT_offline0to3_ep2",
+        "curriculum": "disjoint",
+        "epochs_per_task": 2,
+        "job_id": "V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 2,
+        "participation": 0.6,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "completed"
+    },
+    {
+      "attempts": [
+        {
+          "archive_completed_utc": "2026-11-23T22:42:18Z",
+          "archive_status": "compact_evidence_copied_to_b550_webdav",
+          "attempt_id": "attempt_01",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "class_il",
+            "--curriculum",
+            "disjoint",
+            "--offline-count",
+            "3",
+            "--epochs",
+            "2",
+            "--job-id",
+            "V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_07_CLASS_IL_DISJOINT_offline0to3_ep2",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0/attempt_01"
+          ],
+          "evidence_archive": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/evidence_archives/V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0_attempt_01_evidence.tar.gz",
+          "finished_utc": "2026-11-23T22:42:17Z",
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0_attempt_01.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0/attempt_01",
+          "peak_estimate_mib": 6184,
+          "pid": 15145,
+          "prelaunch_free_vram_mib": 14973,
+          "return_code": 0,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/classil_src",
+          "started_utc": "2026-11-23T22:34:03Z",
+          "status": "completed",
+          "verification": {
+            "result_summary_present": true,
+            "worker_status": "completed"
+          }
+        }
+      ],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:40:22Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_07_CLASS_IL_DISJOINT_offline0to3_ep2",
+        "curriculum": "disjoint",
+        "epochs_per_task": 2,
+        "job_id": "V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 3,
+        "participation": 0.4,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "completed"
+    },
+    {
+      "active_attempt_id": "attempt_01",
+      "attempts": [
+        {
+          "attempt_id": "attempt_01",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "class_il",
+            "--curriculum",
+            "joint",
+            "--offline-count",
+            "0",
+            "--epochs",
+            "2",
+            "--job-id",
+            "V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_08_CLASS_IL_JOINT_offline0to3_ep2",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0/attempt_01"
+          ],
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0_attempt_01.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0/attempt_01",
+          "peak_estimate_mib": 6184,
+          "pid": 16150,
+          "prelaunch_free_vram_mib": 7963,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/classil_src",
+          "started_utc": "2026-11-23T22:41:56Z",
+          "status": "running"
+        }
+      ],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:40:25Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_08_CLASS_IL_JOINT_offline0to3_ep2",
+        "curriculum": "joint",
+        "epochs_per_task": 2,
+        "job_id": "V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 0,
+        "participation": 1.0,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "running"
+    },
+    {
+      "active_attempt_id": "attempt_01",
+      "attempts": [
+        {
+          "attempt_id": "attempt_01",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "class_il",
+            "--curriculum",
+            "joint",
+            "--offline-count",
+            "1",
+            "--epochs",
+            "2",
+            "--job-id",
+            "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_08_CLASS_IL_JOINT_offline0to3_ep2",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0/attempt_01"
+          ],
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0_attempt_01.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0/attempt_01",
+          "peak_estimate_mib": 6184,
+          "pid": 16263,
+          "prelaunch_free_vram_mib": 8787,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/classil_src",
+          "started_utc": "2026-11-23T22:42:19Z",
+          "status": "running"
+        }
+      ],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:40:29Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_08_CLASS_IL_JOINT_offline0to3_ep2",
+        "curriculum": "joint",
+        "epochs_per_task": 2,
+        "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 1,
+        "participation": 0.8,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "running"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:40:33Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_08_CLASS_IL_JOINT_offline0to3_ep2",
+        "curriculum": "joint",
+        "epochs_per_task": 2,
+        "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 2,
+        "participation": 0.6,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:40:36Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_08_CLASS_IL_JOINT_offline0to3_ep2",
+        "curriculum": "joint",
+        "epochs_per_task": 2,
+        "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS2_REPLAY_FEDAVG_SEED0",
+        "offline_count": 3,
+        "participation": 0.4,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_DISJOINT10_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:40:40Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_DISJOINT10_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_09_TASK_IL_DISJOINT_offline0to3_ep5",
+        "curriculum": "disjoint",
+        "epochs_per_task": 5,
+        "job_id": "V25_TASKIL_DISJOINT10_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 0,
+        "participation": 1.0,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:40:43Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_09_TASK_IL_DISJOINT_offline0to3_ep5",
+        "curriculum": "disjoint",
+        "epochs_per_task": 5,
+        "job_id": "V25_TASKIL_DISJOINT10_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 1,
+        "participation": 0.8,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:40:47Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_09_TASK_IL_DISJOINT_offline0to3_ep5",
+        "curriculum": "disjoint",
+        "epochs_per_task": 5,
+        "job_id": "V25_TASKIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 2,
+        "participation": 0.6,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_DISJOINT10_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:40:50Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_DISJOINT10_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_09_TASK_IL_DISJOINT_offline0to3_ep5",
+        "curriculum": "disjoint",
+        "epochs_per_task": 5,
+        "job_id": "V25_TASKIL_DISJOINT10_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 3,
+        "participation": 0.4,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:40:57Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_JOINT_CHAIN20_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_10_TASK_IL_JOINT_offline0to3_ep5",
+        "curriculum": "joint",
+        "epochs_per_task": 5,
+        "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 1,
+        "participation": 0.8,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:41:01Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_JOINT_CHAIN20_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_10_TASK_IL_JOINT_offline0to3_ep5",
+        "curriculum": "joint",
+        "epochs_per_task": 5,
+        "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 2,
+        "participation": 0.6,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:41:05Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_JOINT_CHAIN20_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_10_TASK_IL_JOINT_offline0to3_ep5",
+        "curriculum": "joint",
+        "epochs_per_task": 5,
+        "job_id": "V25_TASKIL_JOINT_CHAIN20_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 3,
+        "participation": 0.4,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "attempt_01",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "class_il",
+            "--curriculum",
+            "disjoint",
+            "--offline-count",
+            "1",
+            "--epochs",
+            "5",
+            "--job-id",
+            "V25_CLASSIL_DISJOINT10_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_11_CLASS_IL_DISJOINT_offline0to3_ep5",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_DISJOINT10_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_01"
+          ],
+          "failure_reason": null,
+          "finished_utc": "2026-11-23T22:33:03Z",
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_CLASSIL_DISJOINT10_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0_attempt_01.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_DISJOINT10_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_01",
+          "peak_estimate_mib": 6184,
+          "pid": 13809,
+          "prelaunch_free_vram_mib": 32497,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/classil_src",
+          "started_utc": "2026-11-23T22:21:42Z",
+          "status": "completed",
+          "verification": {
+            "reconciled_after_controller_restart": true,
+            "result_summary_present": true,
+            "worker_status": "completed"
+          }
+        }
+      ],
+      "completion_source": "worker terminal status plus result summary verified after supervisor restart",
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_DISJOINT10_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:41:12Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_DISJOINT10_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_11_CLASS_IL_DISJOINT_offline0to3_ep5",
+        "curriculum": "disjoint",
+        "epochs_per_task": 5,
+        "job_id": "V25_CLASSIL_DISJOINT10_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 1,
+        "participation": 0.8,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "completed"
+    },
+    {
+      "attempts": [
+        {
+          "archive_completed_utc": "2026-11-23T22:41:55Z",
+          "archive_status": "compact_evidence_copied_to_b550_webdav",
+          "attempt_id": "attempt_01",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "class_il",
+            "--curriculum",
+            "disjoint",
+            "--offline-count",
+            "2",
+            "--epochs",
+            "5",
+            "--job-id",
+            "V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_11_CLASS_IL_DISJOINT_offline0to3_ep5",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_01"
+          ],
+          "evidence_archive": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/evidence_archives/V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0_attempt_01_evidence.tar.gz",
+          "finished_utc": "2026-11-23T22:41:55Z",
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0_attempt_01.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_01",
+          "peak_estimate_mib": 6184,
+          "pid": 14715,
+          "prelaunch_free_vram_mib": 7759,
+          "return_code": null,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/classil_src",
+          "started_utc": "2026-11-23T22:29:55Z",
+          "status": "completed",
+          "verification": {
+            "result_summary_present": true,
+            "worker_status": "completed"
+          }
+        }
+      ],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:41:15Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_11_CLASS_IL_DISJOINT_offline0to3_ep5",
+        "curriculum": "disjoint",
+        "epochs_per_task": 5,
+        "job_id": "V25_CLASSIL_DISJOINT10_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 2,
+        "participation": 0.6,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "completed"
+    },
+    {
+      "active_attempt_id": "attempt_01",
+      "attempts": [
+        {
+          "attempt_id": "attempt_01",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "class_il",
+            "--curriculum",
+            "disjoint",
+            "--offline-count",
+            "3",
+            "--epochs",
+            "5",
+            "--job-id",
+            "V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_11_CLASS_IL_DISJOINT_offline0to3_ep5",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_01"
+          ],
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0_attempt_01.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_01",
+          "peak_estimate_mib": 6184,
+          "pid": 15289,
+          "prelaunch_free_vram_mib": 11233,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/classil_src",
+          "started_utc": "2026-11-23T22:34:27Z",
+          "status": "running"
+        }
+      ],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1
+        ],
+        "completed_utc": "2026-11-23T21:41:19Z",
+        "learning_syncs": 10,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 50,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_11_CLASS_IL_DISJOINT_offline0to3_ep5",
+        "curriculum": "disjoint",
+        "epochs_per_task": 5,
+        "job_id": "V25_CLASSIL_DISJOINT10_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 3,
+        "participation": 0.4,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "running"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:41:26Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_12_CLASS_IL_JOINT_offline0to3_ep5",
+        "curriculum": "joint",
+        "epochs_per_task": 5,
+        "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 1,
+        "participation": 0.8,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:41:29Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_12_CLASS_IL_JOINT_offline0to3_ep5",
+        "curriculum": "joint",
+        "epochs_per_task": 5,
+        "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 2,
+        "participation": 0.6,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "queued"
+    },
+    {
+      "attempts": [],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:41:33Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_12_CLASS_IL_JOINT_offline0to3_ep5",
+        "curriculum": "joint",
+        "epochs_per_task": 5,
+        "job_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE3_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 3,
+        "participation": 0.4,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "queued"
+    },
+    {
+      "active_attempt_id": "attempt_02",
+      "attempts": [
+        {
+          "archive_status": "compact_failure_evidence_copied_to_b550_webdav",
+          "attempt_id": "attempt_01",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "task_il",
+            "--curriculum",
+            "joint",
+            "--offline-count",
+            "0",
+            "--epochs",
+            "5",
+            "--job-id",
+            "V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_10_TASK_IL_JOINT_offline0to3_ep5",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/runs/V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_01"
+          ],
+          "evidence_archive": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/evidence_archives/V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0_attempt_01_evidence.tar.gz",
+          "failure_reason": "worker exit -2 or terminal status/result summary missing",
+          "finished_utc": "2026-11-23T22:30:05Z",
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0_attempt_01.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/runs/V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_01",
+          "peak_estimate_mib": 6184,
+          "pid": 588750,
+          "prelaunch_free_vram_mib": 21178,
+          "return_code": -2,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/source_variants/taskil_src",
+          "started_utc": "2026-11-23T22:20:15Z",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_02",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "task_il",
+            "--curriculum",
+            "joint",
+            "--offline-count",
+            "0",
+            "--epochs",
+            "5",
+            "--job-id",
+            "V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_10_TASK_IL_JOINT_offline0to3_ep5",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_02"
+          ],
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0_attempt_02.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_02",
+          "peak_estimate_mib": 6184,
+          "pid": 15117,
+          "prelaunch_free_vram_mib": 14973,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/taskil_src",
+          "started_utc": "2026-11-23T22:34:02Z",
+          "status": "running"
+        }
+      ],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T22:33:14Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "preflight_previous_v100": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:40:54Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_10_TASK_IL_JOINT_offline0to3_ep5",
+        "curriculum": "joint",
+        "epochs_per_task": 5,
+        "job_id": "V25_TASKIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 0,
+        "participation": 1.0,
+        "seed": 0,
+        "setting": "task_il"
+      },
+      "status": "running",
+      "supervisor_recovery_note": "Moved to Mtech after V100 storage forecast showed current disk headroom could not safely complete this 20-sync cell. Interrupted attempt_01 with KeyboardInterrupt; partial V100 output preserved; retry same cell on Mtech."
+    },
+    {
+      "active_attempt_id": "attempt_02",
+      "attempts": [
+        {
+          "archive_status": "compact_failure_evidence_copied_to_b550_webdav",
+          "attempt_id": "attempt_01",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "class_il",
+            "--curriculum",
+            "joint",
+            "--offline-count",
+            "0",
+            "--epochs",
+            "5",
+            "--job-id",
+            "V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_12_CLASS_IL_JOINT_offline0to3_ep5",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/runs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_01"
+          ],
+          "evidence_archive": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/evidence_archives/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0_attempt_01_evidence.tar.gz",
+          "failure_reason": "worker exit -2 or terminal status/result summary missing",
+          "finished_utc": "2026-11-23T22:30:04Z",
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0_attempt_01.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/runs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_01",
+          "peak_estimate_mib": 6184,
+          "pid": 588728,
+          "prelaunch_free_vram_mib": 21178,
+          "return_code": -2,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/source_variants/classil_src",
+          "started_utc": "2026-11-23T22:20:13Z",
+          "status": "failed"
+        },
+        {
+          "attempt_id": "attempt_02",
+          "command": [
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/.venv/bin/python",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/scripts/run_v25_offline_epoch_grid.py",
+            "--worker",
+            "--setting",
+            "class_il",
+            "--curriculum",
+            "joint",
+            "--offline-count",
+            "0",
+            "--epochs",
+            "5",
+            "--job-id",
+            "V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+            "--block-id",
+            "block_12_CLASS_IL_JOINT_offline0to3_ep5",
+            "--output-dir",
+            "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_02"
+          ],
+          "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0_attempt_02.log",
+          "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0/attempt_02",
+          "peak_estimate_mib": 6184,
+          "pid": 14948,
+          "prelaunch_free_vram_mib": 7759,
+          "safety_margin_mib": 256,
+          "source_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/source_variants/classil_src",
+          "started_utc": "2026-11-23T22:33:18Z",
+          "status": "running"
+        }
+      ],
+      "host": "mtech",
+      "host_assignment": "mtech",
+      "job_id": "V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "output_dir": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/runs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+      "preflight": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T22:33:18Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_v10/logs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "preflight_previous_v100": {
+        "class_occurrence_values": [
+          1,
+          2,
+          3
+        ],
+        "completed_utc": "2026-11-23T21:41:22Z",
+        "learning_syncs": 20,
+        "log": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/results/v25_offline_epoch_grid_20261122_v2/recovery_v10/logs/V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0_preflight.log",
+        "return_code": 0,
+        "task_instances": 100,
+        "terminal_flush": true
+      },
+      "seed_attempt_count": 0,
+      "spec": {
+        "block_id": "block_12_CLASS_IL_JOINT_offline0to3_ep5",
+        "curriculum": "joint",
+        "epochs_per_task": 5,
+        "job_id": "V25_CLASSIL_JOINT_CHAIN20_ALLSYNC_EPOCHS5_REPLAY_FEDAVG_SEED0",
+        "offline_count": 0,
+        "participation": 1.0,
+        "seed": 0,
+        "setting": "class_il"
+      },
+      "status": "running",
+      "supervisor_recovery_note": "Moved to Mtech after V100 storage forecast showed current disk headroom could not safely complete this 20-sync cell. Interrupted attempt_01 with KeyboardInterrupt; partial V100 output preserved; retry same cell on Mtech."
+    }
+  ],
+  "safety_margin_mib": 256,
+  "source_seed": "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261124/results/v25_offline_epoch_grid_20261122_v2/recovery_mtech_queue_seed_20261124.json",
+  "source_seed_sha256": "179e811665a8c2df50afdd520d5a599a86207fd50063cf3959482dbc5bf1ba7d",
+  "status": "queued",
+  "storage_per_worker_mib": 14000,
+  "storage_reserve_mib": 1024,
+  "updated_utc": "2026-11-23T22:42:40Z",
+  "worker_peak_estimate_mib": 6184
+}

@@ -1,0 +1,67 @@
+{
+  "captured_local": "2026-11-23T00:03:33+05:30",
+  "evidence_limits": [
+    "Filesystem values are live snapshots; Mtech rclone cache is large and its last upload success was at 00:00:59 IST, so result write throughput is not yet proven stable.",
+    "V100 rclone caches retain dirty result data; both mounts remain alive and were not modified."
+  ],
+  "hosts": {
+    "mtech": {
+      "campaign_workers": 0,
+      "dev_shm_free_bytes": 22548578304,
+      "gpu_free_mib": 32497,
+      "gpu_used_mib": 4,
+      "identity": "MtechDEServer1",
+      "mount_log_last_success": "2026-11-23T00:00:59+05:30",
+      "rclone_cache_bytes": 45097156608,
+      "rclone_process_pid": 19259,
+      "root_free_bytes": 0
+    },
+    "v100": {
+      "campaign_workers": 0,
+      "dev_shm_free_bytes": 2684354560,
+      "gpu_free_mib": 21178,
+      "gpu_used_mib": 11322,
+      "identity": "V100-server",
+      "new_rclone_cache_bytes": 6979321856,
+      "old_rclone_cache_bytes": 48318382080,
+      "root_free_bytes": 0,
+      "run_user_1027_free_bytes": 0
+    }
+  },
+  "ledger": {
+    "by_suite": {
+      "fedqcl_local_epochs_visibility": {
+        "completed": 11,
+        "queued": 1
+      },
+      "independent_ablation_A_G": {
+        "completed": 10,
+        "queued": 19
+      },
+      "intra_task_sync_frequency": {
+        "queued": 6
+      },
+      "task_size_4_vs_5": {
+        "completed": 6,
+        "queued": 6
+      },
+      "v100_epoch_participation_il_curriculum": {
+        "completed": 13,
+        "queued": 35
+      },
+      "v25_incremental_curriculum_participation": {
+        "completed": 6
+      },
+      "v25_participation_levels": {
+        "completed": 8
+      }
+    },
+    "path": "/home/anurag-basistha/CORRELATION_AWARE_FCL_ABLATIONS_2026-11-22/CAMPAIGN_LEDGER_121.jsonl",
+    "rows": 121,
+    "sha256": "dd8bbf5ae0afa5d18f0dbf50d88cb099637c16fd402fe4ef9ec1b34772839af0",
+    "states": {
+      "completed": 54,
+      "queued": 67
+    }
+  }
+}

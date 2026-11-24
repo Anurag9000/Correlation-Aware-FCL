@@ -58,7 +58,7 @@ def required_features():
                     'gradient_align','gradient_conflict','forgetting','gem_informed','history_adaptive'],
         'scenario':['disjoint','iid','non_iid','overlap','related','recurrence','asynchronous',
                     'mixed','domain','gradual_drift','shifted_recurrence'],
-        'learning_setting':['class_il','task_il','domain_il','boundary_free'],
+        'learning_setting':['task_il'],
         'participation_schedule':['constant','increasing','decreasing','alternating','stage','feedback'],
         'memory_policy':['random_per_class','recent_per_class'],
         'pending_policy':['latest','retain_all','bounded'],

@@ -1,0 +1,96 @@
+{
+  "round": 1,
+  "version": 1,
+  "terminal_communication_only_flush": false,
+  "test_accuracy": 0.25,
+  "validation_accuracy": 0.285,
+  "observed_classes": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "observed_class_count": 4,
+  "server_integrated_classes": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "server_integrated_class_count": 4,
+  "pending_unintegrated_classes": [],
+  "integrated_only_test_accuracy": 0.25,
+  "selected_clients": [
+    0,
+    1
+  ],
+  "zero_prediction_classes": [
+    2
+  ],
+  "predicted_class_counts": {
+    "0": 13,
+    "1": 259,
+    "3": 128
+  },
+  "backbone": "resnet18_cifar32",
+  "optimizer": {
+    "name": "sgd",
+    "lr": 0.03,
+    "momentum": 0.9,
+    "weight_decay": 0.0005
+  },
+  "classifier_bias_diagnostics": {
+    "bias_by_class": {
+      "0": -0.03709053620696068,
+      "1": 0.015189615078270435,
+      "2": 0.00990359578281641,
+      "3": 0.006650703959167004
+    },
+    "new_classes": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "old_classes": [],
+    "mean_new_bias": -0.0013366553466767073,
+    "mean_old_bias": null
+  },
+  "per_class_true_logit_margin": {
+    "0": -0.3788971614837646,
+    "1": 0.20165760904550553,
+    "2": -0.6782376003265381,
+    "3": -0.20354068160057068
+  },
+  "test_only_no_feedback": true,
+  "entries": [
+    {
+      "client_id": 0,
+      "first_round": 1,
+      "classes": [
+        0,
+        1
+      ],
+      "mean_accuracy": 0.48,
+      "per_class": {
+        "0": 0.13,
+        "1": 0.83
+      },
+      "pending_not_accepted_classes": []
+    },
+    {
+      "client_id": 1,
+      "first_round": 1,
+      "classes": [
+        2,
+        3
+      ],
+      "mean_accuracy": 0.02,
+      "per_class": {
+        "2": 0.0,
+        "3": 0.04
+      },
+      "pending_not_accepted_classes": []
+    }
+  ]
+}

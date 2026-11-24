@@ -1,0 +1,370 @@
+{
+  "attempt05_preparation": {
+    "cells": [
+      "B_recur_gap_10_seed0",
+      "B_recur_gap_5_seed0",
+      "C_hidden_2_seed0"
+    ],
+    "prep_attempt01_failure": "writable-tempdir missing; fixed with /dev/shm/cafcl-tmp",
+    "queue": "audit_snapshots/mtech_ag_attempt05_queue_validated_20261123_0037.json",
+    "queue_sha256": "5b50a96712a2ff16f4808f184a93ee75d4bb2da1d45d61f562438258e042f43a",
+    "training_launched": 0,
+    "validated": 3
+  },
+  "audit_note": "2026-11-24 10:28 IST refresh: 120 of 121 cells currently marked completed; full_epochs_1 is queued for oom_retry1 after original CUDA OOM. Retry launch and verification await authenticated Mtech shell access. The 48-cell V25 suite remains recorded complete from prior reconciliation.",
+  "historical_audit_note_20261123_0620": "Current ledger: 54 completed, 67 queued, 0 confirmed running. Five Mtech A-G attempts failed with FUSE EIO and were requeued after .pt cleanup freed substantial space; V100 attempt23/18 failed ENOSPC and remain first priority after its cleanup and local writable output prep.",
+  "last_ledger_refresh": "2026-11-24T10:34:08+05:30",
+  "latest_ledger_refresh": {
+    "captured_at": "2026-11-24T10:34:08+05:30",
+    "ledger_path": "CAMPAIGN_LEDGER_121.jsonl",
+    "ledger_sha256": "13d7b1323cd3e6f745514079a31edbc6079f0c9285ac9e1ab05088aee3a3208a",
+    "counts": {
+      "completed": 120,
+      "queued": 1
+    },
+    "note": "Local ledger reconciliation; live V100 sample at 10:29 IST shows 18,158 MiB VRAM free, but required FedQCL source/data are absent and Mtech SSH is unavailable. No launch."
+  },
+  "ledger_sha256": "13d7b1323cd3e6f745514079a31edbc6079f0c9285ac9e1ab05088aee3a3208a",
+  "live_resource_audit": "audit_snapshots/host_resource_snapshot_20261124_0602_final.json",
+  "local_archive_observation": "V100 attempts offline1 attempt_05 (50 files, 11,137,405,604 bytes) and offline2 attempt_02 (20 files, 2,756,774,819 bytes) copied directly to central remote_results. Source/destination SHA-256 manifests match exactly; receipt v100_failed_attempts_archive_receipt_20261122_2306.json.",
+  "mtech_access_blocker": "As of 2026-11-24T10:28:34+05:30: B550 is reachable, but Mtech SSH returns Permission denied (publickey,password), the existing mtech-link:1.0 pane is dead, and no SSH agent is available on B550. User needs to establish an authenticated Mtech shell in the B550 tmux session.",
+  "mtech_ag_recovery": {
+    "active_workers": 5,
+    "combined_queue": {
+      "jobs": 9,
+      "note": "3 attempt_05 retries ordered first; 11 unstarted attempt_03 retries follow; five interrupted attempt_03 cells require isolated attempt_04 plan validation before inclusion",
+      "path": "audit_snapshots/mtech_ag_combined_retry_queue_20261123_0118.json",
+      "sha256": "2bf4de0a6506fe22fc372a497a418165eb65a176e4710a6d76aee7aee6c95a05"
+    },
+    "dispatch_receipt": "remote_results/mtech/independent_ablation_A_G/recovery/dispatch_receipt.json",
+    "note": "five attempt_03 workers interrupted; outputs retained; controller pane dead; no new jobs admitted due full storage paths",
+    "priority_B5_dispatch": {
+      "cached_output_observation": "audit_snapshots/mtech_attempt05_cached_artifact_observation_20261123_0503.json",
+      "new_storage_mount": "cafcl-results-mount4",
+      "queue_sha256": "60d4973695263d08f46d77961506b7f71cccfb448745b052425b4e6d07365a9b",
+      "scheduler_exit_code": 1,
+      "scheduler_pid": 35754,
+      "session": "cafcl-mtech-ag-bgap5-attempt05-20261123",
+      "state": "attempt_06_running_pid_39631"
+    },
+    "queue": "audit_snapshots/mtech_ag_retry_queue_relocated_20261123_0030.json",
+    "queue_sha256": "2eb6ff19924d1b82a234b14f15d4bda059b5846198760b43311247bd6664cf4a",
+    "queued_validated_retries": 16,
+    "scheduler": "remote_results/tools/mtech_ag_vram_scheduler.py",
+    "scheduler_sha256": "c22abc6094972863f9fd4f5a846621883197660895a46d47da2ab4d3f44b896f",
+    "session": "cafcl-mtech-ag-retries-20261123"
+  },
+  "mtech_post_checkpoint_cleanup_20261123": {
+    "all_old_model_checkpoint_state_bytes_freed": 1124014496524,
+    "all_old_model_checkpoint_state_files_deleted": 14764,
+    "all_old_model_checkpoint_state_gib_freed": 1046.8200748078525,
+    "bytes_freed_verified": 1122362307319,
+    "checkpoint_allowlist_bytes": 1122362307319,
+    "checkpoint_allowlist_count": 14753,
+    "checkpoint_allowlist_sha256_manifest_convention": "94d86e3dbffe71a9bb39742c038e68f7e43591adf457e94a012754caacae86c9",
+    "checkpoint_allowlist_sha256_newline_terminated": "77385f4495d7aa5140d80d41dc706fb18a3b033dc5e1528bea801989d9b1c2b1",
+    "deleted_count_verified": 14753,
+    "evidence": {
+      "allowlist": "audit_snapshots/mtech_checkpoint_deletion_20261123/allowlist.json",
+      "pre_delete_manifest": "audit_snapshots/mtech_checkpoint_deletion_20261123/pre_delete_manifest.json",
+      "preserved_noncheckpoint_manifest": "audit_snapshots/mtech_checkpoint_deletion_20261123/preserved_noncheckpoint_pt_files.json",
+      "remote_delete_receipt": "audit_snapshots/mtech_checkpoint_deletion_20261123/delete_receipt.json"
+    },
+    "failed_unlinks": 0,
+    "gib_freed_verified": 1045.2813537037,
+    "home_remaining_before_new_training_outputs": "644 preserved dataset/scenario .pt files exactly matched the preservation manifest",
+    "host": "MtechDEServer1",
+    "inventory_bytes_before": 1123394157409,
+    "inventory_count_before": 15397,
+    "new_active_attempt_checkpoints": "Fresh checkpoint files have since been generated by the three active Mtech runs and are retained for these running attempts.",
+    "outside_home_bytes_freed": 1652189205,
+    "outside_home_checkpoint_state_files_deleted": 11,
+    "outside_home_paths": [
+      "/tmp/tmpf61a99ai/c.pt",
+      "/tmp/bc-b512-candidate-eta1-9902/training_checkpoint.pt",
+      "/tmp/phaseforge-profile-bundle/model_seed_2026.pt",
+      "/tmp/phaseforge-profile-bundle/model_seed_4109.pt",
+      "/tmp/phaseforge-profile-bundle/model_seed_3107.pt",
+      "/tmp/tmppni3t1jy/c.pt",
+      "/tmp/tmpbt0fqle8/x.pt",
+      "/tmp/bc-b512-candidate-eta1/training_checkpoint.pt",
+      "/tmp/bc-b128-reference/training_checkpoint.pt",
+      "/dev/shm/fedqcl-full2-attempt04/system/dataset/CIFAR100_NONIID_alpha10.0_clients5_tasks5/FedAvg_server.pt",
+      "/run/user/1037/cafcl_batchsync_v26_resumed/runs/OVERLAP_CHAIN20_FEDAVG_BATCH_SYNC_FULL_LOSSMASK_V26_SEED0/checkpoint_latest.pt"
+    ],
+    "outside_home_remaining_noncheckpoint_pt": [
+      "/dev/shm/cafcl-vfs-cache4/vfsMeta/kakarot/mtech/independent_ablation_A_G/D_cross_step_2_seed0/attempt_03/run/run/CAFCL_D_D_cross_step_2__attempt_03/checkpoint_latest.pt",
+      "/dev/shm/cafcl-vfs-cache3/vfsMeta/kakarot/mtech/independent_ablation_A_G/B_recur_gap_5_seed0/attempt_05/run/run/CAFCL_B_B_recur_gap_5_seed0__attempt_05/checkpoint_latest.pt",
+      "/dev/shm/cafcl-rclone-cache/vfsMeta/kakarot/mtech/intra_task_sync_frequency/V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0/attempt_03/run/V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0/checkpoint_latest.pt",
+      "/dev/shm/cafcl-rclone-cache/vfsMeta/kakarot/mtech/independent_ablation_A_G/C_hidden_2_seed0/attempt_04/run/run/CAFCL_C_C_hidden_2_seed0__attempt_04/checkpoint_latest.pt",
+      "/run/user/1037/cafcl_batchsync_v26_resumed/runs/OVERLAP_CHAIN20_FEDAVG_BATCH_SYNC_FULL_LOSSMASK_V26_SEED0/scenario.pt"
+    ],
+    "remaining_matches_preservation_manifest": true,
+    "remaining_pt_bytes": 1031850090,
+    "remaining_pt_count": 644,
+    "remote_find_after_count": 644,
+    "remote_find_unexpected_paths": 0,
+    "root_free_bytes_after": 1122393673728,
+    "scope_note": "Searched the account home and user-owned /tmp, /dev/shm, /var/tmp, /run/user/1037. Did not touch other users' files. A protected private-face-reid directory was temporarily made traversable for read-only inspection, contained no .pt files, and its original mode 0600 was restored.",
+    "verified_at": "2026-11-23T22:31:29+05:30"
+  },
+  "mtech_pt_cleanup_receipt": "audit_snapshots/mtech_pt_cleanup_receipt_20261123.json",
+  "mtech_recovery_attempt04_observation": {
+    "broad_process_scan": "no CAFCL campaign worker found",
+    "captured_at_local": "2026-11-23T01:27:48+05:30",
+    "cells": {
+      "B_recur_gap_10_seed0": 11,
+      "B_recur_gap_5_seed0": 12,
+      "C_hidden_2_seed0": 8
+    },
+    "note": "partial attempt outputs are preserved; next validated attempt_05 is queued ahead of other retries",
+    "terminal_summaries": 0,
+    "worker_pids_20056_20569_absent": true
+  },
+  "retry_dispatch_queue": {
+    "expected_peak_mib_per_job": 6186,
+    "launches": 0,
+    "margin_mib": 1024,
+    "normalized_from_runtime_plan_validation": true,
+    "path": "plans/AG_retry_dispatch_queue_20261122_2135.json",
+    "per_pid_peak_basis": "largest observed live Mtech campaign process: 6186 MiB",
+    "required_free_mib_per_job": 7210,
+    "sha256": "66cbdaea557be97a5ac178bede838c274c686071da72265cc6733c12fd611828",
+    "validated_A_G_retries": 16
+  },
+  "retry_spec_preparation": {
+    "attempt_id": "attempt_03",
+    "attempt_specs": 16,
+    "runtime_validated": 16,
+    "runtime_validation_pending": 0,
+    "state": "all plan-only checks passed; exact validation counters recorded",
+    "suite": "independent_ablation_A_G",
+    "training_launched": 0
+  },
+  "scope": "121 unique cells; retries recorded as attempts, not cells; V25 reference runs and Trash artifacts excluded",
+  "snapshot_date": "2026-11-22",
+  "snapshot_mtech": "06:19:51 IST: after removing only .pt files from campaign roots/cache, GPU idle at 32,497 MiB free, root 525 GiB free, /dev/shm 52 GiB free. Five A-G attempts confirmed failed with FUSE EIO after sync6/7; 9 never-admitted jobs remain queued; all 14 should be revalidated for new local-disk attempts.",
+  "snapshot_v100": "05:54:36 IST: recovery_v9 attempts 23 and 18 failed before terminal completion after /dev/shm reached 100% and mount5 VFS metadata write returned ENOSPC. Campaign PIDs absent; GPU returned to baseline with 21,178 MiB free. Preserve mount5 cache; repair storage before retry attempt24/19.",
+  "summary": {
+    "by_state": {
+      "completed": 121
+    },
+    "by_suite": {
+      "fedqcl_local_epochs_visibility": 12,
+      "independent_ablation_A_G": 29,
+      "intra_task_sync_frequency": 6,
+      "task_size_4_vs_5": 12,
+      "v100_epoch_participation_il_curriculum": 48,
+      "v25_incremental_curriculum_participation": 6,
+      "v25_participation_levels": 8
+    },
+    "cells": 121
+  },
+  "v100_direct_rclone_transfer_receipt": "audit_snapshots/v100_direct_rclone_transfer_receipt_20261123_0333.json",
+  "v100_failed_attempt_reconciliation": {
+    "attempts": {
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0": "attempt_22",
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0": "attempt_17"
+    },
+    "cells": [
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+      "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0"
+    ],
+    "evidence": "previously captured direct V100 logs at 05:41 IST: final torch.save failed; 21/21 metric rounds only, no terminal result",
+    "new_attempt_ids": [
+      "attempt_23",
+      "attempt_18"
+    ],
+    "note": "V100 mount5 was write-probe verified; live status/prelaunch resource check still required before retry.",
+    "retry_priority": "first"
+  },
+  "v100_mount3_large_probe_receipt": "audit_snapshots/v100_write_through_large_probe_receipt_20261123.json",
+  "v100_recovery_manifest": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v3/recovery_manifest.json; 13 completed, 34 queued, 1 stale running record; attempt_12 worker PID absent and FUSE lock write failed. Recovery_v4 had a controller launch but its manifest and outputs are still in dirty VFS cache and not yet centrally visible.",
+  "v100_recovery_v10_preparation": {
+    "access": "persistent SSH pane disconnected; key-only relogin denied from B550",
+    "cells": 48,
+    "planned_output_root": "/dev/shm/cafcl-results3/v100/v25_offline_epoch_grid_20261122_v2/recovery_v10",
+    "precompleted": 13,
+    "prepared_local_at": "2026-11-24T01:46:00+05:30",
+    "queued": 35,
+    "remote_seed_write": "unverified; no controller or training launch confirmed",
+    "scheduler": "recovery_v8/vram_scheduler_v6c.py (verified SHA in V100 transfer receipt)",
+    "seed_manifest": "audit_snapshots/v100_recovery_v10_seed_manifest_20261124.json",
+    "seed_manifest_sha256": "1981241df8f3850ae15b5c3ebd44916e3d22ce556240d065def18dc6342fb307",
+    "static_reconciliation": {
+      "cell_id_sets_match": true,
+      "ledger_suite_cells": 48,
+      "queued_attempt_sequence_mismatches": 0,
+      "queued_specs_present": true,
+      "scope": "local ledger and recovery seed only; remote V100 seed write remains unverified",
+      "seed_suite_cells": 48,
+      "status_sets_match": true,
+      "unique_ids": 48,
+      "validated_at": "2026-11-24T01:53:00+05:30"
+    }
+  },
+  "v100_recovery_v3_reconciliation": {
+    "attempt14": "failed_result_storage_eio_process_absent; recorded with partial outputs retained",
+    "attempts_appended": 21,
+    "reason": "central manifest and worker status/log evidence; failed attempts retained",
+    "rows": 3
+  },
+  "v100_recovery_v5_reconciliation": {
+    "attempts_appended": [
+      [
+        "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "attempt_13",
+        "failed_worker_exit_terminal_missing"
+      ],
+      [
+        "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "attempt_15",
+        "failed_worker_exit_terminal_missing"
+      ],
+      [
+        "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "attempt_16",
+        "failed_worker_exit_terminal_missing"
+      ],
+      [
+        "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "attempt_11",
+        "failed_worker_exit_terminal_missing"
+      ],
+      [
+        "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "attempt_12",
+        "failed_worker_exit_terminal_missing"
+      ]
+    ],
+    "last_resource_sample": {
+      "active_worker_pids": [],
+      "free_vram_mib": 6018,
+      "launches_this_pass": 0,
+      "outstanding_reserved_mib": 0,
+      "utc": "2026-11-22T20:29:44Z"
+    },
+    "latest_resource_sample": "audit_snapshots/host_resource_snapshot_20261123_0244.json",
+    "manifest_counts": {
+      "completed": 13,
+      "queued": 35
+    },
+    "manifest_status": "running",
+    "resume_failure_attempts": {
+      "offline1": [
+        "attempt_17",
+        "attempt_18",
+        "attempt_19"
+      ],
+      "offline2": [
+        "attempt_13",
+        "attempt_14"
+      ],
+      "scheduler_fix_needed": "set CAFCL_VRAM_BROKER_ADMITTED=1 for outer VRAM scheduler workers and reconcile detached worker PID before retry",
+      "transfer_receipt": "audit_snapshots/v100_resume_failure_transfer_receipt_20261123_0244.json"
+    },
+    "worker_terminal_evidence": "controller manifest records nonzero exits; detailed logs pending cache upload"
+  },
+  "v100_recovery_v6_scheduler": {
+    "latest_observation": "audit_snapshots/host_resource_snapshot_20261123_0308.json",
+    "launch_gate": "wait until /run/user/1027 backing cache has at least 4096 MiB free, the recovery cache shows continued upload progress, and no campaign workers/controller exist",
+    "launch_state": "deployed_checksum_verified_waiting_storage",
+    "path": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v5/vram_scheduler_v6.py",
+    "provenance": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v5/vram_scheduler_v6_provenance.json",
+    "provenance_sha256": "298f443482e5452dc9dbf186b4c69238be0fb9416da2174b94eafa9b77a94767",
+    "remote_sha256_verified": "ab344217eecc22503f5b1ee73000cad0a1a4fbbae4a0f9d233e35dceb0d0e954",
+    "remote_tmpfs_path": "/dev/shm/cafcl-tools/cafcl-vram-scheduler-v6-20261123.py",
+    "sha256": "ab344217eecc22503f5b1ee73000cad0a1a4fbbae4a0f9d233e35dceb0d0e954"
+  },
+  "v100_recovery_v6b_scheduler": {
+    "controller_pid": 493935,
+    "controller_session": "cafcl-v100-recovery-v6b-20261123",
+    "latest_observation": "audit_snapshots/host_resource_snapshot_20261123_0322.json",
+    "launch_state": "failed_attempts_logged; do_not_reuse_fuse_output_mount",
+    "path": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v5/vram_scheduler_v6b.py",
+    "provenance": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v5/vram_scheduler_v6b_provenance.json",
+    "provenance_sha256": "1cfbe06a8ad8648292590ca23d38583a7edbd3b361ae7c3eaafc523ed1d79df0",
+    "remote_sha256_verified": true,
+    "remote_tmpfs_path": "/dev/shm/cafcl-tools/cafcl-vram-scheduler-v6b-20261123.py",
+    "sha256": "23fb9af857de9d5659459dee36ceb11c37d77a3834b1e8f56632a07a595cb3e5",
+    "started_at": "2026-11-23T03:21:52+05:30"
+  },
+  "v100_recovery_v7_launch": {
+    "controller_pid": 496763,
+    "controller_session": "cafcl-v100-recovery-v7",
+    "failure_snapshot": "host_resource_snapshot_20261123_0423.json",
+    "initial_free_vram_mib": 21178,
+    "latest_free_vram_mib": 11170,
+    "latest_resource_at_local": "2026-11-23T04:16:59+05:30",
+    "manifest": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v7/recovery_manifest.json",
+    "manifest_sha256": "4ca47c553133cdb25ae809e1bab4d94711cf82b9b63ff66a4a4a56992b8fa281",
+    "next_retry_ids": [
+      "attempt_22",
+      "attempt_17"
+    ],
+    "progress_state": "attempt_21 and attempt_16 failed at sync_004 with tmpfs EIO; no terminal results; retry after storage repair",
+    "scheduler_sha256": "23fb9af857de9d5659459dee36ceb11c37d77a3834b1e8f56632a07a595cb3e5",
+    "status": "failed_storage_eio; retry pending storage repair",
+    "storage_failure_snapshot": "host_resource_snapshot_20261123_0437.json",
+    "workers": [
+      {
+        "attempt_id": "attempt_21",
+        "cell_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "pid": 496767
+      },
+      {
+        "attempt_id": "attempt_16",
+        "cell_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "pid": 496771
+      }
+    ]
+  },
+  "v100_recovery_v7_seed_manifest": "audit_snapshots/v100_recovery_v7_seed_manifest_20261123_0338.json",
+  "v100_recovery_v8_launch": {
+    "backing_cache_free_gib_at_launch": 9.3,
+    "checkpoint_interval_rounds": 20,
+    "controller_pid": 498186,
+    "controller_session": "cafcl-v100-recovery-v8",
+    "initial_free_vram_mib": 21178,
+    "last_resource_sample_local": "2026-11-23T04:53:42+05:30",
+    "last_resource_snapshot": "host_resource_snapshot_20261123_0453.json",
+    "latest_live_snapshot": "audit_snapshots/host_resource_snapshot_20261123_0533_v100.json",
+    "manifest": "remote_results/v100/v25_offline_epoch_grid_20261122_v2/recovery_v8/recovery_manifest.json",
+    "manifest_sha256": "78b2c4bd95460d8ddb6dcf8d6a0ad898a6884d0107c4fed1b6be4635b65bc373",
+    "progress_state": "controller and workers absent at 05:33; attempt_22 and attempt_17 are needs_audit after 21/21 metrics; terminal status unresolved",
+    "scheduler_sha256": "e55d375e2a20b9cb0d8fd73f12f7dce8f8d2af8504f549c45e867b6735040d7a",
+    "source_patch_sha256": "fe81b9ebaf9a4471fef3d68141b989bcbfce4f86190f7f76ae44f86d3af561e8",
+    "source_tree_manifest_sha256": "bc18468dcfeb3ed6f0e6a0839bd70f905ffa6964e37aaf4c8d1f57d322c41373",
+    "v7_failure_attempts": [
+      "attempt_21",
+      "attempt_16"
+    ],
+    "workers": [
+      {
+        "attempt_id": "attempt_22",
+        "cell_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE1_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "pid": 498200
+      },
+      {
+        "attempt_id": "attempt_17",
+        "cell_id": "V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0",
+        "pid": 498204
+      }
+    ]
+  },
+  "v100_recovery_v9_launch_receipt": "audit_snapshots/v100_recovery_v9_launch_receipt_20261123_0551.json",
+  "v100_recovery_v9_launch_receipt_status": "attempts failed on tmpfs/VFS ENOSPC; output retained, storage repair required before attempt24/19",
+  "local_attempt_history_audit_at": "2026-11-24T05:36:00+05:30",
+  "last_local_ledger_annotation": "2026-11-24T05:36:40+05:30",
+  "completion_audit_path": "audit_snapshots/v25_completed_attempts_audit_20261124_0603.jsonl",
+  "v100_transfer_preflight": {
+    "observed_at": "2026-11-24T10:29:07+05:30",
+    "vram_total_mib": 32768,
+    "vram_free_mib": 18158,
+    "disk_free_gib": 276,
+    "one_worker_admission_estimate_mib": 4702,
+    "source_present": false,
+    "dataset_present": false,
+    "mtech_ssh": "Permission denied (publickey,password)"
+  }
+}

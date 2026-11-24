@@ -26,7 +26,7 @@ def main() -> int:
     args = parser.parse_args()
     import torch
     from cafcl.config import RunConfig
-    from cafcl.models import create_model
+    from cafcl.models import create_model, task_class_sets_from_state_dict
 
     if not torch.cuda.is_available():
         raise SystemExit("CUDA is required to audit saved tuning models")
@@ -101,7 +101,8 @@ def main() -> int:
         state = model_file["model_state"]
         if any(not torch.isfinite(t).all() for t in state.values() if t.is_floating_point()):
             raise AssertionError(f"{cfg.job_id}: nonfinite final model tensor")
-        model = create_model(cfg.model, 10).to("cuda")
+        model = create_model(cfg.model, 10,
+            task_class_sets=task_class_sets_from_state_dict(state)).to("cuda")
         model.load_state_dict(state)
         model.eval()
         with torch.inference_mode():

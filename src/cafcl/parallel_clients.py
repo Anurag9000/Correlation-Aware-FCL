@@ -13,7 +13,7 @@ returns, so disconnected clients still train but cannot upload or download.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from threading import Barrier
 from time import perf_counter
 import torch
@@ -28,7 +28,7 @@ class ClientRuntime:
     stream: object | None
 
 
-def create_client_runtimes(cfg, bank, clients, device):
+def create_client_runtimes(cfg, bank, clients, device, task_class_sets):
     """Create one persistent model per client and the configured CUDA streams.
 
     Default execution uses a distinct CUDA stream per client. Bounded
@@ -49,7 +49,8 @@ def create_client_runtimes(cfg, bank, clients, device):
         for cid, client in sorted(clients.items()):
             model = create_model(
                 cfg.model, bank.num_classes,
-                allow_test_model=(cfg.dataset == 'synthetic')).to(device)
+                allow_test_model=(cfg.dataset == 'synthetic'),
+                task_class_sets=task_class_sets).to(device)
             if client.shared_weights is None:
                 raise RuntimeError(f'Client {cid} has no initialized local weights')
             model.load_state_dict(client.shared_weights)
@@ -68,23 +69,33 @@ def create_client_runtimes(cfg, bank, clients, device):
 
 
 def _train_one(runtime, client, bank, cfg, device, round_id, event,
-               task_classes, barrier):
+               task_classes, task_id, barrier,known_task_sets=(),task_ids_by_index=None):
     # All clients with a task in the current ordinal must reach this barrier.
     barrier.wait(timeout=300)
     start = perf_counter()
+    if cfg.learning_setting=='task_il' and task_id:
+        runtime.model.set_active_task_id(task_id)
     if device.type == 'cuda':
         with torch.cuda.device(device), torch.cuda.stream(runtime.stream):
             result = local_train(
                 runtime.model, client, bank, cfg, device, round_id,
-                task_classes=task_classes, experience_end=event['is_actual'],
-                active_pair_classes=event['active_pair'])
+                task_classes=task_classes, task_id=task_id,
+                experience_end=event['is_actual'],
+                active_pair_classes=event['active_pair'],
+                padding_indices=event.get('padding_indices'),
+                known_task_ids=known_task_sets,
+                task_ids_by_index=task_ids_by_index)
             # Never expose an unfinished client update to the server or Task 2.
             runtime.stream.synchronize()
     else:
         result = local_train(
             runtime.model, client, bank, cfg, device, round_id,
-            task_classes=task_classes, experience_end=event['is_actual'],
-            active_pair_classes=event['active_pair'])
+            task_classes=task_classes, task_id=task_id,
+            experience_end=event['is_actual'],
+            active_pair_classes=event['active_pair'],
+            padding_indices=event.get('padding_indices'),
+            known_task_ids=known_task_sets,
+            task_ids_by_index=task_ids_by_index)
     return result, start, perf_counter()
 
 
@@ -97,6 +108,11 @@ def _prepare_events(cfg, client, cid, raw_events, current_stage):
         if any(len(set(e['class_ids'])) < 2 for e in events):
             raise AssertionError('Singleton local task in strict stream')
     else:
+        # Keep task-head construction, per-example provenance and local event
+        # grouping on the same canonical ordering, independent of arrival-list
+        # iteration order or a semantic class-order override.
+        raw_events=sorted(raw_events,key=lambda e:(int(e['global_stage']),
+            tuple(map(int,e['class_ids'])),tuple(map(int,e['indices'][:1]))))
         events = []
         for start in range(0, len(raw_events), 2):
             group = raw_events[start:start + 2]
@@ -104,6 +120,7 @@ def _prepare_events(cfg, client, cid, raw_events, current_stage):
                 events.append({
                     'indices': group[0]['indices'] + group[1]['indices'],
                     'class_ids': (group[0]['class_id'], group[1]['class_id']),
+                    'task_id': group[0]['task_id'],
                     'global_stage': max(g['global_stage'] for g in group),
                     'is_recurrence': any(g['is_recurrence'] for g in group)})
             else:
@@ -117,14 +134,20 @@ def _prepare_events(cfg, client, cid, raw_events, current_stage):
         return [], False
     if events:
         return events, True
+    previous_classes=()
+    if cfg.learning_setting=='task_il' and client.local_training_events:
+        previous_classes=tuple(client.local_training_events[-1].get('classes',()))
     return ([{
         'indices': list(client.current_indices), 'class_id': None,
-        'class_ids': (), 'global_stage': current_stage, 'is_recurrence': False
+        'class_ids': previous_classes,
+        'task_id':client.local_training_events[-1].get('task_id'),
+        'global_stage': current_stage, 'is_recurrence': False
     }], False)
 
 
 def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
-                              round_id, current_stage, scenario, new_events):
+                              round_id, current_stage, scenario, new_events,
+                              known_task_sets=(),task_ids_by_index=None):
     """Train all clients' Task 1 concurrently, join; then Task 2, join; etc.
 
     The server is not involved during either task. Every client has its own
@@ -178,31 +201,39 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                     client.local_training_events.append({
                         'round': round_id, 'local_experience': client.local_experience,
                         'class': classes[0] if len(classes) == 1 else None,
-                        'classes': list(classes), 'global_stage': raw['global_stage'],
+                        'classes': list(classes), 'task_id':raw['task_id'],
+                        'global_stage': raw['global_stage'],
                         'recurrence': raw['is_recurrence'],
                         'selected_for_upload': False})
                     client.current_indices = list(raw['indices'])
                     if cfg.pending_policy == 'bounded' and cfg.max_pending_samples > 0:
                         client.current_indices = client.current_indices[-cfg.max_pending_samples:]
                 if cfg.learning_setting == 'task_il':
-                    stage = raw['global_stage']
-                    task_labels = scenario.stages[min(stage, len(scenario.stages) - 1)]
+                    task_labels = tuple(sorted(set(map(int,raw['class_ids']))))
+                    task_id=raw['task_id']
                 else:
                     task_labels = None
-                local_cfg = cfg
+                    task_id=None
+                local_cfg = replace(cfg, epochs=1) if cfg.stream_sync_every_batch else cfg
                 if cfg.client_heterogeneity:
-                    from dataclasses import replace
                     methods = ('sgd', 'gem', 'agem', 'replay')
-                    local_cfg = replace(cfg, method=methods[cid % len(methods)])
+                    client_method=methods[cid % len(methods)]
+                    policy=(cfg.replay_update_policy if cfg.method=='replay'
+                            else 'sampled_mixed')
+                    local_cfg = replace(local_cfg, method=client_method,
+                        replay_update_policy=(policy if client_method=='replay'
+                                              else local_cfg.replay_update_policy))
                 event = {
                     'is_actual': bool(has_new),
                     'active_pair': (tuple(raw['class_ids'])
                                     if has_new and len(raw['class_ids']) >= 2
                                     and not cfg.label_noise_rate else None),
+                    'padding_indices': list(map(int,raw.get('padding_indices',()))),
                 }
                 pending.append((cid, executor.submit(
                     _train_one, runtimes[cid], client, bank, local_cfg, device,
-                    round_id, event, task_labels, start_barrier)))
+                    round_id, event, task_labels, task_id, start_barrier,known_task_sets,
+                    task_ids_by_index)))
             # Every active client completes Task N before any Task N+1 starts.
             for cid, future in pending:
                 result, start, end = future.result()
@@ -221,6 +252,9 @@ def train_round_task_barriers(*, runtimes, executor, clients, bank, cfg, device,
                 cls = int(cls)
                 client.pending_class_update_steps[cls] = (
                     client.pending_class_update_steps.get(cls, 0) + int(count))
+            for head,count in result.get('task_head_examples',{}).items():
+                client.pending_task_head_examples[head]=(
+                    client.pending_task_head_examples.get(head,0.)+float(count))
             client.pending_upload_classes.update(result['class_counts'])
             for cls, count in result['class_counts'].items():
                 cls = int(cls)

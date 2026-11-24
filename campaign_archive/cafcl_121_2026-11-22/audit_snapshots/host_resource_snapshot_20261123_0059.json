@@ -1,0 +1,47 @@
+{
+  "captured_at_local": "2026-11-23T00:59:13+05:30",
+  "local_observation": "Kakarot receiver had four C-hidden attempt_03 checkpoint_latest.pt files changing in size/mtime during 00:50-00:58, but worker PIDs were absent and metrics remained at one round-zero record; not treated as training progress or completion.",
+  "mtech": {
+    "dev_shm_available_bytes": 0,
+    "dev_shm_use_percent": 100,
+    "gpu_free_mib": 32497,
+    "gpu_used_mib": 4,
+    "host": "MtechDEServer1",
+    "pane": "dead",
+    "partial_outputs_preserved": true,
+    "rclone_mounts": [
+      "/dev/shm/cafcl-kakarot-results",
+      "/dev/shm/cafcl-kakarot-results-fresh"
+    ],
+    "root_available_bytes": 0,
+    "root_use_percent": 100,
+    "scheduler_tmux_session": "cafcl-mtech-ag-retries-20261123",
+    "worker_pids_absent": [
+      32289,
+      32293,
+      32297,
+      32301,
+      32308
+    ]
+  },
+  "v100": {
+    "campaign_process_match": "none in bounded ps query",
+    "captured_at_local": "2026-11-23T00:55:05+05:30",
+    "dev_shm_available_bytes": 6549825126,
+    "gpu_free_mib": 21178,
+    "gpu_used_mib": 11322,
+    "host": "V100-server",
+    "mount2_errors": [
+      "attempt_07: ENOSPC/EIO writing output status",
+      "attempt_08: ENOSPC/EIO writing worker lock"
+    ],
+    "recovery_manifest_counts": {
+      "completed": 13,
+      "queued": 33,
+      "running_stale_or_unverified": 2
+    },
+    "root_available_bytes": 0,
+    "root_use_percent": 100,
+    "run_user_1027_available_bytes": 8804682956
+  }
+}

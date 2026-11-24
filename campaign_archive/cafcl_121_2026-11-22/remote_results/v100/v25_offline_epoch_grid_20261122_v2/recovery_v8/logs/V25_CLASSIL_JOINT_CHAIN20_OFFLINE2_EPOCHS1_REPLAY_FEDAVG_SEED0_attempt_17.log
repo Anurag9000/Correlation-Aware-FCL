@@ -1,0 +1,42 @@
+Matplotlib is building the font cache; this may take a moment.
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 1/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 2/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 3/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 4/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 5/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 6/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 7/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 8/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 9/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 10/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 11/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 12/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 13/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 14/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 15/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 16/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 17/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 18/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 19/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 20/21 acc=deferred forgetting=deferred clients=3
+[V25_CLASSIL_JOINT_CHAIN20_OFFLINE2_EPOCHS1_REPLAY_FEDAVG_SEED0] round 21/21 acc=0.0277 forgetting=0.4315 clients=5
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 850, in save
+    _save(
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1114, in _save
+    zip_file.write_record(name, storage, num_bytes)
+RuntimeError: [enforce fail at inline_container.cc:778] . PytorchStreamWriter failed writing file data/42290: file write failed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/run/user/1027/cafcl-source-v8/classil_src/src/cafcl/simulator.py", line 957, in run_experiment
+    save_checkpoint(run_dir/'model_final.pt',global_state,cfg,version,clients,full_state=True,server_cl_state=server_cl_state)
+  File "/run/user/1027/cafcl-source-v8/classil_src/src/cafcl/simulator.py", line 361, in save_checkpoint
+    torch.save(payload,tmp)
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 849, in save
+    with _open_zipfile_writer(f) as opened_zipfile:
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-mtech-fullcopy-20261122/.venv/lib/python3.12/site-packages/torch/serialization.py", line 690, in __exit__
+    self.file_like.write_end_of_file()
+RuntimeError: [enforce fail at inline_container.cc:603] . unexpected pos 947832768 vs 947832656

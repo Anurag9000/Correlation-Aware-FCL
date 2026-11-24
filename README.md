@@ -2,9 +2,9 @@
 
 This research repository studies continual learning across clients that may train while disconnected, then upload accumulated updates. It includes local continual-learning methods, server aggregation studies, and source-fidelity adapters.
 
-## Current CIFAR-100 paired experiment
+## Current Task-IL CIFAR-100 paired experiment
 
-The primary ResNet-18 Replay/FedAvg experiment compares full participation with a randomly selected one-client outage. Its active configuration is:
+The primary ResNet-18 Replay/FedAvg experiment compares full participation with a randomly selected one-client outage. New configs use task-incremental heads: each delivered class set is a task ID, shared labels have independent parameters in each head, and overlap predictions average and renormalize selected-head probabilities. See the Task-IL protocol in docs/TASK_INCREMENTAL_PROTOCOL.md. Its stream configuration is:
 
 - CIFAR-100 at native 32×32 resolution, with 450 training examples per class.
 - Five independent clients and one server model in each experiment process.
@@ -12,8 +12,8 @@ The primary ResNet-18 Replay/FedAvg experiment compares full participation with 
 - Adjacent class pairs overlap across clients and carry into the next sync: `(0,1),(1,2),(2,3),(3,4),(4,5)`, then `(5,6),(6,7),...`.
 - Twenty learning syncs cover all 100 classes. The final pair `(98,99)` is assigned to the last two client slots so all five clients train at sync 20; class 98 consequently has three owners.
 - Each client retains up to 50 examples per class. The expected deduplicated server archive after the terminal flush contains 10,000 examples: 50 for class 0, 150 for class 98, and 100 for every other class.
-- In the hidden arm, one client is selected randomly for no model upload at each learning sync. All five clients continue training; the offline client retains its model trajectory and receives the complete replay archive.
-- Replay training includes each incoming batch and every currently available replay example in every optimizer update. Replay examples are read in batch-64 chunks and their gradients are accumulated before that update.
+- In the hidden arm, one client is selected randomly for no model upload at each learning sync. All five clients continue training; an omitted client keeps its last received model and Replay archive until it is selected again.
+- Each incoming 64-image batch is split into two updates, each containing 32 current images and 32 replay images. Every replay image is sampled by choosing uniformly among classes in the client’s currently available archive, then uniformly among that class’s stored images.
 - Five independent client models train concurrently per process on separate CUDA streams. The two arms launch as separate concurrent processes on the same GPU, for ten client models training concurrently and two separate server models.
 - Each local task uses batch 64, 10 epochs, crop/flip train augmentation, and persistent client SGD momentum. A communication-only terminal flush follows the 20 learning syncs.
 
@@ -24,7 +24,7 @@ bash scripts/run_primary_probe_cifar100.sh --plan-only
 bash scripts/run_primary_probe_cifar100.sh --gpu 0
 ```
 
-The completed 38.58% full / 30.58% rotating-offline results came from an earlier nine-sync, disjoint-class run with sampled-minibatch replay. They are historical and do not validate this current 20-sync adjacent-chain, exhaustive-replay configuration. The current protocol is one seed and requires a new run for empirical results. See [the current protocol](docs/PRIMARY_PROBE.md) and [project status](docs/STATUS.md).
+The completed 46.78% full / 42.13% random-offline results and the earlier 38.58% / 30.58% result predate the task-head migration. They are historical class-IL measurements and do not validate Task-IL. A one-seed Task-IL pair is now running on Mtech. See [the current protocol](docs/PRIMARY_PROBE.md) and [project status](docs/STATUS.md).
 
 ## Code and documentation
 

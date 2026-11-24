@@ -1,0 +1,43 @@
+{"event": "admitted", "run_id": "V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0_ATTEMPT_03", "worker_pid": 20048, "estimate_mib": 6184, "margin_mib": 1024, "prelaunch_free_vram_mib": 32497, "other_outstanding_reservations_mib": 13758, "admitted_at_epoch": 1795358866.5150654, "command": ["env", "HOME=/dev/shm/cafcl-home", "TMPDIR=/dev/shm/cafcl-tmp", "XDG_CACHE_HOME=/dev/shm/cafcl-runtime-cache", "PYTHONDONTWRITEBYTECODE=1", "PYTHONPATH=/home/anurag24092/Projects/Correlation-Aware-FCL-intratask-sync-ablation-20261122/taskil_src/src", "OMP_NUM_THREADS=1", "MKL_NUM_THREADS=1", "/home/anurag24092/Projects/Correlation-Aware-FCL-intratask-sync-ablation-20261122/taskil_src/.venv/bin/python", "/home/anurag24092/Projects/Correlation-Aware-FCL-intratask-sync-ablation-20261122/scripts/intratask_sync_campaign.py", "--worker-spec", "/dev/shm/cafcl-kakarot-results/mtech/intra_task_sync_frequency/V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0/attempt_03/worker_spec.json"], "reservation_file": "/dev/shm/cafcl-broker-home/.cache/cafcl-vram-broker/reservations/V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0_ATTEMPT_03.19988.reservation.json", "status": "running"}
+{"job_id": "V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0", "setting": "task_il", "seed": 0, "classes_per_task": 2, "tasks_per_client": 10, "task_instances": 50, "syncs_per_task": 2, "epochs_per_task": 10, "epochs_per_sync": 5, "learning_syncs": 20, "terminal_flush": true, "total_syncs_including_flush": 21, "taskil_heads": 50, "taskil_head_width": 2, "classil_heads": null, "classil_width": null, "all_five_clients_upload_each_learning_sync": true, "task_contents_reused_across_segments": true, "task_identity_and_replay_memory_preserved_across_segments": true, "validated": "plan_only"}
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 1/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 2/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 3/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 4/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 5/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 6/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 7/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 8/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 9/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 10/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 11/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 12/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 13/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 14/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 15/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 16/21 acc=deferred forgetting=deferred clients=5
+[V25_TASK_IL_DISJOINT_SYNC2_PER_TASK_REPLAY_FEDAVG_SEED0] round 17/21 acc=deferred forgetting=deferred clients=5
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-intratask-sync-ablation-20261122/taskil_src/src/cafcl/simulator.py", line 951, in run_experiment
+    sync_report=render_sync_report(run_dir,round_number=round_id+1,
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+object address  : 0x7fe369b391c0
+object refcount : 3
+
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-intratask-sync-ablation-20261122/taskil_src/src/cafcl/stage_report.py", line 94, in render_sync_report
+OSError: [Errno 28] No space left on device
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-vram-broker-20261122/vram_broker.py", line 208, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-vram-broker-20261122/vram_broker.py", line 198, in main
+    atomic_json(TERMINAL / f"{args.run_id}.{child.pid}.json", current)
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-vram-broker-20261122/vram_broker.py", line 24, in atomic_json
+    tmp.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n")
+  File "/home/anurag24092/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1047, in write_text
+    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 28] No space left on device

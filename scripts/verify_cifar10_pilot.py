@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from cafcl.config import RunConfig
-from cafcl.models import create_model
+from cafcl.models import create_model, task_class_sets_from_state_dict
 
 
 def finite_tree(value, where):
@@ -146,7 +146,8 @@ def main() -> int:
         state = model_file["model_state"]
         if any(not torch.isfinite(t).all() for t in state.values() if t.is_floating_point()):
             raise AssertionError(f"{cfg.job_id}: final model contains nonfinite tensors")
-        model = create_model(cfg.model, 10).to("cuda")
+        model = create_model(cfg.model, 10,
+            task_class_sets=task_class_sets_from_state_dict(state)).to("cuda")
         model.load_state_dict(state)
         model.eval()
         with torch.inference_mode():

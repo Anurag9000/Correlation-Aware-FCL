@@ -89,7 +89,7 @@ def make_design(jobs,*,mode,replay_ratio):
         original_classifier="FedCLASS/convs/linears.py:SimpleLinear",
         adapted_model="fedclass_resnet8",
         local_loss="source CE for no-replay; replay mode accumulates full-buffer gradients per incoming batch",
-        client_class_history="all server archive labels plus privately acquired labels; model sync remains participation-gated",
+        client_class_history="last received server archive labels plus privately acquired labels; model and archive sync are participation-gated",
         memory_mode=mode,
         replay_ratio=None, # Not an original-source hyperparameter.
         original_first_k_per_class=(50 if mode=="authors_exemplars" else 0),
@@ -99,7 +99,7 @@ def make_design(jobs,*,mode,replay_ratio):
         upstream_fidelity="FedCLASS original ResNet8 + SimpleLinear + CE/FedAvg; v16 asynchronous class-IL adaptation",
         aggregation_on_return="v18 noncanonical G+alpha*(local-anchor), alpha=1/(1+version lag), BN-safe, single-stale terminal-flush cap 1/num_clients",
         fully_connected="5/5 clients upload and receive every synchronization",
-        random_offline="4/5 clients upload model weights each learning sync; all five clients train, and every client receives the complete replay archive",
+        random_offline="4/5 clients upload model weights each learning sync; all five train, but omitted clients retain their last received replay archive",
         full_and_offline_same_gpu=0,
         concurrent_processes=2,
         five_clients_learning_concurrently_per_arm=True,

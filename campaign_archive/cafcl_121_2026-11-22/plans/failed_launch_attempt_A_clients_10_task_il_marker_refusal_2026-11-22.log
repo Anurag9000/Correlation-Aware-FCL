@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 289, in <module>
+    if __name__=='__main__':main()
+                            ^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 285, in main
+    if a.worker_spec: return worker(a.worker_spec,a.plan_only)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 156, in worker
+    raise RuntimeError(f'Refusing nonempty run directory without a worker status: {run_dir}')
+RuntimeError: Refusing nonempty run directory without a worker status: /home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/results/A/A_clients_10_task_il_seed0

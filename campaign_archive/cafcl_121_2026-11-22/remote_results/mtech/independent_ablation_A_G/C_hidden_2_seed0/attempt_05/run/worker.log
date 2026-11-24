@@ -1,0 +1,46 @@
+[CAFCL_C_C_hidden_2_seed0__attempt_05] round 1/17 acc=0.5380 forgetting=0.0000 clients=4
+[CAFCL_C_C_hidden_2_seed0__attempt_05] round 2/17 acc=0.5980 forgetting=0.0040 clients=4
+[CAFCL_C_C_hidden_2_seed0__attempt_05] round 3/17 acc=0.6987 forgetting=0.0389 clients=4
+[CAFCL_C_C_hidden_2_seed0__attempt_05] round 4/17 acc=0.7680 forgetting=0.0586 clients=4
+[CAFCL_C_C_hidden_2_seed0__attempt_05] round 5/17 acc=0.7852 forgetting=0.0374 clients=4
+[CAFCL_C_C_hidden_2_seed0__attempt_05] round 6/17 acc=0.8117 forgetting=0.0587 clients=4
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/runtime_baseline_taskil/src/cafcl/simulator.py", line 942, in run_experiment
+    sync_report=render_sync_report(run_dir,round_number=round_id+1,
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/runtime_baseline_taskil/src/cafcl/stage_report.py", line 94, in render_sync_report
+    (root/(stem+'.json')).write_text(json.dumps(metadata,indent=2)+'\n')
+  File "/home/anurag24092/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1047, in write_text
+    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 5] Input/output error: '/dev/shm/cafcl-kakarot-results-v4/mtech/independent_ablation_A_G/C_hidden_2_seed0/attempt_05/run/run/CAFCL_C_C_hidden_2_seed0__attempt_05/per_sync_accuracy/sync_007.json'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 192, in worker
+    result=run_experiment(cfg,str(run_dir/'run'),str(runtime_root/'data'),download=False,verbose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/runtime_baseline_taskil/src/cafcl/simulator.py", line 1088, in run_experiment
+    atomic_json(status_file,{'status':'failed','protocol_version':protocol_version_for(cfg),
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/runtime_baseline_taskil/src/cafcl/simulator.py", line 435, in atomic_json
+    with tmp.open('w') as fh:json.dump(obj,fh,indent=2,sort_keys=True,default=str)
+         ^^^^^^^^^^^^^
+  File "/home/anurag24092/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 5] Input/output error: '/dev/shm/cafcl-kakarot-results-v4/mtech/independent_ablation_A_G/C_hidden_2_seed0/attempt_05/run/run/CAFCL_C_C_hidden_2_seed0__attempt_05/status.json.39647.tmp'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 323, in <module>
+    if __name__=='__main__':main()
+                            ^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 319, in main
+    if a.worker_spec: return worker(a.worker_spec,a.plan_only)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runn  File "/home/anurag24092/Projects/Correlation-Aware-FCL-independent-ablations-20261122/compiler/cafcl_independent_ablation_runner.py", line 199, in worker

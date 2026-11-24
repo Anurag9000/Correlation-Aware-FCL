@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import math
 import numpy as np
 from .data import Arrival, Scenario
+from .task_ids import task_instance_id
 
 OVERLAP_KINDS = ('none','intra_same_round','intra_cross_round',
                  'inter_same_round','inter_cross_round','combined')
@@ -60,6 +61,33 @@ def make_task_schedule(num_classes, cfg):
                     labels=(own[start],own[(start+1)%len(own)])
                     schedule.append((round_id,cid,0,labels,True))
                 round_id+=1
+        return schedule
+    if (cfg.classes_per_local_task == 2 and cfg.local_tasks_per_round == 1
+            and cfg.stream_overlap_kind == 'none'):
+        # One fresh, disjoint two-class task per client at each sync. This
+        # preserves the V25 local-task/synchronization cadence while removing
+        # its cross-client and cross-round class overlap. For CIFAR-100 with
+        # five clients this yields ten learning syncs, then the configured
+        # communication-only flush.
+        if cfg.stream_recurrence_rounds:
+            raise ValueError('One-task disjoint streaming cannot also add recurrence rounds')
+        if cfg.stream_overlap_fraction or cfg.sample_overlap_fraction:
+            raise ValueError('Disjoint one-task streaming cannot request overlap')
+        order=list(cfg.class_order_override) if cfg.class_order_override else list(range(num_classes))
+        if len(order)!=num_classes or set(order)!=set(range(num_classes)):
+            raise ValueError('Stream class order must be a permutation of dataset labels')
+        if num_classes % cfg.classes_per_local_task:
+            raise ValueError('Disjoint one-task stream cannot end in an incomplete class task')
+        schedule=[];current=0;round_id=0
+        while current<num_classes:
+            for cid in range(cfg.num_clients):
+                if current>=num_classes:break
+                labels=tuple(order[current:current+cfg.classes_per_local_task])
+                if len(labels)!=cfg.classes_per_local_task:
+                    raise ValueError('Disjoint one-task stream produced an incomplete class task')
+                schedule.append((round_id,cid,0,labels,False))
+                current+=cfg.classes_per_local_task
+            round_id+=1
         return schedule
     if cfg.classes_per_local_task != 2 or cfg.local_tasks_per_round != 2:
         raise ValueError('Only two initial two-class tasks and one subsequent two-class task are supported')
@@ -207,7 +235,8 @@ def compile_stream_scenario(bank,cfg):
             if not sample:raise ValueError(f'Not enough examples for label {cls} across its overlapping tasks')
             ids.extend(sample)
             label_holders[cls].add(cid)
-        arrivals.append(Arrival(rnd,cid,rnd,tuple(ids),labels,bool(recur)))
+        task_id=task_instance_id(cid,rnd,task,labels)
+        arrivals.append(Arrival(rnd,cid,rnd,tuple(ids),labels,bool(recur),(),task_id))
     stages=[[] for _ in range(1+max(r for r,_,_,_,_ in schedule))]
     if cfg.stream_terminal_flush:
         stages.append([])  # communication-only flush to integrate last offline clients
@@ -220,8 +249,68 @@ def compile_stream_scenario(bank,cfg):
     unused=tuple(sorted(set(range(len(bank.train)))-all_ids))
     if set(label_holders)!=set(range(bank.num_classes)):
         raise RuntimeError('Unexposed classes in streaming curriculum')
-    return Scenario(arrivals,stages,dict(label_holders),cfg.num_clients,bank.num_classes,
-                    tuple(sorted(set(dup))),unused)
+    scenario=Scenario(arrivals,stages,dict(label_holders),cfg.num_clients,bank.num_classes,
+                      tuple(sorted(set(dup))),unused)
+    if cfg.stream_sync_every_batch:
+        return expand_stream_to_batch_syncs(scenario,cfg)
+    return scenario
+
+
+def expand_stream_to_batch_syncs(scenario,cfg):
+    """Turn each streamed task pass into one FedAvg sync per physical batch."""
+    by_round=defaultdict(list)
+    for arrival in scenario.arrivals:
+        by_round[int(arrival.round_id)].append(arrival)
+    expanded=[];stages=[];assigned=set();sync_id=0
+    for original_round in sorted(by_round):
+        arrivals=sorted(by_round[original_round],key=lambda item:item.client_id)
+        if len({a.client_id for a in arrivals})!=len(arrivals):
+            raise RuntimeError('Batch-sync expansion expects one task per client per source round')
+        for epoch in range(cfg.epochs):
+            batches={}
+            for arrival in arrivals:
+                values=np.asarray(arrival.indices,dtype=np.int64)
+                rng=np.random.default_rng(
+                    cfg.seed+9_771_203+original_round*1_000_003+
+                    arrival.client_id*10_007+epoch*101)
+                values=values[rng.permutation(len(values))]
+                batches[arrival.client_id]=[
+                    tuple(map(int,values[start:start+cfg.batch_size]))
+                    for start in range(0,len(values),cfg.batch_size)]
+            max_batches=max((len(value) for value in batches.values()),default=0)
+            seen_stream_by_client={a.client_id:[] for a in arrivals}
+            for batch_index in range(max_batches):
+                new_labels=[]
+                batch_arrivals=[]
+                for arrival in arrivals:
+                    client_batches=batches[arrival.client_id]
+                    if batch_index>=len(client_batches):
+                        continue
+                    batch_values=client_batches[batch_index]
+                    padding_pool=()
+                    if len(batch_values)<cfg.batch_size:
+                        padding_pool=tuple(seen_stream_by_client[arrival.client_id])
+                        if not padding_pool:
+                            padding_pool=tuple(batch_values)
+                    batch_arrivals.append(Arrival(
+                        sync_id,arrival.client_id,sync_id,
+                        batch_values,arrival.labels,arrival.recurrence,padding_pool,
+                        arrival.task_id))
+                    seen_stream_by_client[arrival.client_id].extend(batch_values)
+                    for label in arrival.labels:
+                        label=int(label)
+                        if label not in assigned:
+                            assigned.add(label);new_labels.append(label)
+                if not batch_arrivals:
+                    continue
+                expanded.extend(batch_arrivals)
+                stages.append(sorted(new_labels))
+                sync_id+=1
+    if cfg.stream_terminal_flush:
+        stages.append([])
+    return Scenario(expanded,stages,scenario.label_holders,scenario.num_clients,
+                    scenario.num_classes,scenario.duplicate_sample_ids,
+                    scenario.unused_sample_ids)
 
 
 def select_offline_cohort(cfg,round_id,total_rounds,standard_selected):

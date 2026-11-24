@@ -30,7 +30,7 @@ def fingerprint(cfg):
 
 def base(seed=0,model=None):
     return RunConfig(dataset='cifar100',stream_protocol=True,class_pair_protocol='strict',
-        learning_setting='class_il',classes_per_local_task=2,local_tasks_per_round=2,
+        learning_setting='task_il',classes_per_local_task=2,local_tasks_per_round=2,
         stream_overlap_kind='none',stream_overlap_fraction=0,
         num_clients=10,participation=.8,selector='random',seed=seed,
         stages=1,rounds_per_stage=1,batch_size=64,
@@ -131,10 +131,15 @@ def expand(dataset='cifar100',seeds=SEEDS,families=None,model='vit',include_inva
         # explicit oracle warning in the methodology documentation.
         if changed.get('aggregator')=='fedadam' and 'server_lr' not in changed:
             changed={**changed,'server_lr':.001}
-        # Replay defaults to the pilot's 50/class independent reservoir;
+        # The primary Replay learner uses the sampled 1:1 class-uniform
+        # update. Exhaustive replay is a separate ablation and must be explicit.
+        # Replay also defaults to the pilot's 50/class independent reservoir;
         # memory-family ablations explicitly override this quota.
-        if changed.get('method')=='replay' and 'memory_per_class' not in changed:
-            changed={**changed,'memory_per_class':50}
+        if changed.get('method')=='replay':
+            if 'replay_update_policy' not in changed:
+                changed={**changed,'replay_update_policy':'sampled_mixed'}
+            if 'memory_per_class' not in changed:
+                changed={**changed,'memory_per_class':50}
         cfg=replace(bases[seed],**changed)
         cfg.validate()
         if not include_invalid:

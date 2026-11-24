@@ -4,7 +4,7 @@ ViT-Base/16 (standard ViT-B): 12 transformer blocks, 768 hidden dimensions, 12 h
 Legacy ViT-Tiny/16 (not part of current suites): 192 dimensions, 3 heads,
 16x16 patches (four image tokens at 32x32) with a learned class token.
 ResNet-18: canonical [2,2,2,2] BasicBlock stages with CIFAR 3x3/stride-1
-stem and *no* stem maxpool. Both have a single class-indexed final Linear.
+stem and *no* stem maxpool. Task-IL models share a backbone and have one classifier head per task class set.
 
 All research runs initialize BOTH architectures from scratch by default.
 This avoids treating unequal, adapted ImageNet transfer initialization as a
@@ -242,6 +242,202 @@ class FixedSimplexETFHead(nn.Module):
         return F.linear(features,self.weight,None)
 
 
+def task_head_key(classes):
+    if isinstance(classes,str):
+        if not classes.startswith('task_') or '/' in classes or '.' in classes:
+            raise ValueError(f'Invalid task ID {classes!r}')
+        return classes
+    values=tuple(sorted(set(map(int,classes))))
+    if not values or values[0]<0:
+        raise ValueError('Task heads need nonnegative global class IDs')
+    return 'task_'+'_'.join(f'{c:03d}' for c in values)
+
+
+def task_class_sets_from_state_dict(state):
+    """Recover occurrence-specific task IDs and class maps from head keys."""
+    prefix='classifier.heads.'
+    keys=sorted({name[len(prefix):].split('.',1)[0]
+                 for name in state if name.startswith(prefix)})
+    if not keys:
+        raise ValueError('Checkpoint has no task-specific classifier heads')
+    result={}
+    for key in keys:
+        if not key.startswith('task_'):
+            raise ValueError(f'Unrecognized task-head key {key!r}')
+        class_part=key[5:].split('__',1)[0]
+        values=tuple(int(value) for value in class_part.split('_') if value)
+        if not values or task_head_key(key)!=key:
+            raise ValueError(f'Invalid task-head key {key!r}')
+        if tuple(sorted(set(values)))!=values:
+            raise ValueError(f'Noncanonical class order in task-head key {key!r}')
+        result[key]=values
+    return result
+
+
+class TaskHeadBank(nn.Module):
+    """Independent classifier per canonical task class set.
+
+    The task ID is the sorted tuple of global labels. Shared labels in two
+    tasks therefore have separate parameters in the two heads.
+    """
+    def __init__(self,in_features,task_class_sets,*,head_kind='linear'):
+        super().__init__()
+        if isinstance(task_class_sets,dict):
+            entries=sorted((task_head_key(task_id),tuple(sorted(set(map(int,classes)))) )
+                           for task_id,classes in task_class_sets.items())
+            if len({key for key,_ in entries})!=len(entries):
+                raise ValueError('Task IDs must be unique')
+        else:
+            unique=sorted({tuple(sorted(set(map(int,c)))) for c in task_class_sets})
+            entries=[(task_head_key(classes),classes) for classes in unique]
+        if not entries or any(not classes for _,classes in entries):
+            raise ValueError('At least one nonempty task class set is required')
+        self.task_classes=dict(entries)
+        self.heads=nn.ModuleDict()
+        self.active_task_key=next(iter(self.task_classes))
+        for key,classes in entries:
+            if head_kind=='fedclass':
+                head=_fedclass_original_linear(in_features,len(classes))
+            elif head_kind=='etf':
+                head=FixedSimplexETFHead(in_features,len(classes))
+            else:
+                head=nn.Linear(in_features,len(classes))
+            self.heads[key]=head
+
+    def set_task_id(self,task_id):
+        key=task_id if isinstance(task_id,str) and task_id in self.heads else task_head_key(task_id)
+        if key not in self.heads:
+            raise KeyError(f'Unknown task ID {task_id!r}; registered={tuple(self.task_classes.values())}')
+        self.active_task_key=key
+
+    def classes_for(self,task_id=None):
+        key=self._key(task_id)
+        return self.task_classes[key]
+
+    def _key(self,task_id=None):
+        if task_id is None:
+            key=self.active_task_key
+            if key is None and len(self.heads)==1:key=next(iter(self.heads))
+        else:
+            key=task_id if isinstance(task_id,str) and task_id in self.heads else task_head_key(task_id)
+        if key not in self.heads:
+            raise ValueError('Prediction/training requires a valid task ID')
+        return key
+
+    def forward(self,features,task_id=None):
+        return self.heads[self._key(task_id)](features)
+
+    @property
+    def weight(self):
+        return self.heads[self._key()].weight
+
+    @property
+    def bias(self):
+        return getattr(self.heads[self._key()],'bias',None)
+
+    @property
+    def out_features(self):
+        return len(self.task_classes[self._key()])
+
+
+class TaskIncrementalClassifier(nn.Module):
+    def __init__(self,features,classes,task_class_sets,*,model_id=None):
+        super().__init__()
+        self.features=features
+        kind=('fedclass' if model_id=='fedclass_resnet8' else
+              'etf' if model_id=='native_feat_etf' else 'linear')
+        self.classifier=TaskHeadBank(features.num_features,task_class_sets,head_kind=kind)
+        self.num_classes=int(classes)
+        self.task_class_sets=tuple(sorted(self.classifier.task_classes.values()))
+        self.backbone_description=dict(model_id=model_id,task_incremental=True,
+            num_global_classes=self.num_classes,task_head_class_sets=[list(x) for x in self.task_class_sets],
+            task_id_to_classes={key:list(value) for key,value in sorted(self.classifier.task_classes.items())},
+            initialization='seeded_random')
+
+    def set_active_task_id(self,task_id):
+        self.classifier.set_task_id(task_id)
+
+    def forward(self,x,task_id=None):
+        return self.classifier(self.features(x),task_id)
+
+    def loss_for_labels(self,x,labels,task_ids=None,task_ids_by_example=None,features=None):
+        """Replay loss using each sample's originating task ID when supplied.
+
+        Task IDs are sets of global labels, so a sample can have multiple
+        valid IDs only when the scenario intentionally reuses that same raw
+        example. Its loss is averaged over those source tasks, not every task
+        head that happens to contain its class.
+        """
+        features=self.features(x) if features is None else features
+        labels=labels.to(features.device,dtype=torch.long)
+        if task_ids_by_example is not None and len(task_ids_by_example)!=len(labels):
+            raise ValueError('One source task-ID set is required per replay example')
+        losses=torch.zeros(len(labels),device=features.device)
+        counts=torch.zeros(len(labels),device=features.device)
+        selected_keys=(tuple(self.classifier._key(task_id) for task_id in task_ids)
+                       if task_ids is not None else tuple(self.classifier.task_classes))
+        for key in sorted(set(selected_keys)):
+            classes=self.classifier.task_classes[key]
+            lookup={c:i for i,c in enumerate(classes)}
+            mask=torch.zeros_like(labels,dtype=torch.bool)
+            for c in classes:mask|=(labels==c)
+            if task_ids_by_example is not None:
+                allowed=torch.as_tensor(
+                    [key in {self.classifier._key(task_id) for task_id in ids}
+                     for ids in task_ids_by_example],
+                    dtype=torch.bool,device=features.device)
+                mask&=allowed
+            if not mask.any():continue
+            selected=self.classifier(features[mask],key)
+            targets=torch.tensor([lookup[int(y)] for y in labels[mask].tolist()],
+                                 dtype=torch.long,device=features.device)
+            losses[mask]+=F.cross_entropy(selected,targets,reduction='none')
+            counts[mask]+=1
+        if (counts==0).any():
+            missing=labels[counts==0].unique().tolist()
+            raise ValueError(f'Replay labels have no task head: {missing}')
+        return (losses/counts).mean()
+
+    @torch.inference_mode()
+    def task_union_scores(self,x,task_id_sets):
+        """Average per-head probabilities for duplicated global labels.
+
+        Returns normalized global-label probabilities restricted to the union
+        of requested task heads for each input row.
+        """
+        if len(task_id_sets)!=len(x):
+            raise ValueError('One task-ID set is required per prediction row')
+        features=self.features(x)
+        result=torch.full((len(x),self.num_classes),-1.,device=features.device)
+        for row,ids in enumerate(task_id_sets):
+            sums=torch.zeros(self.num_classes,device=features.device)
+            counts=torch.zeros(self.num_classes,device=features.device)
+            keys=sorted({self.classifier._key(tid) for tid in ids})
+            if not keys:raise ValueError('Task-ID union cannot be empty')
+            for key in keys:
+                classes=self.classifier.task_classes[key]
+                probs=torch.softmax(self.classifier(features[row:row+1],key),dim=1)[0]
+                idx=torch.as_tensor(classes,dtype=torch.long,device=features.device)
+                sums[idx]+=probs
+                counts[idx]+=1
+            present=counts>0
+            scores=sums[present]/counts[present]
+            scores=scores/scores.sum().clamp_min(torch.finfo(scores.dtype).tiny)
+            result[row,present]=scores
+        return result
+
+
+class SyntheticTaskIncrementalClassifier(TaskIncrementalClassifier):
+    def __init__(self,model,task_class_sets,classes):
+        layers=list(model.children())
+        final=layers[-1]
+        if not isinstance(final,nn.Linear):
+            raise ValueError('Synthetic task model needs a final Linear layer')
+        features=nn.Sequential(*layers[:-1])
+        features.num_features=int(final.in_features)
+        super().__init__(features,classes,task_class_sets,model_id='synthetic')
+
+
 FEATURE_FACTORIES={VIT_ID:ViTBaseFeature,CNN_ID:CIFARResNet18Feature,
     'native_glfc_cbam':lambda:NativePublishedFeature('native_glfc_cbam'),
     'native_lga_cbam':lambda:NativePublishedFeature('native_lga_cbam'),
@@ -250,33 +446,19 @@ FEATURE_FACTORIES={VIT_ID:ViTBaseFeature,CNN_ID:CIFARResNet18Feature,
     'fedclass_resnet8':FedCLASSResNet8Feature}
 MODEL_IDS=tuple(FEATURE_FACTORIES)
 
-class CanonicalClassifier(nn.Module):
-    def __init__(self, backbone_name:str, classes:int):
-        super().__init__()
+class CanonicalClassifier(TaskIncrementalClassifier):
+    def __init__(self,backbone_name:str,classes:int,task_class_sets):
         if backbone_name not in MODEL_IDS:raise ValueError(f'Unknown research backbone: {backbone_name}')
-        self.features=FEATURE_FACTORIES[backbone_name]()
-        self.classifier=(_fedclass_original_linear(self.features.num_features,classes)
-                         if backbone_name=='fedclass_resnet8'
-                         else FixedSimplexETFHead(self.features.num_features,classes)
-                         if backbone_name=='native_feat_etf'
-                         else nn.Linear(self.features.num_features,classes))
-        self.backbone_description=dict(model_id=backbone_name,model_family='vit' if backbone_name==VIT_ID else 'cnn',
-            input_size=32,classes=classes,pretrained=False,initialization='seeded_random',
-            normalization_mean=NORMALIZATION_MEAN,normalization_std=NORMALIZATION_STD,
+        features=FEATURE_FACTORIES[backbone_name]()
+        super().__init__(features,classes,task_class_sets,model_id=backbone_name)
+        self.backbone_description.update(model_family='vit' if backbone_name==VIT_ID else 'cnn',
+            input_size=32,pretrained=False,normalization_mean=NORMALIZATION_MEAN,
+            normalization_std=NORMALIZATION_STD,
             patch_size=16 if backbone_name==VIT_ID else None,
             vit_variant='ViT-Base/16' if backbone_name==VIT_ID else None,
-            classifier=('FedCLASS/convs/linears.py:SimpleLinear'
-                        if backbone_name=='fedclass_resnet8' else
-                        'fixed_simplex_etf_paper_derived_missing_author_source'
-                        if backbone_name=='native_feat_etf' else
-                        'canonical_class_indexed'),
-            implementation=('vendored_original_FedCLASS_architecture'
-                            if backbone_name=='fedclass_resnet8' else
-                            'vendored_FEAT_resnet18_plus_paper_reconstructed_fixed_ETF'
-                            if backbone_name=='native_feat_etf' else 'native_torch'),
+            classifier='independent_task_heads',
             upstream_source=('FedCLASS/convs/resnet_client.py:resnet8 + FedCLASS/convs/linears.py:SimpleLinear'
                              if backbone_name=='fedclass_resnet8' else None))
-    def forward(self,x):return self.classifier(self.features(x))
 
 # One registry, intentionally easy to extend with requested ViT/ResNet variants later.
 BACKBONES={'vit':VIT_ID,'cnn':CNN_ID}
@@ -286,13 +468,16 @@ def resolve_backbone(name:str)->str:
     if name in MODEL_IDS:return name
     raise ValueError(f'Unsupported research backbone {name}; choose vit or cnn')
 
-def create_model(name:str,classes:int,*,allow_test_model=False):
-    if name in MODEL_IDS:return CanonicalClassifier(name,classes)
+def create_model(name:str,classes:int,*,allow_test_model=False,task_class_sets=None):
+    if task_class_sets is None:
+        task_class_sets=(tuple(range(int(classes))),)
+    if name in MODEL_IDS:return CanonicalClassifier(name,classes,task_class_sets)
     if not allow_test_model:raise ValueError(f'Production requires one of {MODEL_IDS}, got {name}')
-    if name=='test_linear':return nn.Sequential(nn.Flatten(),nn.Linear(3*32*32,classes))
-    if name=='test_mlp':return nn.Sequential(nn.Flatten(),nn.Linear(3*32*32,256),nn.ReLU(),nn.Linear(256,classes))
-    if name=='test_smallcnn':return nn.Sequential(nn.Conv2d(3,8,3,padding=1),nn.ReLU(),nn.AdaptiveAvgPool2d(1),nn.Flatten(),nn.Linear(8,classes))
-    raise ValueError(name)
+    if name=='test_linear':base=nn.Sequential(nn.Flatten(),nn.Linear(3*32*32,classes))
+    elif name=='test_mlp':base=nn.Sequential(nn.Flatten(),nn.Linear(3*32*32,256),nn.ReLU(),nn.Linear(256,classes))
+    elif name=='test_smallcnn':base=nn.Sequential(nn.Conv2d(3,8,3,padding=1),nn.ReLU(),nn.AdaptiveAvgPool2d(1),nn.Flatten(),nn.Linear(8,classes))
+    else:raise ValueError(name)
+    return SyntheticTaskIncrementalClassifier(base,task_class_sets,classes)
 
 def copy_cpu_state(model):
     return {k:v.detach().cpu().clone() for k,v in model.state_dict().items()}

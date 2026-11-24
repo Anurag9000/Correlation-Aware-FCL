@@ -1,0 +1,16 @@
+{
+  "gpu_free_mib": 25929,
+  "index": 1,
+  "minimum_free_mib": 24576,
+  "next_run": "A_clients_10_class_il_seed0",
+  "other_campaign_controllers": [
+    "/home/anurag24092/Projects/Correlation-Aware-FCL/.venv/bin/python /home/anurag24092/Projects/FedQCL_Task/system/main.py -data /home/anurag24092/Projects/FedQCL_Task/dataset/CIFAR100_NONIID_alpha10.0_clients5_tasks5 -m resnet18 -algo FedAvg -tasks 5 -nb 20 -nc 5 -jr 1.0 -gr 49 -lbs 13 -lr 0.005 -ls 10 -V 200 -delta 1 -memory_size 500 -memory_batch_size 13 -seed 42 -t 1 -go cifar100_full_e10",
+    "/home/anurag24092/Projects/Correlation-Aware-FCL-tasksize45-disjoint-ablation-20261122/taskil_src/.venv/bin/python /home/anurag24092/Projects/Correlation-Aware-FCL-tasksize45-disjoint-ablation-20261122/scripts/tasksize45_campaign.py --campaign",
+    "bash -c cd /home/anurag24092/Projects/Correlation-Aware-FCL && chmod +x scripts/queue_optimizer_reset_after_order.sh && bash -n scripts/queue_optimizer_reset_after_order.sh && test ! -e results/accuracy_optimizer_reset_v25_seed0 && test ! -e results/accuracy_optimizer_reset_v25_seed0.queued_pid && git diff --check && nohup scripts/queue_optimizer_reset_after_order.sh > results/accuracy_optimizer_reset_v25_seed0.queue-watcher.log 2>&1 < /dev/null & echo $! > /tmp/cafcl_optimizer_reset_queue.pid; cat /tmp/cafcl_optimizer_reset_queue.pid",
+    "bash scripts/queue_optimizer_reset_after_order.sh",
+    "/home/anurag24092/Projects/Correlation-Aware-FCL-intratask-sync-ablation-20261122/taskil_src/.venv/bin/python /home/anurag24092/Projects/Correlation-Aware-FCL-intratask-sync-ablation-20261122/scripts/intratask_sync_campaign.py --campaign"
+  ],
+  "runs_total": 29,
+  "status": "waiting_for_capacity",
+  "updated_at": 1795313741.2441702
+}
