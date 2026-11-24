@@ -1,104 +1,49 @@
-# Unified diagnostic campaign (152 slots)
+# Unified 152-slot FCL diagnostic campaign
 
-This is a **separate** campaign for client-count scaling and the joint/disjoint reversal. It does not replace the archived 121-job campaign or the existing joint suite.
+Canonical [JSON ledger](../../configs/diagnostic_campaign/job_ledger.json) and [CSV mirror](../../configs/diagnostic_campaign/job_ledger.csv). Separate from the historical 121-job campaign and joint essential suite.
 
-Canonical ledger: [job_ledger.json](../../configs/diagnostic_campaign/job_ledger.json). CSV is the inspection mirror. Counts: 142 configured jobs (14 reproductions), 10 reserved confirmation slots.
+## Scope and execution fidelity
 
-## Run suite
-From the repository root, after installing the repository dependencies:
-```bash
-PYTHONPATH=src python -m cafcl.diagnostic_campaign plan --all
-PYTHONPATH=src python -m cafcl.diagnostic_campaign preflight --family FL --data-root data
-PYTHONPATH=src python -m cafcl.diagnostic_campaign run --family FL --device cuda:0 --data-root data
-PYTHONPATH=src python -m cafcl.diagnostic_campaign resume --family FL --device cuda:0 --data-root data
-PYTHONPATH=src python -m cafcl.diagnostic_campaign status --all
-```
+| Family | Jobs | Binding |
+|---|---:|---|
+| FL | 11 | Stationary reference |
+| MC / CM / MO | 60 | Matched reference v1 |
+| CC / JR / OF / ST / JC | 71 | Explicit historical reconstruction v1 |
+| CF | 10 | Reserved, not executable until configured |
 
-`run --all` **fails closed before any training** while any selected slot lacks a binding. `run --all --ready-only` explicitly executes only implemented bindings. This avoids silently running a different scientific condition. The current implementation binds the 11 stationary FL reference jobs; 131 configured FCL jobs are blocked, and 10 confirmation slots are reserved. No GPU run is claimed verified. The FL reference uses the repository data split and ResNet-18 global classifier, a fixed 30-class subset, sample-weighted averaging and reset SGD momentum each block; centralized reference has 100 blocks of 10 epochs, matching the single-client FL trajectory budget. Shared deterministic preprocessing (no augmentation) is deliberate for this independent reference. Roundwise validation and offline test checkpoints are logged; test metrics never drive decisions. Exact gradient-norm and compute-matching diagnostics are not implemented here.
+142 fixed configurations have a reference code path; ten confirmation slots are reserved. The 71 historical-dependent conditions, including 14 intended reproductions, are **not exact historical reproductions**: original V25/V27 runtime source variants are absent from main. They retain their original planned IDs but run only with explicit `--allow-reconstruction`; exact historical-fidelity mode remains blocked. Do not compare a reconstructed intervention with an archived baseline as though the only difference is the intervention. Compare against the reconstructed baseline from this suite. The result metadata records the fidelity boundary.
 
-Results default to `runs/diagnostic_campaign/<family>/<job-id>/attempt_NNNN/`. Each attempt has job and source provenance, logs, status, partition, metrics, checkpoints and summary. Completed attempts are skipped, failed ones can be rerun in a fresh attempt; this is job-level retry, not mid-training resume. The runner is sequential, not a multi-GPU broker. An interrupted active lock requires manual verification and removal.
+## One-command execution
 
-## Remaining runtime bindings
-
-- CC/JR: restore exact historical V25/V27 runtime and schedules from provenanced sources, not a current joint substitute.
-- CC/MC/CM/JC: implement the shared globally observed class objective and repeated same-stage communication under the stated budgets; match actual sample and optimizer exposures.
-- OF/ST: exact uploader schedules and isolated stale-update interventions, including diagnostics.
-- MO: matched ownership with pure disjoint support; current joint compiler rejects no cross-client overlap.
-- CF: freeze confirmation configurations after evidence.
-- Implement fixed-cohort current/history evaluation, local/aggregation/download forgetting, per-head metrics, gradient norm/alignment, checkpoint forks, counterfactual subset evaluation and validation gates before calling the complete campaign runnable.
-
-The existing joint epoch-slicing path is restricted to full participation and divides a fixed epoch budget; it cannot be silently substituted for the proposed partial-participation repeated-optimization jobs. No existing training files or historical ledgers are changed.
-
-
-## Matched-design reference v1
-
-The central suite now binds **71 jobs** (11 stationary + 36 MC + 12 CM + 12 MO).
-The remaining 71 historical-protocol-dependent FCL configurations are still
-blocked; ten confirmation slots remain reserved. These 60 new matched
-bindings are deliberately a new reference backend, not reproductions of V25/V27.
-
-- Same 100 classes, ten classes per stage, ten stages, each unique TRAIN index allocated exactly once.
-- IID class-stratified partition, or 80% dominant-client mixture plus 20% uniform support, with actual allocation counts logged.
-- MO disjoint and complete-overlap share identical semantic pairs; partial overlap changes the second pair matching, explicitly changing TIL discrimination tasks.
-- MO has two 450-sample local units per client per stage on full CIFAR-100; all conditions share the same seeded uploader schedule at a given participation.
-- Global observed-class softmax; semantic task-conditioned heads with source-head replay provenance.
-- Fixed replay cap 50 per class, class-uniform replay, physical batch 64, deterministic padded current examples; memory is shared via TRAIN indices and not privacy preserving.
-- Freeze replay within each parent stage. CM uses identical epoch-indexed batch schedules at a given K across R=1/5/10. Actual optimizer/current/replay counts are logged. MC across K need not have equal padding or step counts.
-- Persistent client SGD state, full-model sample-weighted aggregation (not contributor-only head averaging), stale delta rebasing and retained stale BN buffers.
-- Common global class-ID metadata is a privileged protocol assumption even for offline clients. No future label metadata is used in the loss.
-- Fixed validation panels before and after local training, server aggregation and download; sampled current-objective gradient norm and backbone pairwise gradient cosine at the first round of each stage. Official test metrics at stage end and terminal flush are diagnostic only.
-- Optional `--subset-probes` evaluates all size-two and size-three cohorts at each learning sync for K<=5 (offline oracle, not selection feedback).
-- Stage test metrics use independent semantic heads in TIL; do not compare numerically to the old union evaluator without separate evaluation controls.
-- Checkpoints retain the latest server state, not full client/momentum mid-job resume. Job retries restart from scratch. Checkpoint-fork experiments and historical-protocol reproduction remain unimplemented.
+From a clean checkout with the project dependencies installed:
 
 ```bash
-PYTHONPATH=src python -m cafcl.diagnostic_campaign preflight --all --ready-only
-PYTHONPATH=src python -m cafcl.diagnostic_campaign run --family MC --device cuda:0
-PYTHONPATH=src python -m cafcl.diagnostic_campaign run --all --ready-only --device cuda:0
+git pull origin main
+PYTHONPATH=src python -m cafcl.diagnostic_campaign plan --all --allow-reconstruction
+PYTHONPATH=src python -m cafcl.diagnostic_campaign preflight --all --allow-reconstruction --data-root data
+PYTHONPATH=src python -m cafcl.diagnostic_campaign run --all --allow-reconstruction --gpus 0 1 --data-root data --retries 1
 ```
 
-CPU synthetic integration tests and deterministic allocation/budget tests are included.
-Real-data/GPU execution has not been validated by the authoring session.
+Use actual visible GPU indices; for one GPU use `--device cuda:0`. The suite uses one worker process per GPU and assigns the next pending job to the first free device. There is no CPU fallback. `--download` is optional and fetches the data once during preflight. `--subset-probes` enables computationally expensive size-two/three cohort diagnostics for K<=5 and changes the effective configuration signature.
 
-
-## Optional historical reconstruction v1
-
-The remaining 71 historical-protocol-dependent slots now have a separate
-**explicitly opt-in** reconstruction binding. The original 14 reproduction
-intentions remain unverified. The exact archived runtime variants were not
-available in the main tree. Do not label these outcomes as historical
-reproductions; compare reconstructed intervention arms against reconstructed
-baseline arms using the same source revision.
-
+Resume at the job level using the same flags and output root:
 ```bash
-PYTHONPATH=src python -m cafcl.diagnostic_campaign preflight --all --allow-reconstruction
-PYTHONPATH=src python -m cafcl.diagnostic_campaign run --all --allow-reconstruction --device cuda:0
+PYTHONPATH=src python -m cafcl.diagnostic_campaign resume --all --allow-reconstruction --gpus 0 1 --data-root data --retries 1
+PYTHONPATH=src python -m cafcl.diagnostic_campaign status --all --allow-reconstruction
 ```
 
-The opt-in path binds all 142 fixed jobs; ten reserved slots are skipped.
-Without the flag the suite continues to fail closed on historical fidelity.
-Reconstructed jobs use the archived Block-A class sequence, the joint chain
-(including the final duplicated pair), exact archived 40%/60% cohort lists,
-or the explicit OF balanced cycles. Data is deterministically partitioned
-into nonoverlapping occurrence subsets, but exact original sample order is
-not claimed. Replay cap is 50 per class occurrence, independent task-instance
-heads and restricted local-known competition for the original CIL objective.
-Global-seen CIL is a separate objective. Repeated communications keep the
-parent stage and uploader cohort fixed. Physical batch 64 with paired
-current-padding and class-uniform replay; independently implemented
-crop/flip augmentation. Task-ID evaluation and class-membership union
-evaluation are reported separately.
+Without reconstruction opt-in, select `--family FL`, `MC`, `CM`, or `MO`, or use `--ready-only` to execute 71 independent reference jobs. `--wave 1`, `--family JR`, and `--job-id CC-001` filter the same canonical ledger. Reserved slots are skipped. The suite is sequential within each GPU job; client models are evaluated/trained sequentially using saved state, not simultaneous CUDA streams. The scheduler does not estimate VRAM or support multiple hosts sharing the same suite lock.
 
-ST interventions: beta 0/2, fresh-only (reject stale model and pending
-upload, refresh selected client from server; retain private replay), pre-train
-download (discard unsent displacement, retain private replay), reset SGD
-momentum after sync, TRAIN-only BN recalibration using received indices and
-shared replay. These are new diagnostic controls, not exact original policy
-implementations. Full-model averaging, replay allocation and optimizer
-state semantics may differ from the historical runtime. The original source
-hashes are preserved in the historical archive. No test metric influences
-selection or stopping.
+## Results
 
-CPU tests cover schedule geometry and synthetic CIL/TIL execution. The
-explicit flag records the execution fidelity in each job config; results
-are not treated as verified historical reproductions.
+`runs/diagnostic_campaign/<family>/<job-id>/attempt_NNNN/` contains immutable job spec, commit/device provenance, status, logs, partition and schedule, metrics, diagnostics, checkpoints and terminal summary. The suite validates expected round count, sequential IDs, terminal summary identity, output files and final accuracy before completion. It writes central `suite_status.json`, `suite_status.csv`, `last_launch.json` and per-attempt `artifact_validation.json`. Job retries restart from scratch; this is not full-state mid-job continuation. An interrupted active lock must be cleared only after verifying its worker has stopped. Use a new output root for a new scientific source revision; configuration signatures separate reconstruction and diagnostic options.
+
+## Protocol notes
+
+- FL: stationary 30-class fixed subset, same data across K, common or restricted CE, sample-weighted FedAvg, reset SGD momentum each block, deterministic preprocessing. Central reference matches single-client's 100 blocks ×10 epochs. Validation each block, official test at checkpoints; no test feedback.
+- MC/CM: 100 classes, ten classes per stage, ten stages, every unique TRAIN index once. IID or 80% dominant class mixture +20% uniform, with allocation audits. Global observed-class CE or semantic binary heads. For CM the parent-stage replay archive is frozen and epoch-indexed batch stream is unchanged across R=1/5/10; logs actual steps/current/replay draws.
+- MO: disjoint and complete-task overlap share semantic pairs; partial overlap changes the second matching. Two 450-sample units per client per stage, same seeded cohorts at fixed participation, fixed 50/class shared replay cap. Partial overlap changes TIL discrimination objectives.
+- Historical reconstruction: archived class sequences and exact archived 40%/60% cohorts (or explicit OF cycles); unique occurrence-specific heads, final duplicate pair in joint chain, local-known competitor CE in original CIL, global observed CE intervention. Repeated rounds preserve parent task/cohort. Replay cap 50/class occurrence; deterministic independent sample partition and crop/flip; paired physical-batch padding. Task-ID accuracy and documented class-membership union evaluation are distinct outputs.
+- ST: beta 0/2; fresh-only discards stale pending upload and refreshes selected clients while retaining private replay; pre-train download discards unsent displacement; reset momentum; TRAIN-only BN recalibration on received data/shared replay. These are explicitly new diagnostic policies, not verified original mechanisms.
+- FCL: persistent client SGD unless reset intervention, sample-weighted full-model FedAvg, stale parameter rebasing, stale BN buffers retained. Shared replay is simulated TRAIN-index sharing and is not privacy preserving. Global-seen objective shares current label metadata even with offline clients; no future labels enter the loss.
+- Diagnostics: local/pre/post aggregation/download fixed validation panels, sampled current objective gradient norm and pairwise backbone gradient cosine at each stage's first communication; official test by stage and terminal flush; optional subset evaluation. Full exact gradient norm, matched-acquisition checkpoint forks, full-state checkpoint/resume, and automatic inferential multi-seed confirmation remain open. No GPU validation is claimed by the authoring session.

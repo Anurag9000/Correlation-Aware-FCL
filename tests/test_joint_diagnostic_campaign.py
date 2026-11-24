@@ -105,3 +105,21 @@ def test_reconstructed_smoke(tmp_path):
         assert not summary["historical_reproduction_verified"]
         assert 0<=summary["final_accuracy"]<=1
         if il=="task_il":assert 0<=summary["legacy_union_accuracy"]<=1
+
+
+def test_effective_full_suite():
+    from cafcl.diagnostic_campaign import effective_jobs,expected_rounds
+    jobs=effective_jobs(True,True)
+    assert Counter(j.get("binding","reserved") for j in jobs)=={
+        "stationary_reference":11,"matched_reference_v1":60,"historical_reconstruction_v1":71,"reserved":10}
+    assert all(expected_rounds(j)[0]>0 for j in jobs if j.get("binding"))
+    assert all(j.get("execution_fidelity")=="reconstructed_not_exact"
+               for j in jobs if j.get("binding")=="historical_reconstruction_v1")
+
+
+def test_artifact_validation_rejects_incomplete(tmp_path):
+    from cafcl.diagnostic_campaign import validate_artifacts
+    import pytest
+    j=load_jobs()[0]
+    with pytest.raises(ValueError,match="Missing"):
+        validate_artifacts(j,tmp_path)
