@@ -31,11 +31,11 @@ from .task_ids import task_instance_id
 
 # Changing the semantics of an existing job must never silently reuse its old
 # success markers or checkpoints, even though its scientific config is unchanged.
-PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v9'
+PROTOCOL_VERSION = 'cifar100_native32_v27_chain20_random_offline_parallel5_classuniform_sampledmixed_source_task_replay_audit_v10'
 
 def protocol_version_for(cfg):
     if getattr(cfg,'joint_plan_path',''):
-        return 'joint_spatiotemporal_fcl_v10_audit_'+cfg.learning_setting
+        return 'joint_spatiotemporal_fcl_v11_audit_'+cfg.learning_setting
     suffix=[]
     if cfg.learning_setting=='task_il':suffix.append('taskhead_source_provenance')
     if cfg.stream_sync_every_batch:suffix.append('stream_batch_sync_padpoolfix')
@@ -1000,12 +1000,14 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     model,evaluation_bank,observed,accepted,base_global_state,
                     'uniform' if cfg.aggregator=='uniform' else 'fedavg',
                     cfg.batch_size,device,limit=cfg.causal_max_clients,
-                    task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None)
+                    task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,
+                    cfg=cfg,terminal_flush=bool(cfg.stream_protocol and cfg.stream_terminal_flush and round_id==total_rounds-1))
             subset_analysis=None
             if cfg.subset_diagnostics and accepted and cfg.aggregator in {'fedavg','uniform'}:
                 subset_analysis=aggregation_subset_report(model,evaluation_bank,observed,
                     accepted,base_global_state,cfg.aggregator,cfg.batch_size,device,
-                    limit=cfg.causal_max_clients,task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None)
+                    limit=cfg.causal_max_clients,task_class_groups=active_task_sets if cfg.learning_setting=='task_il' else None,
+                    cfg=cfg,terminal_flush=bool(cfg.stream_protocol and cfg.stream_terminal_flush and round_id==total_rounds-1))
             representation_drift=None
             if pre_representation is not None:
                 arrived=set(pre_representation_ids)
@@ -1149,6 +1151,33 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 if test_this_round:
                     result['standard_task_conditioned_test']=evaluate_task_conditioned(
                         model,evaluation_bank,active_task_sets,cfg.batch_size,device,'test')
+            # Primary scores are explicitly separated from historical union diagnostics.
+            if cfg.learning_setting=='task_il':
+                result['principal_validation_accuracy']=result['standard_task_conditioned_validation']['macro_head_accuracy']
+                result['principal_test_accuracy']=result.get('standard_task_conditioned_test',{}).get('macro_head_accuracy')
+                result['principal_evaluation_protocol']='task_conditioned'
+                result['principal_validation_forgetting']=result['standard_task_conditioned_validation_forgetting']
+            else:
+                result['principal_validation_accuracy']=result['per_sync_validation_accuracy']
+                result['principal_test_accuracy']=result['per_sync_test_accuracy']
+                result['principal_evaluation_protocol']='class_il'
+                # Hold the PREVIOUS round's competitor set fixed for a
+                # one-step historical retention contrast. Never compare across
+                # an expanded output space and call that pure forgetting.
+                result['fixed_context_validation_retention']=None
+                if history:
+                    previous=history[-1]
+                    context=set(previous['observed_classes'])
+                    if context:
+                        same_context,_=evaluate(model,evaluation_bank,context,cfg.batch_size,device,
+                                               split='validation',loader_seed=0)
+                        before=previous['per_sync_validation_accuracy']
+                        after=same_context['accuracy']
+                        if before is not None and after is not None:
+                            result['fixed_context_validation_retention']={
+                                'classes':sorted(context),'before':before,'after':after,
+                                'signed_drop':before-after,'forgetting':max(0.,before-after)}
+                result['principal_validation_forgetting']=None if result['fixed_context_validation_retention'] is None else result['fixed_context_validation_retention']['forgetting']
             if cfg.evaluate_final_only and round_id==total_rounds-1:
                 # Final public TEST score is the same held-out evaluation.
                 # Reuse its peak-based forgetting rather than falsely claiming
@@ -1298,7 +1327,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
         atomic_json(status_file,{'status':'completed','protocol_version':protocol_version_for(cfg),
                                 'finished_at':time.time(),
                                 'rounds':total_rounds})
-        return {'status':'completed','run_dir':str(run_dir),'final_accuracy':history[-1]['accuracy']}
+        return {'status':'completed','run_dir':str(run_dir),'final_accuracy':history[-1]['principal_test_accuracy']}
     except Exception as exc:
         if 'client_executor' in locals():
             client_executor.shutdown(wait=True,cancel_futures=True)

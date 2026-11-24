@@ -219,15 +219,18 @@ def build_report(root,jobs):
     execution=(json.loads(execution_path.read_text()) if execution_path.exists() else {})
     design_path=root/'design.json'
     design=(json.loads(design_path.read_text()) if design_path.exists() else audited_plan(jobs))
-    if set(map(int,full['per_class']))!=set(range(100)) or set(map(int,partial['per_class']))!=set(range(100)):
+    standard_full=full['standard_task_conditioned_test']
+    standard_partial=partial['standard_task_conditioned_test']
+    if set(map(int,standard_full['per_class']))!=set(range(100)) or set(map(int,standard_partial['per_class']))!=set(range(100)):
         raise RuntimeError('Pilot final evaluation must cover all 100 class IDs')
     rows=[]
     for c in range(100):
-        a=float(full['per_class'][str(c)])
-        b=float(partial['per_class'][str(c)])
+        a=float(standard_full['per_class'][str(c)])
+        b=float(standard_partial['per_class'][str(c)])
         rows.append(dict(class_id=c,full_accuracy=a,random_offline_accuracy=b,delta=b-a))
-    overall=dict(full_accuracy=float(full['accuracy']),random_offline_accuracy=float(partial['accuracy']),
-                 delta=float(partial['accuracy'])-float(full['accuracy']),
+    overall=dict(full_accuracy=float(standard_full['macro_head_accuracy']),random_offline_accuracy=float(standard_partial['macro_head_accuracy']),
+                 delta=float(standard_partial['macro_head_accuracy'])-float(standard_full['macro_head_accuracy']),
+                 evaluation_protocol='task_conditioned',legacy_oracle_full_accuracy=full['accuracy'],legacy_oracle_offline_accuracy=partial['accuracy'],
                  final_integrated_full=len(full['globally_integrated_classes']),
                  final_integrated_offline=len(partial['globally_integrated_classes']))
     a=full.get('standard_task_conditioned_test',{}).get('macro_head_accuracy')
@@ -260,11 +263,11 @@ def build_report(root,jobs):
         f"- Standard task-conditioned full accuracy: {a}",
         f"- Standard task-conditioned random-offline accuracy: {b}",
         f"- Standard task-conditioned delta: {overall['standard_task_il_delta']}",
-        f"- Legacy class-membership-oracle full accuracy: {overall['full_accuracy']:.6f}",
-        f"- Legacy class-membership-oracle random-offline accuracy: {overall['random_offline_accuracy']:.6f}",
+        f"- Legacy class-membership-oracle full accuracy: {overall['legacy_oracle_full_accuracy']:.6f}",
+        f"- Legacy class-membership-oracle random-offline accuracy: {overall['legacy_oracle_offline_accuracy']:.6f}",
         f"- Difference (offline minus full): {overall['delta']:+.6f}",
         '- Both models integrated all 100 labels: yes','',
-        '| Class | Full | Random offline | Delta |','|---:|---:|---:|---:|']
+        '| Class (task-conditioned episodes) | Full | Random offline | Delta |','|---:|---:|---:|---:|']
     markdown.extend(f"| {r['class_id']} | {r['full_accuracy']:.4f} | {r['random_offline_accuracy']:.4f} | {r['delta']:+.4f} |" for r in rows)
     (folder/'comparison.md').write_text('\n'.join(markdown)+'\n')
     return overall

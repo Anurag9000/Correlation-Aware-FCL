@@ -25,6 +25,7 @@ def evaluate_task_conditioned(model,bank,groups,batch_size,device,split='validat
     loader=DataLoader(Subset(dataset,ids),batch_size=batch_size,shuffle=False,
                       num_workers=0,generator=torch.Generator().manual_seed(0))
     correct=defaultdict(int);total=defaultdict(int)
+    class_correct=defaultdict(int);class_total=defaultdict(int)
     model.eval()
     for x,y in loader:
         y=y.to(device);features=model.features(x.to(device))
@@ -36,10 +37,17 @@ def evaluate_task_conditioned(model,bank,groups,batch_size,device,split='validat
             pred=classes[logits.argmax(dim=1)]
             correct[head]+=int((pred==y[mask]).sum())
             total[head]+=int(mask.sum())
+            targets=y[mask]
+            for c in targets.unique().tolist():
+                subset=targets==c
+                class_total[c]+=int(subset.sum())
+                class_correct[c]+=int((pred[subset]==c).sum())
     records={head:{'accuracy':correct[head]/total[head] if total[head] else None,
                    'correct':correct[head],'total':total[head],
                    'classes':list(map(int,groups[head]))}
              for head in sorted(groups)}
     values=[x['accuracy'] for x in records.values() if x['accuracy'] is not None]
     return {'per_head':records,'macro_head_accuracy':sum(values)/len(values) if values else None,
+            'per_class':{c:class_correct[c]/n for c,n in sorted(class_total.items()) if n},
+            'micro_episode_accuracy':sum(correct.values())/sum(total.values()) if sum(total.values()) else None,
             'evaluation_split':split,'evaluation_protocol':'task_conditioned'}

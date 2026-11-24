@@ -28,8 +28,28 @@ def pair_interaction(scores: dict[frozenset, float], base: Iterable[int], a: int
             - scores[s | {b}] + scores[s])
 
 
+def _score_candidate(model,bank,observed,batch_size,device,task_class_groups):
+    if task_class_groups is not None:
+        from .joint.task_evaluation import evaluate_task_conditioned
+        value=evaluate_task_conditioned(model,bank,task_class_groups,batch_size,device,'validation')
+        return {'accuracy':value['macro_head_accuracy'],'per_class':value['per_class']}
+    from .evaluation import evaluate
+    value,_=evaluate(model,bank,observed,batch_size,device,peak={},split='validation',loader_seed=0)
+    return value
+
+
+def _candidate(updates,base,aggregator,task_class_groups,cfg,terminal_flush):
+    from .simulator import aggregate,_merge_task_heads_fedavg,_guard_single_stale_terminal_flush
+    weights=aggregate(updates,base,aggregator)
+    if task_class_groups is not None and aggregator=='fedavg':
+        weights=_merge_task_heads_fedavg(updates,base,weights)
+    if cfg is not None:
+        weights,_=_guard_single_stale_terminal_flush(weights,base,updates,cfg,terminal_flush=terminal_flush)
+    return weights
+
+
 def aggregation_leave_one_out(model, bank, observed, updates, base_weights,
-                              aggregator, batch_size, device, *, limit=6, task_class_groups=None):
+                              aggregator, batch_size, device, *, limit=6, task_class_groups=None,cfg=None,terminal_flush=False):
     """Return per-class and overall effects of each uploaded client.
 
     The original full aggregate is compared with the aggregate omitting one
@@ -40,16 +60,10 @@ def aggregation_leave_one_out(model, bank, observed, updates, base_weights,
     if len(updates) < 2 or len(updates) > limit:
         return {'kind': 'leave_one_out_aggregation', 'status': 'not_evaluated',
                 'reason': 'requires 2..limit accepted updates'}
-    from .simulator import aggregate, _merge_task_heads_fedavg
-    from .evaluation import evaluate
     original = {k: v.detach().cpu().clone() for k,v in model.state_dict().items()}
     def score(chosen):
-        candidate = aggregate(chosen, base_weights, aggregator)
-        if task_class_groups is not None and aggregator=='fedavg':
-            candidate=_merge_task_heads_fedavg(chosen,base_weights,candidate)
-        model.load_state_dict(candidate)
-        vals, _ = evaluate(model, bank, observed, batch_size, device, peak={},split='validation',task_class_groups=task_class_groups,loader_seed=0)
-        return vals
+        model.load_state_dict(_candidate(chosen,base_weights,aggregator,task_class_groups,cfg,terminal_flush))
+        return _score_candidate(model,bank,observed,batch_size,device,task_class_groups)
     try:
         full = score(updates)
         impacts = {}
@@ -63,13 +77,14 @@ def aggregation_leave_one_out(model, bank, observed, updates, base_weights,
             }
         return {'kind': 'leave_one_out_aggregation', 'status': 'evaluated',
                 'full_accuracy': full['accuracy'], 'effects': impacts,
+                'evaluation_protocol':'task_conditioned' if task_class_groups is not None else 'class_il',
                 'note': 'Retrospective oracle analysis; not a deployable client selector'}
     finally:
         model.load_state_dict(original)
 
 
 def aggregation_subset_report(model,bank,observed,updates,base_weights,aggregator,
-                              batch_size,device,*,limit=5,task_class_groups=None):
+                              batch_size,device,*,limit=5,task_class_groups=None,cfg=None,terminal_flush=False):
     """Evaluate every nonempty subset and pairwise interaction from SAME uploads.
 
     This is a retrospective *aggregation-only* oracle. It is intentionally
@@ -79,26 +94,21 @@ def aggregation_subset_report(model,bank,observed,updates,base_weights,aggregato
     ids=[int(u['client_id']) for u in updates]
     if not 2<=len(ids)<=limit or len(set(ids))!=len(ids):
         return {'status':'not_evaluated','reason':'requires 2..limit unique uploads'}
-    from .simulator import aggregate, _merge_task_heads_fedavg
-    from .evaluation import evaluate
     original={k:v.detach().cpu().clone() for k,v in model.state_dict().items()}
     scores={}
     per_class={}
     try:
         # Empty subset is the unmodified previous global model.
         model.load_state_dict(base_weights)
-        baseline,_=evaluate(model,bank,observed,batch_size,device,peak={},split='validation',task_class_groups=task_class_groups,loader_seed=0)
+        baseline=_score_candidate(model,bank,observed,batch_size,device,task_class_groups)
         scores[frozenset()]=baseline['accuracy']
         per_class[frozenset()]=baseline['per_class']
         for size in range(1,len(ids)+1):
             for chosen in combinations(ids,size):
                 cohort=frozenset(chosen)
                 selected=[u for u in updates if u['client_id'] in cohort]
-                weights=aggregate(selected,base_weights,aggregator)
-                if task_class_groups is not None and aggregator=='fedavg':
-                    weights=_merge_task_heads_fedavg(selected,base_weights,weights)
-                model.load_state_dict(weights)
-                value,_=evaluate(model,bank,observed,batch_size,device,peak={},split='validation',task_class_groups=task_class_groups,loader_seed=0)
+                model.load_state_dict(_candidate(selected,base_weights,aggregator,task_class_groups,cfg,terminal_flush))
+                value=_score_candidate(model,bank,observed,batch_size,device,task_class_groups)
                 scores[cohort]=value['accuracy']
                 per_class[cohort]=value['per_class']
         interactions={}
@@ -112,6 +122,7 @@ def aggregation_subset_report(model,bank,observed,updates,base_weights,aggregato
                     for c in baseline['per_class']}}
         return {'status':'evaluated','kind':'aggregation_subset_oracle',
                 'evaluated_subsets':len(scores),
+                'evaluation_protocol':'task_conditioned' if task_class_groups is not None else 'class_il',
                 'subset_accuracy':{','.join(map(str,sorted(key))):value
                                    for key,value in scores.items()},
                 'pair_interactions':interactions,
