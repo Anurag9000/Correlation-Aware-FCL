@@ -103,8 +103,11 @@ def validate_artifacts(job,path):
         required.append("schedule.json")
     if not isinstance(value,(float,int)) or not math.isfinite(value) or not 0<=value<=1:
         raise ValueError("Invalid final accuracy")
-    return {"job_id":job["job_id"],"rows":len(rows),"final_accuracy":value,
+    receipt={"job_id":job["job_id"],"rows":len(rows),"final_accuracy":value,
             "sha256":{name:sha_file(path/name) for name in required}}
+    if (path/"artifact_validation.json").is_file() and json.loads((path/"artifact_validation.json").read_text())!=receipt:
+        raise ValueError("Validated artifact checksum mismatch")
+    return receipt
 
 
 def inspect_job(job,root):
@@ -217,6 +220,15 @@ def run_suite(jobs,all_jobs,args,root,devices):
     try:
         head,dirty=source_identity()
         if dirty:raise RuntimeError("Use a clean tracked checkout")
+        identity={"git_commit":head,"ledger_sha256":sha_file(LEDGER)}
+        identity_file=root/"campaign_identity.json"
+        if identity_file.exists() and json.loads(identity_file.read_text())!=identity:
+            raise RuntimeError("Campaign source/ledger differs; choose a new --output root")
+        if not identity_file.exists():
+            for receipt in root.glob("*/*/attempt_*/provenance.json"):
+                if json.loads(receipt.read_text()).get("git_commit")!=head:
+                    raise RuntimeError("Existing attempts use another source revision; choose a new --output root")
+            atomic_json(identity_file,identity)
         if shutil.disk_usage(root).free<args.min_disk_gib*1024**3:
             raise RuntimeError("Insufficient free result disk space")
         preflight(jobs,args)
@@ -252,7 +264,11 @@ def run_suite(jobs,all_jobs,args,root,devices):
         write_status(root,all_jobs,failures)
         from .diagnostic_analysis import analyze
         analyze(root,all_jobs)
-        return int(bool(failures))
+        fork_code=0
+        if args.fork_probes:
+            from .diagnostic_forks import run_forks
+            fork_code=run_forks(root,args.data_root,devices[0],args.allow_reconstruction,args.subset_probes)
+        return int(bool(failures) or bool(fork_code))
     finally:lock.rmdir()
 
 
@@ -264,6 +280,7 @@ def main(argv=None):
     p.add_argument("--ready-only",action="store_true")
     p.add_argument("--allow-reconstruction",action="store_true",help="Explicitly allow non-exact historical reference jobs")
     p.add_argument("--subset-probes",action="store_true")
+    p.add_argument("--fork-probes",action="store_true",help="Run 12 short fixed-checkpoint branches after validated MC anchors")
     p.add_argument("--output",default="runs/diagnostic_campaign")
     p.add_argument("--data-root",default="data")
     p.add_argument("--device",default="cuda:0")

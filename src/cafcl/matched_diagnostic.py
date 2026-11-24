@@ -449,6 +449,14 @@ def run_reference(job,output,bank,device="cpu",model_name="resnet18_cifar32",sub
         atomic_json(output/f"stage_{t:02d}_evaluation.json",{"stage":t,"test":test,"validation":val,"current":sorted(targets(current,setting)),"historical":sorted(keys),"class_membership_union_test":legacy})
         atomic_json(diagnostics/f"sync_{ctr:04d}.json",rows[-1])
         torch.save({"server":server,"version":version,"stage":t},checkpoints/"latest.pt")
+        if (job["family"]=="MC" and job["clients"]==2 and job["partition"]=="iid"
+                and job["rounds_per_stage"]==1 and t==4):
+            # A common learned checkpoint and identical replay IDs for all
+            # subsequent short client-count forgetting forks.
+            torch.save({"server":server,"version":version,"stage":t,
+                        "prior_heads":sorted(prior|current),"observed":sorted(observed),
+                        "archive":archive,"job_id":job["job_id"],"allocation_sha256":audit["allocation_sha256"]},
+                       checkpoints/"fork_reference.pt")
         prior.update(current)
     if job["participation"]<1 or reconstructed:
         row=commit(list(range(len(clients))),len(stages),set(),flush=True)

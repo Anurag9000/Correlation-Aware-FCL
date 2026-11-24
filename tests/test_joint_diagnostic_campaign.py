@@ -156,3 +156,50 @@ def test_empty_analysis(tmp_path):
     result=analyze(tmp_path,effective_jobs(True,False))
     assert result["completed_jobs"]==0 and len(result["unavailable_jobs"])==142
     assert (tmp_path/"analysis"/"job_summary.csv").is_file()
+
+
+def test_fixed_checkpoint_fork(tmp_path):
+    from cafcl.models import create_model,copy_cpu_state
+    from cafcl.diagnostic_forks import fork_branch
+    torch.set_num_threads(1)
+    bank=DataBank(Fixture(8),Fixture(2),20,{},(),Fixture(2))
+    model=create_model("test_linear",20,allow_test_model=True,learning_setting="class_il")
+    anchor={"server":copy_cpu_state(model),"stage":0,"prior_heads":[(c,c+1) for c in range(0,10,2)],
+            "observed":list(range(10)),"archive":[(c*8,(c//2*2,c//2*2+1)) for c in range(10)],"job_id":"fixture"}
+    j=next(x for x in load_jobs() if x["family"]=="MC" and x["clients"]==2 and x["partition"]=="iid" and x["il"]=="class_il")
+    j={**j,"rounds_per_stage":2,"local_epochs":1}
+    result=fork_branch(anchor,j,bank,"cpu",tmp_path,model_name="test_linear")
+    assert result["stage"]==1 and result["final_validation"]["round"]==2
+    assert set(result["thresholds"])=={"0.5","0.6","0.7","0.8","0.9"}
+
+
+def test_staleness_interventions_and_matched_overlap(tmp_path):
+    torch.set_num_threads(1)
+    bank=DataBank(Fixture(8),Fixture(2),20,{},(),Fixture(2))
+    for intervention in ("fresh_only","download_before_new_training","no_damping_beta0","strong_damping_beta2","reset_momentum"):
+        j=next(x for x in load_jobs() if x["family"]=="ST" and x["il"]=="class_il" and x["intervention"]==intervention)
+        j={**j,"binding":"historical_reconstruction_v1","local_epochs":1}
+        rows=run_reference(j,tmp_path/intervention,bank,model_name="test_linear")
+        if intervention=="fresh_only":
+            assert any(row["rejected_stale_clients"] for row in rows)
+            assert all(u["lag"]==0 for row in rows for u in row["uploads"])
+        if intervention=="download_before_new_training":
+            assert all(u["lag"]==0 for row in rows if not row["flush"] for u in row["uploads"])
+        if intervention=="no_damping_beta0":
+            assert all(u["damping"]==1 for row in rows for u in row["uploads"])
+    j=next(x for x in load_jobs() if x["family"]=="MO" and x["curriculum"]=="matched_partial_class_overlap" and x["il"]=="task_il" and x["participation"]==.4)
+    rows=run_reference({**j,"local_epochs":1},tmp_path/"mo",bank,model_name="test_linear")
+    assert len(rows)==3 and rows[-1]["flush"]
+
+
+def test_bn_recalibration_uses_training_data():
+    from cafcl.matched_diagnostic import recalibrate_bn
+    from cafcl.models import copy_cpu_state
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__();self.features=torch.nn.Sequential(torch.nn.BatchNorm2d(3))
+    model=Model();state=copy_cpu_state(model)
+    dataset=Fixture(2)
+    new=recalibrate_bn(model,state,dataset,list(range(len(dataset))),"cpu",0)
+    assert new["features.0.num_batches_tracked"].item()>0
+    assert state["features.0.num_batches_tracked"].item()==0

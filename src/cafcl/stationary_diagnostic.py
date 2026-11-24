@@ -70,6 +70,37 @@ def evaluate(model,dataset,device):
     return {"accuracy":hits/total,"loss":loss/total,"examples":total}
 
 
+def stationary_probe(model,bank,parts,labels,objective,device,limit=128):
+    """Fixed TRAIN panels; common and actual objective gradient estimates."""
+    model.eval()
+    params=list(model.parameters())
+    global_grad=[torch.zeros_like(p,device="cpu",dtype=torch.float64) for p in params]
+    actual_grad=[torch.zeros_like(p,device="cpu",dtype=torch.float64) for p in params]
+    total=sum(map(len,parts));global_loss=actual_loss=0.
+    for cid,ids in enumerate(parts):
+        sample=random.Random(99437+cid).sample(ids,min(limit,len(ids)))
+        batch=[bank.train[i] for i in sample]
+        x=torch.stack([a for a,_ in batch]).to(device)
+        y=torch.tensor([int(b) for _,b in batch],device=device)
+        w=len(ids)/total
+        z=model(x)
+        loss=nn.functional.cross_entropy(z,y)
+        g=torch.autograd.grad(loss,params)
+        global_loss+=w*float(loss.detach())
+        for a,b in zip(global_grad,g):a.add_(b.detach().cpu().double(),alpha=w)
+        if objective=="restricted_local":
+            active=torch.tensor(labels[cid],device=device)
+            mapping=torch.full((30,),-1,dtype=torch.long,device=device)
+            mapping[active]=torch.arange(len(active),device=device)
+            loss=nn.functional.cross_entropy(model(x)[:,active],mapping[y])
+            g=torch.autograd.grad(loss,params)
+        actual_loss+=w*float(loss.detach())
+        for a,b in zip(actual_grad,g):a.add_(b.detach().cpu().double(),alpha=w)
+    return {"sampled_global_gradient_norm_squared":sum(float(x.square().sum()) for x in global_grad),
+            "sampled_actual_objective_gradient_norm_squared":sum(float(x.square().sum()) for x in actual_grad),
+            "sampled_global_loss":global_loss,"sampled_actual_objective_loss":actual_loss}
+
+
 def train(job,output,root,device,download):
     if job["family"]!="FL" or job.get("binding")!="stationary_reference":
         raise ValueError("Unsupported job")
@@ -118,11 +149,12 @@ def train(job,output,root,device,download):
         if r in CHECKPOINTS or r==rounds:
             test=evaluate(model,bank.test,device)
             row.update(test_accuracy=test["accuracy"],test_loss=test["loss"])
+            row.update(stationary_probe(model,bank,parts,labels,job["objective"],device))
             checkpoints=output/"checkpoints";checkpoints.mkdir(exist_ok=True)
             torch.save({"round":r,"state":copy_cpu_state(model)},checkpoints/f"round_{r:03d}.pt")
         rows.append(row)
         with (output/"metrics.csv").open("w",newline="") as f:
-            writer=csv.DictWriter(f,fieldnames=["round","validation_accuracy","validation_loss","test_accuracy","test_loss","optimizer_steps","processed_examples"])
+            writer=csv.DictWriter(f,fieldnames=["round","validation_accuracy","validation_loss","test_accuracy","test_loss","optimizer_steps","processed_examples","sampled_global_gradient_norm_squared","sampled_actual_objective_gradient_norm_squared","sampled_global_loss","sampled_actual_objective_loss"])
             writer.writeheader();writer.writerows(rows)
         print(json.dumps(row),flush=True)
     atomic_json(output/"result_summary.json",{"job_id":job["job_id"],"final":rows[-1],"rounds":rounds,"protocol":"stationary_reference","optimizer_policy":"reset_each_block","augmentation":"none (shared deterministic repository preprocessing)","bn_policy":"sample_weighted_floating_buffers_max_integer_buffers"})

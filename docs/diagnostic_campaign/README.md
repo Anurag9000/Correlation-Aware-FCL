@@ -46,7 +46,7 @@ Without reconstruction opt-in, select `--family FL`, `MC`, `CM`, or `MO`, or use
 - Historical reconstruction: archived class sequences and exact archived 40%/60% cohorts (or explicit OF cycles); unique occurrence-specific heads, final duplicate pair in joint chain, local-known competitor CE in original CIL, global observed CE intervention. Repeated rounds preserve parent task/cohort. Replay cap 50/class occurrence; deterministic independent sample partition and crop/flip; paired physical-batch padding. Task-ID accuracy and documented class-membership union evaluation are distinct outputs.
 - ST: beta 0/2; fresh-only discards stale pending upload and refreshes selected clients while retaining private replay; pre-train download discards unsent displacement; reset momentum; TRAIN-only BN recalibration on received data/shared replay. These are explicitly new diagnostic policies, not verified original mechanisms.
 - FCL: persistent client SGD unless reset intervention, sample-weighted full-model FedAvg, stale parameter rebasing, stale BN buffers retained. Shared replay is simulated TRAIN-index sharing and is not privacy preserving. Global-seen objective shares current label metadata even with offline clients; no future labels enter the loss.
-- Diagnostics: local/pre/post aggregation/download fixed validation panels, sampled current and current-plus-replay gradient norm and backbone cosine before and after each communication, historical gradient-to-update alignment, candidate-update geometry; official test by stage and terminal flush; optional subset evaluation. Full exact gradient norm, matched-acquisition checkpoint forks, full-state checkpoint/resume, and automatic inferential multi-seed confirmation remain open. No GPU validation is claimed by the authoring session.
+- Diagnostics: local/pre/post aggregation/download fixed validation panels, sampled current and current-plus-replay gradient norm and backbone cosine before and after each communication, historical gradient-to-update alignment, candidate-update geometry; official test by stage and terminal flush; optional subset evaluation. Full exact population gradient norm, full-state checkpoint/resume, and automatic inferential multi-seed confirmation remain open. No GPU validation is claimed by the authoring session.
 
 
 ## Central scientific analysis
@@ -67,5 +67,32 @@ The optional subset probes evaluate all nonempty cohorts (K<=5) and
 parameter-only pair nonadditivity for actual uploaders using fixed base BN
 buffers. Gradient norms use fixed sampled TRAIN panels, not full exact
 population gradients. Historical directional probes use fixed validation
-panels. Exact full-gradient convergence claims and shared-checkpoint
-forks remain future work.
+panels. Exact full-population-gradient convergence claims remain future work.
+
+
+## Fixed-checkpoint matched acquisition diagnostic
+
+The two MC K=2 IID R=1 arms save a common historical reference after stage
+five. After those anchors are artifact-validated, the optional
+`--fork-probes` flag runs 12 short next-stage branches: 2 IL protocols ×
+2 partitions × K={2,3,10}. Each branch begins with the identical historical
+checkpoint and replay archive for its IL protocol, reset local optimizer
+states, identical next-stage data, ten communications × two local epochs.
+These are additional diagnostic branches, not extra full-training ledger
+slots. Results include fixed historical accuracy loss at the earliest
+measured 50/60/70/80/90% validation acquisition crossing; unreachable
+thresholds are reported as such. The final official test is never used to
+select thresholds or train.
+
+```bash
+PYTHONPATH=src python -m cafcl.diagnostic_campaign run --all --allow-reconstruction --subset-probes --fork-probes --gpus 0 1 --retries 1
+```
+
+Or independently after the anchors exist:
+```bash
+PYTHONPATH=src python -m cafcl.diagnostic_forks --allow-reconstruction --subset-probes --device cuda:0
+```
+
+A result root is pinned to its tracked Git revision and ledger digest;
+use a different output root when changing code. Terminal artifact receipts
+are checked against the recorded checksums when a completed job is reused.
