@@ -16,6 +16,13 @@ from cafcl.simulator import (aggregate,anchored_upload,server_optimizer_step,
                              run_experiment)
 
 
+def _server_cfg(**kwargs):
+    """Valid multi-class Task-IL fixtures for server-route integration checks."""
+    holders={str(cls):(0,1) for cls in range(10)}
+    return RunConfig(dataset='synthetic',model='test_linear',num_clients=2,
+        scenario='stationary',holders_override=holders,**kwargs)
+
+
 def _values():
     base={
         'features.weight':torch.tensor([0.,0.]),
@@ -149,11 +156,13 @@ def test_fresh_upload_is_exact_local_model_and_stale_is_labeled_and_rebased():
 def test_canonical_server_route_never_uses_classwise_head_fusion(
     server_algorithm,monkeypatch,tmp_path
 ):
+    # Give each client multiple labels in each round so the canonical Task-IL
+    # head contract is valid while these tests exercise server behavior.
     from cafcl import simulator
     def forbidden(*args,**kwargs):
         raise AssertionError('Canonical server route overwrote classifier rows')
     monkeypatch.setattr(simulator,'classwise_merge',forbidden)
-    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,
+    cfg=_server_cfg(
         stages=1,rounds_per_stage=1,participation=1.,
         aggregator=server_algorithm,method='sgd',
         # Legacy default stays True for old factorial config hashes;
@@ -172,9 +181,10 @@ def test_canonical_server_route_never_uses_classwise_head_fusion(
 
 
 def test_custom_row_aggregation_is_a_separately_identified_experimental_arm(tmp_path):
-    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,
+    cfg=_server_cfg(
         stages=1,rounds_per_stage=1,participation=1.,
-        aggregator='class_balanced',method='sgd',job_id='custom_head')
+        aggregator='class_balanced',method='sgd',
+        job_id='custom_head')
     result=run_experiment(cfg,str(tmp_path),verbose=False)
     assert result['status']=='completed'
     metrics=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
@@ -183,7 +193,7 @@ def test_custom_row_aggregation_is_a_separately_identified_experimental_arm(tmp_
 
 
 def test_offline_client_unsent_class_exposure_does_not_enter_server_history(tmp_path):
-    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,
+    cfg=_server_cfg(
         stages=1,rounds_per_stage=1,participation=.5,method='replay',
         aggregator='class_balanced',job_id='only_online_counts',
         participation_overrides={'0':(1,)})
@@ -212,7 +222,7 @@ def test_inverse_participation_excludes_past_nonsynchronizing_client_counts():
 
 
 def test_server_acknowledges_only_online_client_dataset_ids(tmp_path):
-    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,
+    cfg=_server_cfg(
         stages=1,rounds_per_stage=1,participation=.5,
         participation_overrides={'0':(1,)},method='sgd',
         aggregator='fedavg',job_id='accepted_only_ids')
@@ -239,7 +249,7 @@ def test_retention_server_gradient_never_consults_hidden_client_indices(monkeypa
         observed_inputs.append(set(allowed_indices or ()))
         return original(model,bank,classes,device,allowed_indices=allowed_indices,**kwargs)
     monkeypatch.setattr(sim,'class_gradient_representations',captured)
-    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,
+    cfg=_server_cfg(
         stages=2,rounds_per_stage=1,participation=.5,
         participation_overrides={'0':(1,),'1':(1,)},
         method='sgd',aggregator='retention_aware',job_id='retention_only_ack')

@@ -929,6 +929,124 @@
       "verification_evidence": [
         "The test now checks private classes remain local and received_memory is empty for the offline client; focused 12-test run passed."
       ]
+    },
+    {
+      "finding_id": "NEW-005",
+      "description": "The frozen v16 factorial snapshot retained fingerprints and rejected-job example IDs from the pre-migration Class-IL registry after full_matrix.base changed to strict Task-IL. Feasible counts, family counts, accepted/rejected totals, and method/aggregator coverage remained identical.",
+      "classification": "stale_frozen_design_snapshot",
+      "current_status": "snapshot_refreshed_and_factorial_validator_passed",
+      "affected_source_locations": [
+        "src/cafcl/full_matrix.py:31-38",
+        "configs/designs/stream_v16_batch64.json",
+        "scripts/validate_factorial_plans.py:12-25"
+      ],
+      "affected_job_families_and_configurations": [
+        "CIFAR-100 v16 full factorial registry, ViT and CNN."
+      ],
+      "regression_test_coverage": [
+        "scripts/validate_factorial_plans.py"
+      ],
+      "verification_evidence": [
+        "Compared all generated model fields; only hashes differed. Compared feasibility audit; counts and reasons were identical and only example job IDs differed. Refreshed only those fields. Validator passes with 32,133 feasible jobs per model, 99 method/aggregator pairs, 53,805 inputs, 21,672 rejected."
+      ]
+    },
+    {
+      "finding_id": "NEW-006",
+      "description": "The factorial validator retained outdated primary-probe expectations of one client worker and nine training intervals, while current primary_probe.py and docs define concurrency five and twenty intervals.",
+      "classification": "stale_validator_contract",
+      "current_status": "expectations_aligned_and_validator_passed",
+      "affected_source_locations": [
+        "scripts/validate_factorial_plans.py:19-26",
+        "src/cafcl/primary_probe.py:22-35",
+        "docs/PRIMARY_PROBE.md"
+      ],
+      "affected_job_families_and_configurations": [
+        "The two-run primary Replay/FedAvg probe."
+      ],
+      "regression_test_coverage": [
+        "scripts/validate_factorial_plans.py",
+        "tests/test_primary_probe.py"
+      ],
+      "verification_evidence": [
+        ".venv/bin/python scripts/validate_factorial_plans.py exited 0."
+      ]
+    },
+    {
+      "finding_id": "NEW-007",
+      "description": "Primary-probe tests asserted retired V23 names, obsolete summary field layout, and old server-barrier wording despite current V27 Task-IL implementation.",
+      "classification": "stale_protocol_regression_fixture",
+      "current_status": "fixture_aligned_and_targeted_tests_passed",
+      "affected_source_locations": [
+        "tests/test_primary_probe.py",
+        "src/cafcl/primary_probe.py:22-35,208-240"
+      ],
+      "affected_job_families_and_configurations": [
+        "The two-run primary Replay/FedAvg probe."
+      ],
+      "regression_test_coverage": [
+        "tests/test_primary_probe.py"
+      ],
+      "verification_evidence": [
+        ".venv/bin/pytest -q tests/test_primary_probe.py: 4 passed."
+      ]
+    },
+    {
+      "finding_id": "NEW-008",
+      "description": "Task-IL GEM/A-GEM reference-gradient extraction forwarded only the valid unpadded examples through the feature extractor, unlike the configured full physical training batch. With batch-dependent normalization, this made the reference gradient use different batch statistics from the physical-batch contract; padding was already excluded from the loss.",
+      "classification": "reference_gradient_physical_batch_mismatch",
+      "current_status": "fixed_and_focused_regression_passed",
+      "affected_source_locations": [
+        "src/cafcl/continual.py:380-394"
+      ],
+      "affected_job_families_and_configurations": [
+        "Task-IL GEM/A-GEM reference gradients using a final partial reference batch and batch-dependent model layers."
+      ],
+      "regression_test_coverage": [
+        "tests/test_exact_batch_v16.py::test_reference_gradient_requires_one_full_physical_forward"
+      ],
+      "verification_evidence": [
+        ".venv/bin/pytest -q tests/test_exact_batch_v16.py and combined affected tests passed; full repository suite passed with 458 tests and 335 subtests."
+      ]
+    },
+    {
+      "finding_id": "NEW-009",
+      "description": "Server-fidelity integration tests used the legacy synthetic disjoint schedule, which created singleton Task-IL tasks and failed before reaching the aggregation, offline exposure, acknowledgement, or hidden-index assertions. The fixtures now allocate all synthetic labels to both clients under a stationary scenario, producing valid multi-class Task-IL tasks while preserving distinct client sample indices.",
+      "classification": "invalid_taskil_regression_fixture",
+      "current_status": "fixture_corrected_and_focused_tests_passed",
+      "affected_source_locations": [
+        "tests/test_server_fidelity_v11.py:12-20,158-260"
+      ],
+      "affected_job_families_and_configurations": [
+        "Synthetic server aggregation and client acknowledgement integration tests."
+      ],
+      "regression_test_coverage": [
+        "tests/test_server_fidelity_v11.py"
+      ],
+      "verification_evidence": [
+        ".venv/bin/pytest -q tests/test_server_fidelity_v11.py: 16 passed; full repository suite passed with 458 tests and 335 subtests."
+      ]
+    },
+    {
+      "finding_id": "NEW-010",
+      "description": "Two Task-IL paths mishandled task-local output semantics: spurious reversed-test evaluation omitted independent task IDs and indexed local head columns as global classes; synthetic label noise selected from the full global label space and could produce targets outside the originating head.",
+      "classification": "task_context_and_label_noise_protocol_bug",
+      "current_status": "corrected_and_full_regression_suite_passed",
+      "affected_source_locations": [
+        "src/cafcl/simulator.py:1213-1221",
+        "src/cafcl/domains.py:82-117",
+        "src/cafcl/continual.py:492-518"
+      ],
+      "affected_job_families_and_configurations": [
+        "Task-IL runs with spurious_ood_eval enabled.",
+        "Task-IL synthetic/domain label-noise runs using task-conditioned heads."
+      ],
+      "regression_test_coverage": [
+        "tests/test_expanded.py::test_task_local_label_noise_stays_inside_the_source_head",
+        "tests/test_expanded.py::test_spurious_and_noise_end_to_end"
+      ],
+      "verification_evidence": [
+        ".venv/bin/pytest -q tests/test_expanded.py passed in the full suite; full repository suite passed with 458 tests and 335 subtests."
+      ]
     }
   ],
   "phase2_follow_up_findings": [
@@ -975,6 +1093,36 @@
   ],
   "working_tree_changes": [
     "src/cafcl/simulator.py: strict singleton-task rejection wording and targeted regression test",
-    "docs/AUDIT_REMEDIATION_ISSUE_REGISTER.json: machine-readable evidence inventory"
+    "docs/AUDIT_REMEDIATION_ISSUE_REGISTER.json: machine-readable evidence inventory",
+    {
+      "source_revision": "5b19cc51df629d42d90c362f32337726f6883dee",
+      "summary": "Corrected Task-IL reference-gradient physical forward shape and repaired legacy Task-IL integration fixtures with valid multi-class inputs; full repository validation remains pending.",
+      "files": [
+        "src/cafcl/continual.py",
+        "tests/test_exact_batch_v16.py",
+        "tests/test_server_fidelity_v11.py"
+      ]
+    },
+    {
+      "source_revision": "5b19cc51df629d42d90c362f32337726f6883dee",
+      "summary": "Task-IL simulator and API fixture corrections; focused validation pending.",
+      "files": [
+        "src/cafcl/domains.py",
+        "src/cafcl/continual.py",
+        "src/cafcl/simulator.py",
+        "tests/test_advanced.py",
+        "tests/test_core.py",
+        "tests/test_continuous_local.py",
+        "tests/test_expanded.py",
+        "tests/test_feat_fixed_etf.py",
+        "tests/test_fedclass_offline_pilot.py",
+        "tests/test_native_backbones.py",
+        "tests/test_native_offline_pilots.py",
+        "tests/test_original_source_fidelity_gate.py",
+        "tests/test_parallel_client_execution_v10.py",
+        "tests/test_physical_batch_v15.py",
+        "tests/test_reservoir_v9.py"
+      ]
+    }
   ]
 }

@@ -1,4 +1,9 @@
-"""v12 paper-mechanism regression: each CL method under unchanged task stream."""
+"""v12 paper-mechanism regressions for the explicit legacy Class-IL local API.
+
+These direct local_train fixtures do not pass RunConfig.validate and are not an
+executable production protocol; Task-IL behavior is covered by validated
+Task-IL simulator and joint-path tests.
+"""
 from dataclasses import replace
 import numpy as np
 import pytest
@@ -108,7 +113,7 @@ class ImageBank:
 
 def client_model():
     torch.manual_seed(103)
-    model=create_model('test_linear',4,allow_test_model=True)
+    model=create_model('test_linear',4,allow_test_model=True,learning_setting='class_il')
     state={name:value.detach().clone() for name,value in model.state_dict().items()}
     client=LocalState(0)
     client.receive(state,0)
@@ -116,7 +121,7 @@ def client_model():
 
 
 def cfg(method,**kwargs):
-    return replace(RunConfig(dataset='synthetic',model='test_linear',num_clients=2,
+    return replace(RunConfig(dataset='synthetic',model='test_linear',num_clients=2,learning_setting='class_il',
         method=method,aggregator='fedavg',epochs=1,lr=.03,
         batch_size=16,memory_per_class=2,
         regularization_strength=0.1,importance_samples_per_experience=4),
@@ -146,7 +151,7 @@ def test_der_remembers_preoptimizer_online_trajectory_logits(method):
 
 
 @pytest.mark.parametrize('method',('ewc','mas','si','lwf','gem','agem','replay','er_ace','der','derpp','sgd'))
-def test_every_registered_method_stays_in_original_task_protocol(method):
+def test_every_registered_method_executes_in_explicit_legacy_class_il_api(method):
     model,client=client_model()
     client.local_experience=0
     client.arrival([0,1,2,3],(0,1),0)
@@ -156,8 +161,8 @@ def test_every_registered_method_stays_in_original_task_protocol(method):
     assert result['active_pair_classes']==[0,1]
     assert result['steps']==1
     # Old/future classifier rows are frozen even when a regularizer exists.
-    rows=model.state_dict()['1.weight']
-    torch.testing.assert_close(rows[2:],client.sync_anchor['1.weight'][2:],rtol=0,atol=0)
+    rows=model.state_dict()['classifier.weight']
+    torch.testing.assert_close(rows[2:],client.sync_anchor['classifier.weight'][2:],rtol=0,atol=0)
     assert torch.isfinite(rows).all()
     if method in ('ewc','mas'):
         assert method in client.pending_importance
@@ -194,7 +199,7 @@ def test_gem_historical_reference_gradient_uses_its_original_pair_loss():
 
 def test_si_integral_uses_unregularized_task_gradient_even_with_old_importance():
     import torch.nn.functional as F
-    model=create_model('test_mlp',4,allow_test_model=True)
+    model=create_model('test_mlp',4,allow_test_model=True,learning_setting='class_il')
     client=LocalState(0)
     client.receive({k:v.detach().clone() for k,v in model.state_dict().items()},0)
     conf=replace(cfg('si'),model='test_mlp',regularization_strength=20.,

@@ -13,6 +13,13 @@ from cafcl.simulator import aggregate,run_experiment
 from cafcl.full_matrix import expand,manifest
 
 
+def _multi_class_task_cfg(**kwargs):
+    clients=kwargs.get('num_clients',2)
+    kwargs.setdefault('holders_override',{str(c):tuple(range(clients)) for c in range(10)})
+    kwargs.setdefault('scenario','stationary')
+    return RunConfig(dataset='synthetic',model='test_linear',**kwargs)
+
+
 def test_catalogue_complete():
     assert len(CATALOGUE)==152
     assert set(IMPLEMENTED)<=set(CATALOGUE)
@@ -73,7 +80,7 @@ def test_fedavg_weights_and_uniform():
 
 
 def test_post_sync_and_all_observed_inactive(tmp_path):
-    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=3,stages=2,rounds_per_stage=1,
+    cfg=_multi_class_task_cfg(num_clients=3,stages=2,rounds_per_stage=1,
                   participation=1/3,batch_size=64,job_id='test_sync')
     result=run_experiment(cfg,str(tmp_path/'runs'),str(tmp_path/'data'),verbose=False)
     assert result['status']=='completed'
@@ -134,7 +141,7 @@ def test_recurrence_policy_same_vs_different_client():
 
 def test_gem_full_simulation(tmp_path):
     # First stage creates local memory; second stage can activate GEM constraints.
-    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,stages=2,rounds_per_stage=1,
+    cfg=_multi_class_task_cfg(num_clients=2,stages=2,rounds_per_stage=1,
                   participation=1.,batch_size=64,method='gem',
                   job_id='gem_integration')
     run_experiment(cfg,str(tmp_path),str(tmp_path/'data'),verbose=False)

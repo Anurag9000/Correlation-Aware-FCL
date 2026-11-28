@@ -20,20 +20,26 @@ def _fixture(n=5):
     cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=n,
         stream_protocol=True,local_tasks_per_round=2,classes_per_local_task=2,
         method='replay',batch_size=64,share_continual_state=True)
-    init=create_model('test_linear',100,allow_test_model=True).state_dict()
+    task_class_sets=tuple((cid*2,cid*2+1) for cid in range(n)) + tuple(
+        (cid*2+20,cid*2+21) for cid in range(n))
+    init=create_model('test_linear',100,allow_test_model=True,
+                      task_class_sets=task_class_sets).state_dict()
     clients={cid:LocalState(cid) for cid in range(n)}
     for client in clients.values():
         client.receive(init,version=0)
-    bank=SimpleNamespace(num_classes=100)
+    bank=SimpleNamespace(num_classes=100,
+                         train=SimpleNamespace(targets=list(range(100))))
     device=torch.device('cpu')
     runtimes=parallel_clients.create_client_runtimes(
-        cfg,bank,clients,device)
+        cfg,bank,clients,device,task_class_sets)
     arrivals={}
     for cid in clients:
         arrivals[cid]=[
             {'indices':[cid], 'class_ids':(cid*2,cid*2+1),
+             'task_id':(cid*2,cid*2+1),
              'global_stage':0,'is_recurrence':False},
             {'indices':[cid+50], 'class_ids':(cid*2+20,cid*2+21),
+             'task_id':(cid*2+20,cid*2+21),
              'global_stage':0,'is_recurrence':False},
         ]
     return cfg,bank,clients,device,runtimes,arrivals
@@ -110,6 +116,8 @@ def test_partial_final_round_only_schedules_actual_tasks(monkeypatch):
 def test_real_cuda_clients_have_separate_streams():
     cfg,bank,clients,device,runtimes,arrivals=_fixture()
     cuda_runtimes=parallel_clients.create_client_runtimes(
-        cfg,bank,clients,torch.device('cuda'))
+        cfg,bank,clients,torch.device('cuda'),
+        tuple((cid*2,cid*2+1) for cid in range(5)) +
+        tuple((cid*2+20,cid*2+21) for cid in range(5)))
     assert len({id(v.stream) for v in cuda_runtimes.values()})==5
     assert all(v.stream is not None for v in cuda_runtimes.values())

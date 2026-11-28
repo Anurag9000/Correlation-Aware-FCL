@@ -13,7 +13,7 @@ def test_pilot_uses_64_cropflip_and_persistent_sgd():
         assert cfg.optimizer_state_policy=='persist'
         assert cfg.training_augmentation=='cifar_crop_flip'
         assert cfg.momentum==.9 and cfg.weight_decay==.0005
-        assert '_V23_CHAIN20_' in cfg.job_id
+        assert '_TASKIL_V27_SOURCE_TASK_REPLAY_' in cfg.job_id
     plan=audited_plan(jobs)
     assert plan['batch_size']==64
     assert plan['training_intervals']==20 and plan['terminal_communication_only_flush']

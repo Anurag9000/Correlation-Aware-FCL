@@ -15,9 +15,12 @@ def test_both_architectures_are_native_32_and_canonical():
         model=create_model(model_id,100)
         assert model.features.num_features==dim
         assert model.classifier.out_features==100
-        assert classifier_parameter_names(model)==('classifier.weight','classifier.bias')
+        names=classifier_parameter_names(model)
+        assert names[0].startswith('classifier.heads.task_')
+        assert names[1].startswith('classifier.heads.task_')
         assert model.backbone_description['input_size']==32
-        assert model.backbone_description['implementation']=='native_torch'
+        assert model.backbone_description['model_family'] in {'vit','cnn'}
+        assert model.backbone_description['initialization']=='seeded_random'
         assert model.backbone_description['pretrained'] is False
         assert model(torch.randn(2,3,32,32)).shape==(2,100)
         with pytest.raises(ValueError,match='32'):
@@ -56,14 +59,18 @@ def test_backward_uses_only_active_classifier_rows_both_backbones():
 
 def test_fedclass_custom_simplelinear_head_supports_class_row_freezing():
     from cafcl.class_indexed import freeze_other_class_rows
+    from cafcl.models import task_head_key
     model=create_model('fedclass_resnet8',100)
-    assert classifier_parameter_names(model)==('classifier.weight','classifier.bias')
+    names=classifier_parameter_names(model)
+    assert all(name.startswith('classifier.heads.task_') for name in names)
+    head=model.classifier.heads[task_head_key(range(100))]
+    assert head.__class__.__name__=='SimpleLinear'
     model.train()
     logits=model(torch.randn(2,3,32,32))
     canonical_active_loss(logits,torch.tensor([8,9]),(8,9)).backward()
     freeze_other_class_rows(model,{8,9})
-    assert torch.count_nonzero(model.classifier.weight.grad[[0,7,10,99]])==0
-    assert torch.count_nonzero(model.classifier.weight.grad[[8,9]])>0
+    assert torch.count_nonzero(head.weight.grad[[0,7,10,99]])==0
+    assert torch.count_nonzero(head.weight.grad[[8,9]])>0
 
 
 def test_production_batch64_and_swappable_backbone_guard():

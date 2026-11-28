@@ -14,9 +14,17 @@ from cafcl.causal import pair_interaction,aggregation_leave_one_out
 from cafcl.models import create_model
 
 
+def _multi_class_task_cfg(**kwargs):
+    """Keep simulator integration tests inside strict multi-class Task-IL."""
+    clients=kwargs.get('num_clients',2)
+    kwargs.setdefault('holders_override',{str(c):tuple(range(clients)) for c in range(10)})
+    kwargs.setdefault('scenario','stationary')
+    return RunConfig(dataset='synthetic',model='test_linear',**kwargs)
+
+
 @pytest.mark.parametrize('method',['er_ace','der','derpp','mas','lwf','replay','ewc'])
 def test_extended_local_methods_execute(tmp_path,method):
-    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,stages=2,rounds_per_stage=1,
+    cfg=_multi_class_task_cfg(num_clients=2,stages=2,rounds_per_stage=1,
                   participation=1.,batch_size=64,method=method,
                   job_id=f'local_{method}')
     run_experiment(cfg,str(tmp_path),verbose=False)
@@ -71,7 +79,7 @@ def test_pair_interaction_counterfactual_math():
 
 
 def test_causal_aggregation_diagnostics(tmp_path):
-    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=3,stages=2,rounds_per_stage=1,
+    cfg=_multi_class_task_cfg(num_clients=3,stages=2,rounds_per_stage=1,
                   participation=1.,causal_diagnostics=True,
                   causal_max_clients=3,job_id='causal_test')
     run_experiment(cfg,str(tmp_path),verbose=False)
@@ -81,7 +89,7 @@ def test_causal_aggregation_diagnostics(tmp_path):
 
 
 def test_checkpoint_can_restore_final_round(tmp_path):
-    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,stages=2,rounds_per_stage=1,
+    cfg=_multi_class_task_cfg(num_clients=2,stages=2,rounds_per_stage=1,
                   participation=1.,job_id='resume_smoke',checkpoint_every=1)
     rd=tmp_path/'resume_smoke'
     run_experiment(cfg,str(tmp_path),verbose=False)
@@ -97,7 +105,7 @@ def test_checkpoint_can_restore_final_round(tmp_path):
 
 
 def test_pending_policy_retains_all_training_data(tmp_path):
-    cfg=RunConfig(dataset='synthetic',model='test_linear',num_clients=2,stages=2,rounds_per_stage=1,
+    cfg=_multi_class_task_cfg(num_clients=2,stages=2,rounds_per_stage=1,
                   participation=1.,job_id='retain_all',pending_policy='retain_all')
     run_experiment(cfg,str(tmp_path),verbose=False)
     ckpt=torch.load(tmp_path/'retain_all'/'model_final.pt',map_location='cpu',weights_only=False)
@@ -111,9 +119,11 @@ def test_class_relationship_diagnostics():
     assert label_jaccard({0,1},{0,8})==pytest.approx(1/3)
     assert vector_cosine(torch.tensor([1.,0.]),torch.tensor([0.,1.]))==pytest.approx(0.)
     bank=get_data_bank('synthetic','unused')
-    model=create_model('test_linear',bank.num_classes,allow_test_model=True)
+    model=create_model('test_linear',bank.num_classes,allow_test_model=True,
+                       task_class_sets=((0,1),))
     feature=feature_relationships(model,bank,[0,1],torch.device('cpu'),4)
-    gradient=diagnostic_gradient_relationships(model,bank,[0,1],torch.device('cpu'),4)
+    gradient=diagnostic_gradient_relationships(model,bank,[0,1],torch.device('cpu'),4,
+        task_class_groups={'task_000_001':(0,1)})
     assert '0:1' in feature and '0:1' in gradient
     assert -1<=gradient['0:1']<=1
 
@@ -121,7 +131,7 @@ def test_class_relationship_diagnostics():
 def test_resume_after_interrupted_round_is_identical(tmp_path,monkeypatch):
     import cafcl.simulator as sim
     from dataclasses import replace
-    base=RunConfig(dataset='synthetic',model='test_linear',num_clients=3,stages=2,rounds_per_stage=2,
+    base=_multi_class_task_cfg(num_clients=3,stages=2,rounds_per_stage=2,
                    participation=2/3,checkpoint_every=1,
                    job_id='interrupted_midrun')
     original_evaluate=sim.evaluate
@@ -152,7 +162,7 @@ def test_resume_after_interrupted_round_is_identical(tmp_path,monkeypatch):
 
 def test_full_trajectory_counterfactual_fork(tmp_path):
     from dataclasses import replace
-    base=RunConfig(dataset='synthetic',model='test_linear',num_clients=4,stages=2,rounds_per_stage=2,
+    base=_multi_class_task_cfg(num_clients=4,stages=2,rounds_per_stage=2,
                    participation=.5,checkpoint_every=1,
                    job_id='baseline_for_forks')
     run_experiment(base,str(tmp_path),verbose=False)
@@ -175,12 +185,12 @@ def test_full_trajectory_counterfactual_fork(tmp_path):
 
 def test_counterfactual_fork_rejects_scenario_change(tmp_path):
     from dataclasses import replace
-    base=RunConfig(dataset='synthetic',model='test_linear',num_clients=3,stages=2,rounds_per_stage=1,
+    base=_multi_class_task_cfg(num_clients=3,stages=2,rounds_per_stage=1,
                    participation=2/3,checkpoint_every=1,
                    job_id='fork_root')
     run_experiment(base,str(tmp_path),verbose=False)
     ck=tmp_path/'fork_root'/'checkpoint_round_0001.pt'
-    changed=replace(base,job_id='bad_fork',scenario='overlap',
+    changed=replace(base,job_id='bad_fork',scenario='domain',
                     force_target='include',target_client=0,intervention_round=1)
     with pytest.raises(RuntimeError,match='confounded settings'):
         run_experiment(changed,str(tmp_path),verbose=False,fork_from_checkpoint=ck)

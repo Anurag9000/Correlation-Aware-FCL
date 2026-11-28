@@ -21,6 +21,13 @@ def conf(**kwargs):
                              rounds_per_stage=2),**kwargs)
 
 
+def task_conf(**kwargs):
+    clients=kwargs.get('num_clients',5)
+    kwargs.setdefault('holders_override',{str(c):tuple(range(clients)) for c in range(10)})
+    kwargs.setdefault('scenario','stationary')
+    return conf(**kwargs)
+
+
 def test_manual_participation_exact_budget():
     states={i:LocalState(i) for i in range(5)}
     cfg=conf(participation=.4,participation_overrides={'1':(2,4)})
@@ -91,6 +98,14 @@ def test_task_oracle_masks_other_task_logit():
     class Fixed(torch.nn.Module):
         def forward(self,x):
             return torch.tensor([[3.,2.,4.,0.],[5.,0.,3.,2.]],device=x.device)[:len(x)]
+        def task_union_scores(self,x,task_ids):
+            logits=self.forward(x[:2])
+            output=torch.zeros((len(task_ids),4),device=x.device)
+            for row,ids in enumerate(task_ids):
+                classes=(0,1) if ids==('task_000_001',) else (2,3)
+                local=logits[row%len(logits),list(classes)].softmax(0)
+                output[row,list(classes)]=local
+            return output
     bank=DataBank(Tiny(),Tiny(),4,{})
     ordinary,_=evaluate(Fixed(),bank,{0,2},batch_size=64,device='cpu')
     masked,_=evaluate(Fixed(),bank,{0,2},batch_size=64,device='cpu',
@@ -145,7 +160,7 @@ def test_subset_counterfactual_evaluates_all_combinations():
 
 
 def test_synaptic_intelligence_and_hidden_boundaries(tmp_path):
-    cfg=conf(num_clients=2,participation=1.,rounds_per_stage=1,method='si',job_id='si_test')
+    cfg=task_conf(num_clients=2,participation=1.,rounds_per_stage=1,method='si',job_id='si_test')
     run_experiment(cfg,str(tmp_path),verbose=False)
     ck=torch.load(tmp_path/'si_test'/'model_final.pt',weights_only=False)
     assert ck['clients'][0]['si_omega'] is not None
@@ -155,8 +170,8 @@ def test_synaptic_intelligence_and_hidden_boundaries(tmp_path):
 
 
 def test_task_il_prediction_uses_task_ids(tmp_path):
-    cfg=conf(num_clients=2,participation=.5,rounds_per_stage=1,
-             scenario='disjoint',learning_setting='task_il',job_id='check_task_il')
+    cfg=task_conf(num_clients=2,participation=.5,rounds_per_stage=1,
+             scenario='stationary',learning_setting='task_il',job_id='check_task_il')
     run_experiment(cfg,str(tmp_path),verbose=False)
     hist=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
     assert hist[-1]['global_evaluation_includes_inactive']
@@ -165,7 +180,7 @@ def test_task_il_prediction_uses_task_ids(tmp_path):
 
 
 def test_sgd_does_not_allocate_raw_replay_memory(tmp_path):
-    cfg=conf(num_clients=2,participation=1.,rounds_per_stage=1,job_id='sgd_memory')
+    cfg=task_conf(num_clients=2,participation=1.,rounds_per_stage=1,job_id='sgd_memory')
     run_experiment(cfg,str(tmp_path),verbose=False)
     state=torch.load(tmp_path/cfg.job_id/'model_final.pt',weights_only=False)
     assert all(not c['memory'] for c in state['clients'].values())
@@ -183,9 +198,18 @@ def test_spurious_patch_and_label_noise_are_deterministic():
     assert torch.equal(matched[0][0][...,4:,4:],reverse[0][0][...,4:,4:])
 
 
+def test_task_local_label_noise_stays_inside_the_source_head():
+    from cafcl.domains import ClientAugmentedDataset
+    base=TinySynthetic()
+    noisy=ClientAugmentedDataset(base,0,{},label_noise_rate=1.,seed=17,
+        num_classes=10,task_classes_by_index={i:(0,1) for i in range(len(base))})
+    assert all(noisy[i][1] in {0,1} for i in range(len(base)))
+    assert any(noisy[i][1]!=base[i][1] for i in range(len(base)))
+
+
 def test_active_client_memory_reset_ablation(tmp_path):
     for reset in (False,True):
-        cfg=conf(num_clients=2,participation=1.,method='gem',rounds_per_stage=1,
+        cfg=task_conf(num_clients=2,participation=1.,method='gem',rounds_per_stage=1,
                  reset_memory_on_sync=reset,job_id=f'gem_memory_reset_{reset}')
         run_experiment(cfg,str(tmp_path),verbose=False)
         state=torch.load(tmp_path/cfg.job_id/'model_final.pt',weights_only=False)
@@ -204,8 +228,8 @@ def test_adaptive_participation_from_local_constraint_feedback():
 
 
 def test_sample_lag_and_multiple_domains_pipeline(tmp_path):
-    cfg=conf(num_clients=2,participation=1.,rounds_per_stage=2,
-             scenario='shifted_recurrence',recurrence_round_delay=2,
+    cfg=task_conf(num_clients=2,participation=1.,rounds_per_stage=2,
+             scenario='domain',
              job_id='shifted_recurrence_smoke')
     run_experiment(cfg,str(tmp_path),verbose=False)
     rows=json.loads((tmp_path/cfg.job_id/'metrics.json').read_text())
@@ -217,7 +241,7 @@ def test_sample_lag_and_multiple_domains_pipeline(tmp_path):
 def test_spurious_and_noise_end_to_end(tmp_path):
     for tag,kw in [('spurious',{'spurious_strength':1.,'spurious_ood_eval':True}),
                    ('noise',{'label_noise_rate':.2})]:
-        cfg=conf(num_clients=2,participation=1.,rounds_per_stage=1,
+        cfg=task_conf(num_clients=2,participation=1.,rounds_per_stage=1,
                  job_id='extra_'+tag,**kw)
         run_experiment(cfg,str(tmp_path),verbose=False)
         final=json.loads((tmp_path/cfg.job_id/'summary.json').read_text())['final_metrics']

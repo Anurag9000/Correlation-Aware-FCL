@@ -45,10 +45,12 @@ class TinyBank:
 def test_every_method_can_update_known_rows_but_never_future_rows(method):
     from cafcl.models import copy_cpu_state
     torch.manual_seed(36)
-    model=create_model('test_linear',6,allow_test_model=True)
+    # This v14 unit regression preserves the historical flat Class-IL local
+    # objective; supported Task-IL training is exercised by current task-head tests.
+    model=create_model('test_linear',6,allow_test_model=True,learning_setting='class_il')
     c=LocalState(0)
     c.receive(copy_cpu_state(model),0)
-    config=RunConfig(dataset='synthetic',model='test_linear',method=method,
+    config=RunConfig(dataset='synthetic',model='test_linear',method=method,learning_setting='class_il',
                      num_clients=2,batch_size=16,
                      lr=.03,epochs=1,memory_per_class=2,
                      importance_samples_per_experience=2,
@@ -60,10 +62,10 @@ def test_every_method_can_update_known_rows_but_never_future_rows(method):
     c.shared_weights=first['weights']
     c.local_experience=1
     c.arrival([4,5,6,7],(2,3),1)
-    prior=first['weights']['1.bias'].clone()
+    prior=first['weights']['classifier.bias'].clone()
     result=local_train(model,c,TinyBank(),config,torch.device('cpu'),1,
                        active_pair_classes=(2,3),experience_end=True)
-    after=result['weights']['1.bias']
+    after=result['weights']['classifier.bias']
     if method in ('replay','sgd'):
         assert not torch.equal(after[:2],prior[:2]), (
             'Old class rows must be allowed to participate in global seen-class CE')

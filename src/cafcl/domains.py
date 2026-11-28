@@ -82,7 +82,8 @@ def apply_spurious_patch(x:torch.Tensor,y:int,strength:float,reverse=False):
 class ClientAugmentedDataset(Dataset):
     """Deterministic client-domain transformation and optional training noise."""
     def __init__(self,base,client_id,sample_stages,mode='disjoint',*,
-                 spurious_strength=0.,label_noise_rate=0.,seed=0,num_classes=10):
+                 spurious_strength=0.,label_noise_rate=0.,seed=0,num_classes=10,
+                 task_classes_by_index=None):
         self.base=base
         self.targets=base.targets
         self.client_id=int(client_id)
@@ -92,6 +93,8 @@ class ClientAugmentedDataset(Dataset):
         self.label_noise_rate=float(label_noise_rate)
         self.seed=int(seed)
         self.num_classes=int(num_classes)
+        self.task_classes_by_index={int(i):tuple(sorted(set(map(int,classes))))
+            for i,classes in (task_classes_by_index or {}).items()}
     def __len__(self):return len(self.base)
     def __getitem__(self,i):
         x,y=self.base[i]
@@ -103,8 +106,11 @@ class ClientAugmentedDataset(Dataset):
             import numpy as np
             rng=np.random.default_rng((self.seed*1000003+self.client_id*1009+int(i))%(2**32))
             if rng.random()<self.label_noise_rate:
-                offset=int(rng.integers(1,self.num_classes))
-                y=(int(y)+offset)%self.num_classes
+                allowed=self.task_classes_by_index.get(int(i))
+                candidates=(sorted(set(allowed)-{int(y)}) if allowed is not None
+                            else [c for c in range(self.num_classes) if c!=int(y)])
+                if candidates:
+                    y=candidates[int(rng.integers(0,len(candidates)))]
         return x,int(y)
 
 

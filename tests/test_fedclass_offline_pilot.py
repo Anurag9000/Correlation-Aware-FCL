@@ -11,7 +11,7 @@ from cafcl.fedclass_primary import (
     SOURCE_COMMIT, make_fedclass_jobs, make_design, main, _output_root)
 from cafcl.primary_probe import audited_plan
 from cafcl.streaming import make_task_schedule, select_offline_cohort
-from cafcl.models import create_model
+from cafcl.models import create_model,task_head_key
 
 
 @pytest.mark.parametrize("mode,method,count",[
@@ -75,19 +75,21 @@ def test_original_fedclass_modules_exact_feature_head_forward():
     import torch.nn.functional as F
     torch.manual_seed(51)
     model=create_model("fedclass_resnet8",100)
+    task_head=model.classifier.heads[task_head_key(range(100))]
     assert model.features.original.__class__.__name__=="ResNet"
     assert model.features.original.out_dim==64
-    assert model.classifier.__class__.__name__=="SimpleLinear"
-    assert model.classifier.in_features==64
-    assert model.classifier.out_features==100
-    assert torch.count_nonzero(model.classifier.bias).item()==0
-    assert model.backbone_description["implementation"]=="vendored_original_FedCLASS_architecture"
+    assert task_head.__class__.__name__=="SimpleLinear"
+    assert task_head.in_features==64
+    assert task_head.out_features==100
+    assert torch.count_nonzero(task_head.bias).item()==0
+    assert model.backbone_description["model_id"]=="fedclass_resnet8"
+    assert "FedCLASS/convs/resnet_client.py" in model.backbone_description["upstream_source"]
     model.eval()
     x=torch.randn(4,3,32,32)
     with torch.no_grad():
         feats=model.features(x)
         output=model(x)
-        source_manual=F.linear(feats,model.classifier.weight,model.classifier.bias)
+        source_manual=F.linear(feats,task_head.weight,task_head.bias)
     assert feats.shape==(4,64)
     assert output.shape==(4,100)
     torch.testing.assert_close(output,source_manual)

@@ -72,7 +72,7 @@ def test_paired_probe_both_use_reservoir_and_share_state():
     for c in (full,partial):
         assert c.method=='replay' and c.share_continual_state
         assert c.replay_reservoir_fraction==pytest.approx(1/9)
-        assert c.batch_size==64 and 'RESERVOIR11p1111_V23_CHAIN20' in c.job_id
+        assert c.batch_size==64 and 'RESERVOIR11p1111_TASKIL_V27_SOURCE_TASK_REPLAY' in c.job_id
         assert c.optimizer_state_policy=='persist'
         assert c.training_augmentation=='cifar_crop_flip'
     plan=audited_plan((full,partial))

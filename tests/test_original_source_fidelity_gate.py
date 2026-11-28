@@ -44,10 +44,11 @@ def test_default_launch_prevented_before_any_cuda_or_data_download(tmp_path):
     from cafcl.native_primary import main as native
     from cafcl.fedclass_primary import main as fedclass
     for method in ('glfc','lga','feat'):
-        with pytest.raises(RuntimeError,match='INCOMPLETE adapted pilot'):
+        with pytest.raises(ValueError,match='no task-head adaptation'):
             native(['--suite',method,'--output-dir',str(tmp_path)])
     with pytest.raises(RuntimeError,match='INCOMPLETE adapted pilot'):
         fedclass(['--output-dir',str(tmp_path)])
-    # Plan-only is read-only and may be used to inspect old ablations.
-    native(['--suite','glfc','--plan-only','--output-dir',str(tmp_path)])
-    fedclass(['--plan-only','--output-dir',str(tmp_path)])
+    # Native Task-IL plans are not emitted while their method adapter is
+    # unsupported; source fidelity remains a separate launch gate.
+    with pytest.raises(ValueError,match='no task-head adaptation'):
+        native(['--suite','glfc','--plan-only','--output-dir',str(tmp_path)])

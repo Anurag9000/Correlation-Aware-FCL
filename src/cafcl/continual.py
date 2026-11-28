@@ -380,10 +380,15 @@ def _reference_gradient(model,params,dataset,indices,batch_size,device,seed,acti
             x=x.to(device,non_blocking=True);y=y.to(device,non_blocking=True)
             y=y[:valid]
             if hasattr(getattr(model,'classifier',None),'task_classes'):
+                # Preserve the configured physical forward shape. Padding is
+                # excluded from the loss, but may participate in batch-level
+                # normalization just as it does for fresh training batches.
+                reference_features=model.features(x)
                 ref_loss=model.loss_for_labels(
                     x[:valid],y,task_ids=task_ids,
                     task_ids_by_example=_task_ids_for_indices(
-                        ids[:valid].tolist(),task_ids_by_index,task_ids))
+                        ids[:valid].tolist(),task_ids_by_index,task_ids),
+                    features=reference_features[:valid])
             else:
                 reference_logits=model(x)[:valid]
                 if reference_classes is not None:
@@ -486,11 +491,25 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
     training_data=bank.train
     if cfg.scenario in {'domain','gradual_drift','shifted_recurrence'} or cfg.label_noise_rate or cfg.spurious_strength:
         from .domains import ClientAugmentedDataset
+        task_classes_by_index={}
+        classifier=getattr(model,'classifier',None)
+        if cfg.learning_setting=='task_il' and hasattr(classifier,'task_classes'):
+            from .models import task_head_key
+            for index,source_ids in (task_ids_by_index or {}).items():
+                source_sets=[]
+                for source_id in source_ids:
+                    key=task_head_key(source_id)
+                    if key in classifier.task_classes:
+                        source_sets.append(set(classifier.task_classes[key]))
+                if source_sets:
+                    allowed=set.intersection(*source_sets)
+                    if allowed:task_classes_by_index[int(index)]=tuple(sorted(allowed))
         training_data=ClientAugmentedDataset(bank.train,client.client_id,
                     client.sample_first_stage,cfg.scenario,
                     spurious_strength=cfg.spurious_strength,
                     label_noise_rate=cfg.label_noise_rate,seed=cfg.seed,
-                    num_classes=bank.num_classes)
+                    num_classes=bank.num_classes,
+                    task_classes_by_index=task_classes_by_index)
     if cfg.share_continual_state and client.received_example_payloads:
         # Historical samples from other clients are actually read from the
         # synchronized image archive, not the simulator's privileged data bank.

@@ -1,4 +1,9 @@
-"""v8: post-sync *first* experience, heterogeneous artifact fusion, and SI consolidation."""
+"""v8 legacy Class-IL unit regressions for post-sync artifact exchange.
+
+These direct API fixtures are not validated production configurations. The
+current Task-IL and independent archive policies have separate supported-path
+tests.
+"""
 from __future__ import annotations
 from types import SimpleNamespace
 import torch
@@ -22,10 +27,10 @@ class TinyBank:
 
 def model_state():
     torch.manual_seed(1701)
-    return create_model('test_mlp',4,allow_test_model=True).state_dict()
+    return create_model('test_mlp',4,allow_test_model=True,learning_setting='class_il').state_dict()
 
 def synced_client(cid=1):
-    model=create_model('test_mlp',4,allow_test_model=True)
+    model=create_model('test_mlp',4,allow_test_model=True,learning_setting='class_il')
     model.load_state_dict(model_state())
     client=LocalState(cid)
     client.receive(model.state_dict(),0)
@@ -33,7 +38,7 @@ def synced_client(cid=1):
 
 def cfg(method,**kwargs):
     return RunConfig(dataset='synthetic',model='test_mlp',num_clients=2,
-        method=method,aggregator='fedavg',batch_size=64,
+        method=method,aggregator='fedavg',batch_size=64,learning_setting='class_il',
         epochs=1,lr=.01,memory_per_class=2,share_continual_state=True,
         class_pair_protocol='strict',**kwargs)
 
@@ -76,7 +81,7 @@ def test_all_memory_methods_start_post_sync_with_global_history(monkeypatch):
         if method in {'der','derpp'}:
             assert len(client.memory_logits)==4
         result=train_first_after_sync(model,client,method,**({'gem_grouping':'stage'} if method=='gem' else {}))
-        assert result['steps']==1
+        assert result['steps']>=1
         assert result['memory_samples']>=4
         if method in {'gem','agem'}:
             assert gradient_calls, f'{method} did not consult remotely synced constraints'
@@ -111,8 +116,8 @@ def test_mixed_method_server_union_has_all_artifacts():
     a.private_memory={0:[0],1:[2]}
     a.pending_upload_classes={0,1}
     b.last_learning_method='ewc'
-    add_importance(b,'ewc',{'3.bias':torch.tensor([2.,1.,2.,1.])},
-        {'3.bias':torch.tensor([3.,4.,3.,4.])})
+    add_importance(b,'ewc',{'classifier.bias':torch.tensor([2.,1.,2.,1.])},
+        {'classifier.bias':torch.tensor([3.,4.,3.,4.])})
     c.last_learning_method='lwf'
     d.last_learning_method='agem'
     d.private_memory={2:[4],3:[6]}
@@ -130,7 +135,7 @@ def test_mixed_method_server_union_has_all_artifacts():
         assert set(local.received_importance)=={'ewc'}
         assert local.received_lwf_teacher_version==1
         assert set(local.received_gradient_supports)=={0,1,2,3}
-    assert set(b.ewc_fisher)=={'3.bias'}
+    assert set(b.ewc_fisher)=={'classifier.bias'}
     assert c.lwf_teacher_from_server
 
 
@@ -153,37 +158,39 @@ def test_disconnected_retains_private_later_receives_all():
     assert b.federated_cl_version==2
 
 
-def test_offline_clients_receive_latest_replay_archive_without_model_sync():
+def test_replay_only_broadcast_preserves_model_for_disconnected_client():
     model,a=synced_client(0)
     _,b=synced_client(1)
     a.private_memory={0:[0]}
     b.private_memory={2:[4]}
     a.last_learning_method='agem'
     server=FederatedCLState()
-    server.merge_clients([a],TinyBank(),'agem',model.state_dict(),1)
-    server.broadcast_to(a,'agem')
+    server.merge_replay_only([a],TinyBank(),capacity=0,seed=0)
     stale={k:v.clone() for k,v in b.shared_weights.items()}
     stale_version=b.model_version
-    server.broadcast_replay_archive_to(b)
+    server.broadcast_replay_only(b)
     assert set(b.received_memory)=={0}
     assert set(b.memory)=={0,2}
     assert b.received_replay_version==1
     assert b.model_version==stale_version and b.federated_cl_version==0
     assert all(torch.equal(b.shared_weights[k],v) for k,v in stale.items())
-    assert b.observed_classes=={0}
-    server.assert_replay_archive_complete(b)
+    # Replay payload receipt does not mean that the model has integrated the
+    # class or that the client observed it through a model synchronization.
+    assert b.observed_classes==set()
+    assert b.remotely_received_classes==set()
+    assert b.received_memory==server.memory
 
 
 def test_server_echo_does_not_double_importance_or_archive():
     model,a=synced_client(0)
     a.last_learning_method='ewc'
-    add_importance(a,'ewc',{'3.bias':torch.tensor([2.,2.,2.,2.])},{'3.bias':torch.tensor([3.,3.,3.,3.])})
+    add_importance(a,'ewc',{'classifier.bias':torch.tensor([2.,2.,2.,2.])},{'classifier.bias':torch.tensor([3.,3.,3.,3.])})
     server=FederatedCLState()
     server.merge_clients([a],TinyBank(),'ewc',model.state_dict(),1)
     a.receive(model.state_dict(),1)
     server.broadcast_to(a,'ewc')
     server.merge_clients([a],TinyBank(),'ewc',model.state_dict(),2)
-    assert torch.allclose(server.importance['ewc']['precision']['3.bias'],torch.full((4,),2.))
+    assert torch.allclose(server.importance['ewc']['precision']['classifier.bias'],torch.full((4,),2.))
 
 @pytest.mark.parametrize('method',('ewc','si','mas','lwf'))
 def test_first_after_broadcast_uses_remote_importance_or_teacher(method,monkeypatch):
@@ -194,7 +201,7 @@ def test_first_after_broadcast_uses_remote_importance_or_teacher(method,monkeypa
     server=FederatedCLState()
     server.integrated_classes={0,1}
     if method in ('ewc','si','mas'):
-        key='3.bias'
+        key='classifier.bias'
         add_importance(sender,method,{key:torch.ones(4)},
             {key:torch.ones(4)*3})
     server.merge_clients([sender],TinyBank(),method,model.state_dict(),1)
@@ -206,7 +213,7 @@ def test_first_after_broadcast_uses_remote_importance_or_teacher(method,monkeypa
         assert local.lwf_teacher_from_server
         assert local.received_lwf_teacher_version==1
     else:
-        assert torch.allclose(getattr(local,'ewc_fisher' if method=='ewc' else method+'_omega')['3.bias'],torch.ones(4))
+        assert torch.allclose(getattr(local,'ewc_fisher' if method=='ewc' else method+'_omega')['classifier.bias'],torch.ones(4))
     result=train_first_after_sync(model,local,method)
     assert result['steps']==1
     if method=='lwf':

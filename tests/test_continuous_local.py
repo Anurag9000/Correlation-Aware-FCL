@@ -4,7 +4,7 @@ import json
 import torch
 import pytest
 from cafcl.config import RunConfig
-from cafcl.simulator import run_experiment,anchored_upload,PROTOCOL_VERSION
+from cafcl.simulator import run_experiment,anchored_upload,protocol_version_for
 from cafcl.continual import LocalState
 
 # Every supported local method uses the same unconditional local-training loop.
@@ -12,12 +12,15 @@ ALL_METHODS=('sgd','agem','gem','replay','ewc','si','er_ace','der','derpp','mas'
 
 
 def config(method='agem',**kw):
-    holders={str(c):(c%5,) for c in range(10)}
+    # Pair labels per client so every local Task-IL head has two classes in
+    # every arrival round (client 0 retains the historical {0,5} invariant).
+    holders={str(c):(c%5,) for c in range(5)}
+    holders.update({str(c+5):(c,) for c in range(5)})
     selection={'0':(1,2,3,4),'1':(1,2,3,4),
                '2':(1,2,3,4),'3':(0,1,2,3)}
     return RunConfig(dataset='synthetic',model='test_linear',num_clients=5,stages=2,
         rounds_per_stage=2,participation=.8,batch_size=64,
-        scenario='disjoint',method=method,aggregator='fedavg',
+        scenario='stationary',method=method,aggregator='fedavg',
         holders_override=holders,participation_overrides=selection,
         memory_per_class=8,checkpoint_every=1,**kw)
 
@@ -38,11 +41,11 @@ def test_hidden_clients_train_locally_and_rejoin_with_history(method,tmp_path):
         assert hist[i]['uploaded_count']==4
     ckpt=torch.load(rd/'checkpoint_round_0003.pt',map_location='cpu',weights_only=False)
     c=ckpt['clients'][0]
-    assert ckpt['protocol_version']==PROTOCOL_VERSION
+    assert ckpt['protocol_version']==protocol_version_for(cfg)
     assert c['model_version']==0, 'hidden client must not download updated server model'
     assert c['pending_upload_steps']>0
     assert {0,5}<=set(c['pending_upload_classes'])
-    assert [z['class'] for z in c['local_training_events']]==[0,5]
+    assert [z['classes'] for z in c['local_training_events']]==[[0,5],[0,5]]
     assert c['local_experience']==1
     assert any(not torch.equal(c['shared_weights'][k],c['sync_anchor'][k])
                for k in c['shared_weights'] if c['shared_weights'][k].is_floating_point())
@@ -114,7 +117,7 @@ def test_resume_restores_offline_client_model_and_pending_delta(tmp_path):
     # A resume from round 2 should match the uninterrupted last-round result.
     original=torch.load(rd/'model_final.pt',map_location='cpu',weights_only=False)
     (rd/'checkpoint_latest.pt').write_bytes((rd/'checkpoint_round_0003.pt').read_bytes())
-    (rd/'status.json').write_text(json.dumps({'status':'failed','protocol_version':PROTOCOL_VERSION}))
+    (rd/'status.json').write_text(json.dumps({'status':'failed','protocol_version':protocol_version_for(cfg)}))
     assert run_experiment(cfg,str(tmp_path),verbose=False)['status']=='completed'
     replayed=torch.load(rd/'model_final.pt',map_location='cpu',weights_only=False)
     for k,v in original['model_state'].items():

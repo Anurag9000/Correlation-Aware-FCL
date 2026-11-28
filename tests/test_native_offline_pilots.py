@@ -1,40 +1,23 @@
 from __future__ import annotations
 import torch
 from torch import nn
+import pytest
 from cafcl.native_primary import make_native_jobs,SUITES
 from cafcl.primary_probe import audited_plan
 from cafcl.native_methods import native_loss,weighted_bce,feat_gsa
 
 def test_all_three_paired_pilot_schedules():
-    for name,(method,model) in SUITES.items():
-        full,hidden=make_native_jobs(name,seed=0)
-        assert (full.method,full.model)==(method,model)
-        assert (hidden.method,hidden.model)==(method,model)
-        assert full.participation==1 and hidden.participation==.8
-        assert hidden.stream_offline_policy=='random'
-        assert full.classwise_head_merge is False
-        assert full.batch_size==hidden.batch_size==64
-        assert full.memory_per_class==hidden.memory_per_class==50
-        assert full.optimizer_state_policy=='persist'
-        assert full.momentum==hidden.momentum==.9
-        assert full.weight_decay==hidden.weight_decay==.0005
-        plan=audited_plan((full,hidden))
-        assert plan['training_intervals']==20
-        assert plan['total_jobs']==2
-        assert plan['expected_server_exemplars_after_flush']==10000
-        assert len(plan['offline_schedule'])==20
-        assert all(len(x['online_clients'])==4 for x in plan['offline_schedule'])
-        assert plan['client_training_concurrency']==5
-        assert plan['concurrently_training_client_models_across_both_arms']==10
-        assert set(map(int,range(100)))==set(range(100))
+    for name in SUITES:
+        # The native algorithms still use a global class head. They cannot
+        # be assigned the canonical Task-IL label until a source-faithful
+        # task-head adapter exists.
+        with pytest.raises(ValueError,match='no task-head adaptation'):
+            make_native_jobs(name,seed=0)
 
 
 def test_bounded_client_execution_is_included_in_native_pair_plan():
-    jobs=make_native_jobs('glfc',client_training_concurrency=2)
-    assert jobs[0].client_training_concurrency==jobs[1].client_training_concurrency==2
-    plan=audited_plan(jobs)
-    assert plan['client_execution_mode']=='bounded_concurrent_task_barriers'
-    assert plan['client_training_concurrency']==2
+    with pytest.raises(ValueError,match='no task-head adaptation'):
+        make_native_jobs('glfc',client_training_concurrency=2)
 
 class SmallNet(nn.Module):
     def __init__(self):
@@ -97,7 +80,7 @@ def test_native_client_continues_through_disconnection_and_replay_uses_64():
         cfg=RunConfig(dataset='synthetic',model='test_smallcnn',num_clients=2,
             method=method,epochs=1,lr=.01,batch_size=64,
             memory_per_class=2,replay_reservoir_fraction=.5,
-            share_continual_state=True)
+            share_continual_state=True,learning_setting='class_il')
         client=LocalState(0)
         client.receive(model.state_dict(),0)
         client.local_experience=0
@@ -179,19 +162,12 @@ def test_native_method_server_sync_is_acknowledged_only_for_online_clients():
 
 
 def test_all_three_pilot_entrypoints_write_audited_plans(tmp_path):
-    import json
     from cafcl import native_primary
     for name in SUITES:
-        native_primary.main(['--suite',name,'--seed','0',
-                             '--output-dir',str(tmp_path),'--plan-only'])
-        design=json.loads((tmp_path/name/'seed0'/('source_v5' if name=='feat' else 'source_v4')/'design.json').read_text())
-        assert design['training_intervals']==20
-        assert design['expected_server_exemplars_after_flush'] is None
-        assert design['expected_server_exemplars_per_class'] is None
-        assert design['terminal_communication_only_flush'] is True
-        assert design['full_and_offline_same_gpu']==0
-        assert design['concurrent_processes']==2
-        assert design['total_jobs']==2
+        with pytest.raises(ValueError,match='no task-head adaptation'):
+            native_primary.main(['--suite',name,'--seed','0',
+                                 '--output-dir',str(tmp_path),'--plan-only'])
+    assert not list(tmp_path.iterdir())
 
 def test_pilot_dispatch_spawns_both_arms_concurrently_on_gpu_zero(monkeypatch,tmp_path):
     from cafcl import native_primary as n
@@ -214,10 +190,6 @@ def test_pilot_dispatch_spawns_both_arms_concurrently_on_gpu_zero(monkeypatch,tm
         launched.append((cmd,kwargs))
         return FakeProcess()
     monkeypatch.setattr(n.subprocess,'Popen',fake_popen)
-    n.main(['--suite','glfc','--output-dir',str(tmp_path),'--no-download','--permit-adapted-legacy'])
-    assert len(launched)==2
-    assert [cmd[-2:] for cmd,_ in launched]==[['--worker','0'],['--worker','1']]
-    assert all(kwargs['env']['CUDA_VISIBLE_DEVICES']=='0' for _,kwargs in launched)
-    assert all(kwargs['stderr']==n.subprocess.STDOUT for _,kwargs in launched)
-    assert 'GLFC source-method adapter/FedAvg' in (
-        tmp_path/'glfc'/'seed0'/'source_v4'/'comparison'/'comparison.md').read_text()
+    with pytest.raises(ValueError,match='no task-head adaptation'):
+        n.main(['--suite','glfc','--output-dir',str(tmp_path),'--no-download','--permit-adapted-legacy'])
+    assert launched==[]

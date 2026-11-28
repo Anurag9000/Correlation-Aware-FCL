@@ -1216,7 +1216,9 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                 shifted=DataBank(bank.train,SpuriousTest(bank.test,cfg.spurious_strength,reverse=True),
                                  bank.num_classes,bank.coarse_by_fine,bank.original_labels)
                 shifted_metrics,_=evaluate(model,shifted,observed,cfg.batch_size,
-                                           device,peak={},integrated=integrated)
+                                           device,peak={},integrated=integrated,
+                                           task_class_groups=(active_task_sets
+                                               if cfg.learning_setting=='task_il' else None))
                 result['spurious_reversed_accuracy']=shifted_metrics['accuracy']
             if pre_aggregation_metrics is not None:
                 result['pre_aggregation_accuracy']=pre_aggregation_metrics['accuracy']

@@ -23,7 +23,7 @@ def test_probe_is_the_fixed_two_job_100_label_recipe():
     assert full.client_training_concurrency==random_offline.client_training_concurrency==5
     assert full.stream_client_chain and random_offline.stream_client_chain
     assert full.local_tasks_per_round==random_offline.local_tasks_per_round==1
-    assert 'V23_CHAIN20' in full.job_id and 'V23_CHAIN20' in random_offline.job_id
+    assert 'V27_SOURCE_TASK_REPLAY' in full.job_id and 'V27_SOURCE_TASK_REPLAY' in random_offline.job_id
     assert full.evaluate_final_only and random_offline.evaluate_final_only
     assert full.participation==1. and random_offline.participation==.8
     plan=audited_plan((full,random_offline))
@@ -41,7 +41,7 @@ def test_probe_is_the_fixed_two_job_100_label_recipe():
     assert plan['client_training_concurrency']==5
     assert plan['models_per_run']==6 and plan['server_models_across_both_arms']==2
     assert plan['client_models_across_both_arms']==10
-    assert 'five-client learning barrier' in plan['server_model_updates']
+    assert 'five-client task barrier' in plan['server_model_updates']
     assert plan['concurrently_training_client_models_across_both_arms']==10
     assert plan['expected_server_exemplars_after_flush']==10000
     assert plan['expected_server_exemplars_per_class']['0']==50
@@ -65,7 +65,10 @@ def test_report_requires_both_complete_and_all_classes(tmp_path):
         path=root/'runs'/job.job_id
         path.mkdir(parents=True)
         (path/'summary.json').write_text(json.dumps({'final_metrics':{
-            'accuracy':accuracy,'per_class':{str(i):accuracy for i in range(100)},
+            'accuracy':accuracy,
+            'standard_task_conditioned_test':{
+                'macro_head_accuracy':accuracy,
+                'per_class':{str(i):accuracy for i in range(100)}},
             'globally_integrated_classes':list(range(100))}}))
     report=build_report(root,(full,partial))
     assert report['delta']==pytest.approx(.1)

@@ -21,8 +21,8 @@ def main():
     assert probe['backbone']=='resnet18_cifar32'
     assert probe['optimizer_state_policy']=='persist'
     assert probe['training_augmentation']=='cifar_crop_flip'
-    assert probe['client_training_concurrency']==1
-    assert probe['training_intervals']==9 and probe['total_jobs']==2
+    assert probe['client_training_concurrency']==5
+    assert probe['training_intervals']==20 and probe['total_jobs']==2
     assert probe['private_reservoir_per_class']==50
     audit_result=audit(expand(include_invalid=True,model='vit'))
     assert audit_result==frozen['feasibility_audit'], 'v16 feasibility audit changed'

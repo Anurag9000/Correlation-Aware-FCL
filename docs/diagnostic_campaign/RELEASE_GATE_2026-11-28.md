@@ -2,39 +2,40 @@
 
 ## Decision
 
-**Not released for production execution.** The repository-wide test gate is red and the ten CF confirmation slots still lack scientific bindings. No diagnostic production run was admitted in this worktree.
+**Not released for production execution.** Repository and factorial-plan validation now pass, but the ten CF confirmation slots still lack scientific bindings. Real CIFAR-100 GPU smoke, failure/recovery validation, and a durable two-host coordinator have not been completed. No diagnostic production run was admitted from this worktree.
 
-## Source and worktree
+## Source and inventory
 
-- Base source revision inspected: `30b5f593b77d802cfe25a2b504e731f802f332c7` (`main`).
-- Candidate revision: `3a2670543bf2022f21898b96d8c67227dc5a1fd4` (committed and pushed to `main`; release gate remains red).
-- The 152-slot canonical ledger remains the inventory. Local and remote real-data preflight previously compiled 142 configured jobs and reported 10 reserved slots; this is configuration preflight, not GPU execution or result evidence.
-- The ten CF slots have no config, seed, selection rule, or binding in the checked-in ledger. They remain specification-blocked pending the author's definition.
+- Source revision inspected and currently pushed on `main`: `5b19cc51df629d42d90c362f32337726f6883dee`.
+- The current candidate is that source plus the uncommitted changes listed in the issue register and Git worktree.
+- The canonical ledger contains 152 slots. The local and remote real-data preflight compiled 142 configured jobs and reported 10 reserved CF slots. This is configuration preflight, not GPU execution or result evidence.
+- No CF config, seed, selection rule, or binding is defined for the 10 reserved slots. Keep them explicitly specification-blocked until the author supplies definitions.
+- The original 53-issue audit descriptions are absent from this checkout. The register preserves 53 issue identities and summary dispositions, but explicitly does not claim independent issue-by-issue resolution.
 
-## Validation evidence on the candidate worktree
+## Validation on the current candidate worktree
 
-- `pytest -q tests/test_joint_*.py`: **70 passed, 335 subtests passed** (43.72 s).
-- Focused class-indexed simulator suite, including strict singleton rejection and all 11 method parameters: **12 passed** (4.37 s).
-- EWC/MAS importance-coordinate focused tests: **2 passed** (2.59 s).
-- Full `.venv/bin/pytest -q`: **108 failed, 349 passed, 335 subtests passed, 8 warnings** (62.98 s). The repository-wide gate therefore fails.
-- `scripts/audit_stream_math.py` passed on the earlier candidate inspection; `scripts/validate_factorial_plans.py` failed because the generated v16 registry hash does not match the frozen snapshot. Neither result is a production release clearance.
-- Current-job CI on base `30b5f59` also had a failed main tests workflow and a successful isolated joint workflow (see run links in the campaign audit notes).
+- `.venv/bin/pytest -q --tb=no`: **458 passed, 335 subtests passed, 8 warnings** (238.96 s).
+- `.venv/bin/pytest -q tests/test_joint_*.py --tb=no`: **70 passed, 335 subtests passed** (62.68 s).
+- `.venv/bin/python scripts/validate_factorial_plans.py`: passed. It compiled 32,133 valid jobs per model, 99 method/aggregator pairs, 53,805 inputs, and 21,672 rejections for each ViT/CNN plan; current primary-probe expectations are five concurrent clients and 20 intervals.
+- `.venv/bin/python scripts/audit_stream_math.py`: passed with the same 53,805 / 32,133 / 21,672 input, accepted, and rejected totals.
+- The full run emitted eight warnings, including existing upstream source syntax/deprecation warnings and one test tensor-to-float warning. No test failed.
+- CI for the earlier code push at `3a26705` had a passing joint workflow and a failing repository-wide test workflow. [Run #204](https://github.com/Anurag9000/Correlation-Aware-FCL/actions/runs/46151262520). That CI result predates this candidate’s corrections; current local success is not yet a new remote CI result.
 
-## Confirmed fixes in this candidate
+## Corrections verified in this candidate
 
-- Non-stream arrival events now provide the `class_ids` field consumed by event preparation; targeted cross-method tests pass.
-- Task-IL EWC/MAS consolidation now indexes importance estimates in active task-head coordinates; targeted regressions pass.
-- The offline-client replay assertion now matches the declared selected-client archive policy and verifies that remote archive content is not attributed to an offline recipient.
-- Strict Task-IL singleton rejection retains its scientific guard and now reports the discriminative-class requirement clearly.
+- Non-stream arrival events now provide `class_ids` to downstream event preparation.
+- Task-IL EWC/MAS importance consolidation uses active task-head output coordinates.
+- Task-IL GEM/A-GEM reference gradients retain the physical forward batch while excluding padding from the loss.
+- Spurious reversed-test evaluation now receives task identities, so local head columns are not treated as global class IDs.
+- Synthetic Task-IL label noise now selects replacement labels from each sample’s source-task label set.
+- Invalid singleton Task-IL test fixtures were rebuilt with valid multi-class schedules; historical direct Class-IL API checks are explicitly marked or isolated. Native GLFC/LGA/FEAT Task-IL pilot construction now remains blocked because those methods lack a task-head adaptation.
+- Factorial snapshot fingerprints/examples and stale primary-probe expectations were refreshed without changing validated plan counts or scientific configuration values.
 
-These targeted passes do not establish repository-wide correctness. The issue register retains the documented limitations and does not treat all 53 summarized issues as independently resolved.
+## Remaining release requirements
 
-## Required before production
-
-1. Investigate and resolve or rigorously isolate every repository-wide test failure that can affect the supported campaign pathways; rerun the complete suite and required validators.
-2. Reconcile the v16 factorial manifest hash mismatch without weakening frozen-plan validation.
-3. Obtain/locate the original 53-issue audit descriptions and independently map the findings to source, tests, and ledger jobs.
-4. Define the ten CF confirmation slots or keep them explicitly blocked; do not count them as verified runs.
-5. Complete synthetic integration, real CIFAR-100 GPU smoke, and failure/recovery validation before accepting a campaign revision.
-6. Establish and verify a persistent, transactional two-host coordinator with atomic claims, attempt identities, resource reservations, and artifact verification.
-7. Commit and push the validated revision, then pin both servers to it before production admission.
+1. Locate the original 53-issue audit descriptions and independently map each finding to source, tests, and ledger jobs.
+2. Obtain scientific definitions for the ten CF slots or retain them as specification-blocked.
+3. Complete deterministic synthetic integration and failure/recovery checks across the production engines and coordinator.
+4. Perform a minimal real CIFAR-100 GPU smoke on each authorized server, including independent artifact validation.
+5. Establish and verify one persistent two-host coordinator with atomic claims, attempt identities, resource reservations, recovery, and artifact checksums.
+6. Commit and push the verified candidate, obtain fresh CI evidence, and pin both servers to that exact revision before production admission.

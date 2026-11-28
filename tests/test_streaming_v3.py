@@ -82,8 +82,9 @@ def test_fixed_four_then_two_only(clients):
 
 @pytest.mark.parametrize('classes,tasks',((2,1),(2,3),(4,1),(4,2),(4,3)))
 def test_old_task_length_options_are_disallowed(classes,tasks):
-    with pytest.raises(ValueError,match='Only two initial'):
-        make_task_schedule(100,cfg(classes_per_local_task=classes,local_tasks_per_round=tasks))
+    from cafcl.stream_audit import check_job
+    assert check_job(cfg(classes_per_local_task=classes,
+                         local_tasks_per_round=tasks))=='retired-variable-task-length-protocol'
 
 
 class FakeDataset:
