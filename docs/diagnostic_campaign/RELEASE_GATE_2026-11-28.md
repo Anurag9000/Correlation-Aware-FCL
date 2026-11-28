@@ -43,8 +43,7 @@
 
 1. Locate the original 53-issue audit descriptions and independently map each finding to source, tests, and ledger jobs.
 2. Obtain scientific definitions for the ten CF slots or retain them as specification-blocked.
-3. Complete deterministic synthetic integration and failure/recovery checks across the production engines and coordinator.
-4. Perform and independently verify a real CIFAR-100 GPU smoke on V100-server when unrelated GPU workloads release adequate capacity.
-5. Establish and verify one persistent two-host coordinator with atomic claims, attempt identities, resource reservations, recovery, and artifact checksums.
-6. Complete the required deterministic synthetic integration and failure/recovery checks across applicable production engines and the coordinator.
-7. Locate the original audit descriptions and obtain definitions for the ten CF confirmation slots; neither issue may be silently waived to admit production.
+3. Complete deterministic synthetic integration across every intended production engine and supported method/aggregation pair. Existing checkpoint-write interruption, simulator resume equivalence, local exclusive-lease, hardware-gate, and incomplete-artifact rejection tests passed in the full suite; SSH interruption, broker restart, stale scheduler reconciliation, worker exit without a receipt, resource exhaustion, and separated retry-attempt behavior still lack end-to-end injection evidence.
+4. Perform and independently verify a real CIFAR-100 GPU smoke on V100-server when its unrelated GPU assignments release stable capacity.
+5. Establish and verify one persistent two-host coordinator with atomic claims, attempt identities, resource reservations, recovery, and artifact checksums. Finding `NEW-011` records the current single-host broker boundary.
+6. Locate the original audit descriptions and obtain definitions for the ten CF confirmation slots; neither issue may be silently waived to admit production.

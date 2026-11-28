@@ -1047,6 +1047,31 @@
       "verification_evidence": [
         ".venv/bin/pytest -q tests/test_expanded.py passed in the full suite; full repository suite passed with 458 tests and 335 subtests."
       ]
+    },
+    {
+      "finding_id": "NEW-011",
+      "description": "The joint broker and campaign ledger implement a single-host GPU scheduler and node-local flock leases. Current tests cover exclusive local leases and GPU gates, but do not establish cross-host atomic claims, coordinator restart recovery, stale-worker reconciliation, or collision-free attempt directories across Mtech and V100.",
+      "classification": "multi_host_coordination_verification_gap",
+      "current_status": "single_host_broker_multi_host_unverified",
+      "affected_source_locations": [
+        "src/cafcl/joint/broker.py:1-180",
+        "src/cafcl/joint/campaign.py:1-124",
+        "src/cafcl/joint/checkpoint_io.py:1-45"
+      ],
+      "affected_job_families_and_configurations": [
+        "All jobs scheduled concurrently or recoverably across Mtech and V100."
+      ],
+      "regression_test_coverage": [
+        "tests/test_joint_broker.py::BrokerTests.test_exclusive_lease",
+        "tests/test_joint_broker.py::BrokerTests.test_hardware_gate",
+        "tests/test_joint_checkpoint_io.py::CheckpointIOTests.test_job_lease",
+        "tests/test_joint_checkpoint_io.py::CheckpointIOTests.test_failed_serialization_preserves_last_commit"
+      ],
+      "required_correction": "Implement or configure a coordinator with verified cross-host atomic claims, per-attempt identity and output isolation, durable controller recovery, resource reservations, stale-worker reconciliation, and checksum-verified artifacts; inject controller and worker failures across both hosts before production admission.",
+      "verification_evidence": [
+        "Static inspection of broker.py shows leases under local tempfile.gettempdir() and per-process GPU IDs; no two-host coordinator integration or restart test was found in the repository test suite.",
+        "The 2026-11-28 release gate remains closed pending this work."
+      ]
     }
   ],
   "phase2_follow_up_findings": [
