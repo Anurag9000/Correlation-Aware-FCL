@@ -8,6 +8,7 @@
 
 - Validated campaign code revision, pushed on `main`: `06410c7e8f6199243315c767129c6dec87f4b374` (`Fix Task-IL batch and evaluation regressions`). The clean local worktree and both clean server mirrors were verified at this revision before smoke execution.
 - The canonical ledger contains 152 slots. The local and remote real-data preflight compiled 142 configured jobs and reported 10 reserved CF slots. This is configuration preflight, not GPU execution or result evidence.
+- Read-only `cafcl.diagnostic_campaign status --allow-reconstruction --subset-probes` against `runs/diagnostic_campaign` found 142 jobs `ready` and 10 `reserved`; no prior completed, running, failed, or invalid attempts were present in that output root.
 - No CF config, seed, selection rule, or binding is defined for the 10 reserved slots. Keep them explicitly specification-blocked until the author supplies definitions.
 - The original 53-issue audit descriptions are absent from this checkout. The register preserves 53 issue identities and summary dispositions, but explicitly does not claim independent issue-by-issue resolution.
 
