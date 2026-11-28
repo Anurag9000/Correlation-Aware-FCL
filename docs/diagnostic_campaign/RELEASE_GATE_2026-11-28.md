@@ -14,7 +14,7 @@
 
 ## Validation on the current candidate worktree
 
-- `.venv/bin/pytest -q --tb=no`: **458 passed, 335 subtests passed, 8 warnings** (238.96 s).
+- `.venv/bin/pytest -q --tb=no`: **461 passed, 335 subtests passed, 8 warnings** (221.72 s), including three new diagnostic-runner failure-injection tests.
 - `.venv/bin/pytest -q tests/test_joint_*.py --tb=no`: **70 passed, 335 subtests passed** (62.68 s).
 - `.venv/bin/python scripts/validate_factorial_plans.py`: passed. It compiled 32,133 valid jobs per model, 99 method/aggregator pairs, 53,805 inputs, and 21,672 rejections for each ViT/CNN plan; current primary-probe expectations are five concurrent clients and 20 intervals.
 - `.venv/bin/python scripts/audit_stream_math.py`: passed with the same 53,805 / 32,133 / 21,672 input, accepted, and rejected totals.
@@ -47,6 +47,6 @@
 
 1. Locate the original 53-issue audit descriptions and independently map each finding to source, tests, and ledger jobs.
 2. Obtain scientific definitions for the ten CF slots or retain them as specification-blocked.
-3. Complete deterministic synthetic integration across every intended production engine and supported method/aggregation pair. Existing checkpoint-write interruption, simulator resume equivalence, local exclusive-lease, hardware-gate, and incomplete-artifact rejection tests passed in the full suite; SSH interruption, broker restart, stale scheduler reconciliation, worker exit without a receipt, resource exhaustion, and separated retry-attempt behavior still lack end-to-end injection evidence.
+3. Complete deterministic synthetic integration across every intended production engine and supported method/aggregation pair. Existing checkpoint-write interruption, simulator resume equivalence, local exclusive-lease, hardware-gate, and incomplete-artifact rejection tests passed. New runner injections confirm duplicate claims fail, zero-exit workers without artifacts remain failed, and retries use a separate attempt directory. SSH interruption, broker restart, stale scheduler reconciliation, resource exhaustion, and cross-host recovery still lack end-to-end injection evidence.
 4. Perform and independently verify a real CIFAR-100 GPU smoke on V100-server when its unrelated GPU assignments release stable capacity.
 5. Implement and verify one persistent two-host coordinator with atomic claims, attempt identities, resource reservations, recovery, and artifact checksums. Both `diagnostic_campaign.run_suite` (the 152-slot ledger) and the joint broker currently schedule only local subprocesses and GPU IDs; finding `NEW-011` records this implementation gap.

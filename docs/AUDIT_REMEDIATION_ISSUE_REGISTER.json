@@ -1067,11 +1067,15 @@
         "tests/test_joint_broker.py::BrokerTests.test_hardware_gate",
         "tests/test_joint_checkpoint_io.py::CheckpointIOTests.test_job_lease",
         "tests/test_joint_checkpoint_io.py::CheckpointIOTests.test_failed_serialization_preserves_last_commit",
+        "tests/test_diagnostic_campaign_recovery.py::test_retry_uses_a_separate_attempt_directory",
+        "tests/test_diagnostic_campaign_recovery.py::test_zero_exit_without_artifacts_is_not_completed",
+        "tests/test_diagnostic_campaign_recovery.py::test_duplicate_claim_is_rejected_while_worker_is_running",
         "No cross-host diagnostic_campaign runner test is present."
       ],
       "required_correction": "Implement or configure a coordinator with verified cross-host atomic claims, per-attempt identity and output isolation, durable controller recovery, resource reservations, stale-worker reconciliation, and checksum-verified artifacts; inject controller and worker failures across both hosts before production admission.",
       "verification_evidence": [
         "Static inspection shows both run_suite and run_broker schedule local subprocesses and local GPU indices; no two-host coordinator integration or restart test was found in the repository test suite.",
+        "The new local runner failure-injection tests passed in the 461-test full suite; they do not exercise SSH, host-to-host claims, or controller restart.",
         "The 2026-11-28 release gate remains closed pending this work."
       ]
     }
