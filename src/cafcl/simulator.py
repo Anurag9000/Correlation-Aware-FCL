@@ -83,7 +83,10 @@ def _assign_task_ids(scenario,bank,cfg):
                 pair=ordered[start:start+2]
                 classes=tuple(sorted({int(cls) for _,event in pair for cls in event.labels}))
                 if len(classes)<2 and cfg.class_pair_protocol=='strict':
-                    raise ValueError(f'Task-IL replay provenance contains singleton task {classes}')
+                    raise ValueError(
+                        'Task-IL discriminative heads require at least two distinct classes; '
+                        f'insufficient distinct class labels for task {classes}'
+                    )
                 task_id=task_instance_id(client_id,round_id,ordinal,classes)
                 task_class_map[task_id]=classes
                 task_first_round[task_id]=min(task_first_round.get(task_id,round_id),round_id)
@@ -666,6 +669,7 @@ def run_experiment(cfg:RunConfig,output_root:str,data_root:str='data',download=T
                     if ids:
                         new_events[arrival.client_id].append({
                             'indices':ids,'class_id':int(cls),
+                            'class_ids':(int(cls),),
                             'task_id':arrival.task_id,
                             'global_stage':int(arrival.stage),
                             'is_recurrence':bool(arrival.recurrence)})

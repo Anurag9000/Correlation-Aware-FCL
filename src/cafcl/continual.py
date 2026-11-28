@@ -1282,7 +1282,11 @@ def local_train(model,client,bank,cfg,device,round_id,task_classes=None,*,task_i
         fresh=estimate_diagonal_importance(model,training_data,consolidation_indices,device,
             kind=cfg.method,max_samples=cfg.importance_samples_per_experience,
             seed=cfg.seed+rng_round*100003+client.client_id*127+client.local_experience,
-            active_classes=(seen_classes if active_pair_classes is not None else None))
+            active_classes=(
+                active_pair_classes if cfg.learning_setting=='task_il'
+                else seen_classes if active_pair_classes is not None
+                else None
+            ))
         fresh_anchor={n:p.detach().cpu().clone() for n,p in model.named_parameters()}
         from .federated_cl import add_importance,weighted_importance
         add_importance(client,cfg.method,fresh,fresh_anchor)
