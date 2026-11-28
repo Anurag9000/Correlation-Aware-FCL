@@ -1050,10 +1050,11 @@
     },
     {
       "finding_id": "NEW-011",
-      "description": "The joint broker and campaign ledger implement a single-host GPU scheduler and node-local flock leases. Current tests cover exclusive local leases and GPU gates, but do not establish cross-host atomic claims, coordinator restart recovery, stale-worker reconciliation, or collision-free attempt directories across Mtech and V100.",
-      "classification": "multi_host_coordination_verification_gap",
-      "current_status": "single_host_broker_multi_host_unverified",
+      "description": "Both scheduling paths remain single-host. The joint broker schedules local GPU IDs with node-local flock leases; the authoritative 152-slot diagnostic run_suite uses a local ThreadPoolExecutor, local output-root locks and local subprocesses. Current tests cover local exclusive leases and GPU gates, but do not establish cross-host atomic claims, coordinator restart recovery, stale-worker reconciliation, or collision-free attempt directories across Mtech and V100.",
+      "classification": "multi_host_coordination_implementation_and_verification_gap",
+      "current_status": "single_host_schedulers_two_host_coordinator_absent",
       "affected_source_locations": [
+        "src/cafcl/diagnostic_campaign.py:130-280",
         "src/cafcl/joint/broker.py:1-180",
         "src/cafcl/joint/campaign.py:1-124",
         "src/cafcl/joint/checkpoint_io.py:1-45"
@@ -1065,11 +1066,12 @@
         "tests/test_joint_broker.py::BrokerTests.test_exclusive_lease",
         "tests/test_joint_broker.py::BrokerTests.test_hardware_gate",
         "tests/test_joint_checkpoint_io.py::CheckpointIOTests.test_job_lease",
-        "tests/test_joint_checkpoint_io.py::CheckpointIOTests.test_failed_serialization_preserves_last_commit"
+        "tests/test_joint_checkpoint_io.py::CheckpointIOTests.test_failed_serialization_preserves_last_commit",
+        "No cross-host diagnostic_campaign runner test is present."
       ],
       "required_correction": "Implement or configure a coordinator with verified cross-host atomic claims, per-attempt identity and output isolation, durable controller recovery, resource reservations, stale-worker reconciliation, and checksum-verified artifacts; inject controller and worker failures across both hosts before production admission.",
       "verification_evidence": [
-        "Static inspection of broker.py shows leases under local tempfile.gettempdir() and per-process GPU IDs; no two-host coordinator integration or restart test was found in the repository test suite.",
+        "Static inspection shows both run_suite and run_broker schedule local subprocesses and local GPU indices; no two-host coordinator integration or restart test was found in the repository test suite.",
         "The 2026-11-28 release gate remains closed pending this work."
       ]
     }
