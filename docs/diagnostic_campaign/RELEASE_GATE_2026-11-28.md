@@ -2,12 +2,11 @@
 
 ## Decision
 
-**Not released for production execution.** Repository and factorial-plan validation now pass, but the ten CF confirmation slots still lack scientific bindings. Real CIFAR-100 GPU smoke, failure/recovery validation, and a durable two-host coordinator have not been completed. No diagnostic production run was admitted from this worktree.
+**Not released for production execution.** The validated code revision passes local and remote CI, and the Mtech CIFAR-100 GPU smoke plus independent artifact verification passed. The ten CF confirmation slots still lack scientific bindings; failure/recovery validation and a durable two-host coordinator remain incomplete. No diagnostic production run was admitted.
 
 ## Source and inventory
 
-- Source revision inspected and currently pushed on `main`: `5b19cc51df629d42d90c362f32337726f6883dee`.
-- The current candidate is that source plus the uncommitted changes listed in the issue register and Git worktree.
+- Validated campaign code revision, pushed on `main`: `06410c7e8f6199243315c767129c6dec87f4b374` (`Fix Task-IL batch and evaluation regressions`). The clean local worktree and both clean server mirrors were verified at this revision before smoke execution.
 - The canonical ledger contains 152 slots. The local and remote real-data preflight compiled 142 configured jobs and reported 10 reserved CF slots. This is configuration preflight, not GPU execution or result evidence.
 - No CF config, seed, selection rule, or binding is defined for the 10 reserved slots. Keep them explicitly specification-blocked until the author supplies definitions.
 - The original 53-issue audit descriptions are absent from this checkout. The register preserves 53 issue identities and summary dispositions, but explicitly does not claim independent issue-by-issue resolution.
@@ -19,7 +18,7 @@
 - `.venv/bin/python scripts/validate_factorial_plans.py`: passed. It compiled 32,133 valid jobs per model, 99 method/aggregator pairs, 53,805 inputs, and 21,672 rejections for each ViT/CNN plan; current primary-probe expectations are five concurrent clients and 20 intervals.
 - `.venv/bin/python scripts/audit_stream_math.py`: passed with the same 53,805 / 32,133 / 21,672 input, accepted, and rejected totals.
 - The full run emitted eight warnings, including existing upstream source syntax/deprecation warnings and one test tensor-to-float warning. No test failed.
-- CI for the earlier code push at `3a26705` had a passing joint workflow and a failing repository-wide test workflow. [Run #204](https://github.com/Anurag9000/Correlation-Aware-FCL/actions/runs/46151262520). That CI result predates this candidate’s corrections; current local success is not yet a new remote CI result.
+- Fresh CI for `06410c7` passed both workflows: [CIFAR-100 sequential local-task protocol](https://github.com/Anurag9000/Correlation-Aware-FCL/actions/runs/46156374402) and [Joint FCL isolated validation](https://github.com/Anurag9000/Correlation-Aware-FCL/actions/runs/46156374365).
 
 ## Corrections verified in this candidate
 
@@ -31,11 +30,21 @@
 - Invalid singleton Task-IL test fixtures were rebuilt with valid multi-class schedules; historical direct Class-IL API checks are explicitly marked or isolated. Native GLFC/LGA/FEAT Task-IL pilot construction now remains blocked because those methods lack a task-head adaptation.
 - Factorial snapshot fingerprints/examples and stale primary-probe expectations were refreshed without changing validated plan counts or scientific configuration values.
 
+## Real-data smoke evidence
+
+- Mtech `MtechDEServer1`, clean mirror at `06410c7e8f6199243315c767129c6dec87f4b374`; Tesla V100-PCIE-32GB. Initial free memory was 32,497 MiB. During the run the process used 2,712 MiB according to `nvidia-smi`; recorded peak CUDA allocated memory was 1,088,733,696 bytes.
+- Runtime was Python 3.12.15, PyTorch 2.5.1+cu121, torchvision 0.20.1+cu121, CUDA build 12.1. The existing Mtech `.venv` and CIFAR-100 payload were read-only inputs from the preserved older checkout; source was imported from the clean mirror.
+- Smoke run `SMOKE_CIFAR100_TASKIL_GPU_20261128_MTECH`, output `/home/anurag24092/Projects/CAFCL-smoke-20261128-mtech/runs/SMOKE_CIFAR100_TASKIL_GPU_20261128_MTECH`. It used the full 45,000-sample CIFAR-100 training split, 100 labels, five clients, ten learning intervals, one epoch, 750 optimizer steps, and a final communication-only flush (11 recorded intervals total). All 50 learning uploads completed; local recorded losses were finite. Logical tensor payload totaled 2,245,954,400 bytes; this is simulator accounting, not a measured network transfer.
+- The run completed with all 100 classes observed. Final smoke metrics were Task-IL test accuracy 0.6595 on 10,000 test examples and validation accuracy 0.6662 on 5,000 examples. These are smoke health metrics, not production results or a comparative finding.
+- `cafcl.verify_final` independently reloaded the final checkpoint on CUDA and recomputed test, validation, and per-head Task-IL accuracy. All 104 recorded comparisons matched exactly (`verified: true`). Final model SHA-256: `9a3d477eaacbf2fdb3731b69251dfc7a9440c683c5c49172f268030a18ebb6a`; metrics SHA-256: `a9e45c4f1c5d11448833e87626c74f898d8e9543689055d97e626041ad31fe56`; verifier JSON SHA-256: `b46d0d09a1818ede7b27ac24fc76182eb765a85977e2e4a0cfa1dd2e10e7ddf3`.
+- V100-server remains un-smoked. At the latest check its V100 had 9,498 MiB free while three unrelated Boltz processes occupied 23,002 MiB; no CAFCL run was started there to avoid interfering with those workloads. The mirror itself was clean at `06410c7`.
+
 ## Remaining release requirements
 
 1. Locate the original 53-issue audit descriptions and independently map each finding to source, tests, and ledger jobs.
 2. Obtain scientific definitions for the ten CF slots or retain them as specification-blocked.
 3. Complete deterministic synthetic integration and failure/recovery checks across the production engines and coordinator.
-4. Perform a minimal real CIFAR-100 GPU smoke on each authorized server, including independent artifact validation.
+4. Perform and independently verify a real CIFAR-100 GPU smoke on V100-server when unrelated GPU workloads release adequate capacity.
 5. Establish and verify one persistent two-host coordinator with atomic claims, attempt identities, resource reservations, recovery, and artifact checksums.
-6. Commit and push the verified candidate, obtain fresh CI evidence, and pin both servers to that exact revision before production admission.
+6. Complete the required deterministic synthetic integration and failure/recovery checks across applicable production engines and the coordinator.
+7. Locate the original audit descriptions and obtain definitions for the ten CF confirmation slots; neither issue may be silently waived to admit production.
