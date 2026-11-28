@@ -7,7 +7,7 @@
 ## Source and worktree
 
 - Base source revision inspected: `30b5f593b77d802cfe25a2b504e731f802f332c7` (`main`).
-- Candidate revision: pending commit of the focused corrections recorded in this worktree.
+- Candidate revision: `3a2670543bf2022f21898b96d8c67227dc5a1fd4` (committed and pushed to `main`; release gate remains red).
 - The 152-slot canonical ledger remains the inventory. Local and remote real-data preflight previously compiled 142 configured jobs and reported 10 reserved slots; this is configuration preflight, not GPU execution or result evidence.
 - The ten CF slots have no config, seed, selection rule, or binding in the checked-in ledger. They remain specification-blocked pending the author's definition.
 
